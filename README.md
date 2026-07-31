@@ -17,10 +17,12 @@ spuntare**, senza modali e senza salvataggi.
 
 ### 1. Database
 
-Apri Supabase → **SQL Editor** → incolla ed esegui il contenuto di
-[`sql/001_gestionale_v2.sql`](sql/001_gestionale_v2.sql).
+Apri Supabase → **SQL Editor** → esegui **in ordine**:
 
-Lo script è **idempotente** (puoi rilanciarlo) e **solo additivo**: non modifica né
+1. [`sql/001_gestionale_v2.sql`](sql/001_gestionale_v2.sql) — struttura principale
+2. [`sql/002_chat_pratiche.sql`](sql/002_chat_pratiche.sql) — conversazione sulle pratiche
+
+Ogni script è **idempotente** (puoi rilanciarlo) e **solo additivo**: non modifica né
 cancella le tabelle esistenti (`projects`, `tasks`, `time_entries`, `files`,
 `profiles`, `project_fasi`, `project_sottofasi`). Aggiunge:
 
@@ -35,6 +37,11 @@ cancella le tabelle esistenti (`projects`, `tasks`, `time_entries`, `files`,
 | Trigger | `updated_at` automatico; timbro di chi/quando chiude un'attività; calcolo automatico della scadenza di una pratica da `data_invio + termine_giorni` |
 | Policy RLS | Lettura a tutto lo studio, scrittura a `collaboratore`/`admin`, cancellazione ad `admin`. Le notifiche le vede solo il destinatario |
 | `v_avanzamento_commesse` | Vista di riepilogo con percentuale di avanzamento calcolata dal DB |
+
+La 002 aggiunge inoltre: `notifiche.pratica_id` (per aprire la pratica giusta dalla
+campanella), l'indice cronologico sulla conversazione, la vista `v_pratiche_chat`
+con il conteggio messaggi, e le policy che lasciano correggere o cancellare **solo
+i propri** messaggi.
 
 ### 2. Storage
 
@@ -118,6 +125,20 @@ Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo
   `/` cerca · `Esc` chiude.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
+- **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
+  Presso l'ente, In ritardo, Concluse*) mostrano il conteggio e filtrano con un click;
+  sotto ci sono commessa, ente e responsabile, più una ricerca su ente, tipo pratica,
+  oggetto, protocollo, riferimento normativo e nome commessa. Il raggruppamento si
+  cambia al volo: **per ente, per commessa, per stato** o elenco piatto ordinato per
+  scadenza.
+- **Ogni pratica ha una conversazione interna** (scheda *Conversazione*): messaggi
+  rapidi fra chi la segue, con Invio per inviare e Shift+Invio per andare a capo.
+  Nella stessa cronologia compaiono anche gli eventi formali (invio, protocollo,
+  integrazione, sollecito, sopralluogo, parere, rilascio) e i cambi di stato, perché
+  quando segui una pratica conta l'ordine dei fatti, non la loro categoria.
+  Sotto il campo di scrittura è indicato **chi riceverà la notifica**; se la pratica
+  non ha un responsabile te lo dice invece di inviare nel vuoto. In elenco ogni
+  pratica mostra 💬 con il numero di messaggi, evidenziato se ce ne sono di non letti.
 - **Chiudere una commessa**: dal dettaglio → *Modifica* trovi due operazioni distinte.
   - **Archivia** (collaboratori e admin, reversibile): la commessa esce dagli elenchi
     e dai menu a tendina ma resta consultabile dal filtro *Archiviate*, con tutto lo
@@ -166,14 +187,15 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 47 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 65 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
 riapertura di un'attività, avanzamento automatico delle fasi, popover di
 assegnazione e scadenza, drag & drop Kanban, calcolo dei termini di legge,
 Gantt pluriennale, archiviazione con ripristino, eliminazione con conferma e
-verifica che non restino record orfani, tutte le pagine e l'assenza di errori
+verifica che non restino record orfani, filtri e raggruppamenti delle pratiche,
+invio ed eliminazione di messaggi in chat, tutte le pagine e l'assenza di errori
 in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
 

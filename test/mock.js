@@ -13,6 +13,12 @@
   const clone=x=>JSON.parse(JSON.stringify(x));
 
   function Q(table){
+    // vista calcolata: conteggio messaggi per pratica
+    if(table==='v_pratiche_chat'){
+      DB[table]=DB.commessa_pratiche.map(p=>({pratica_id:p.id,project_id:p.project_id,
+        messaggi:DB.pratica_eventi.filter(e=>e.pratica_id===p.id&&e.tipo==='messaggio').length,
+        eventi_totali:DB.pratica_eventi.filter(e=>e.pratica_id===p.id).length}));
+    }
     let rows=()=>clone(DB[table]||[]);
     const flt=[]; let ord=null, lim=null, single=false, maybe=false;
     const api={
