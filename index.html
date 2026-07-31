@@ -530,7 +530,10 @@ tbody tr:hover td { background:#f0f4f9; }
       <input type="hidden" id="pr-id"><input type="hidden" id="pr-fase">
     </div>
     <div class="mf">
-      <button class="btn btn-d left" id="pr-del" style="display:none">Elimina</button>
+      <span class="left row">
+        <button class="btn btn-d" id="pr-del" style="display:none">Elimina</button>
+        <button class="btn" id="pr-nonnec" style="display:none" title="Reversibile: resta tracciata ma esce dai conteggi">&#8856; Non necessaria</button>
+      </span>
       <button class="btn" data-close="m-prat">Chiudi</button>
       <button class="btn btn-p" id="pr-save">Salva Pratica</button>
     </div>
@@ -606,6 +609,14 @@ tbody tr:hover td { background:#f0f4f9; }
    SCS GESTIONALE PROGETTI
    App single-file. Richiede l'esecuzione di sql/001_gestionale_v2.sql.
    =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   PERMESSI CONFIGURABILI
+   'admin' = solo gli amministratori · 'staff' = anche i collaboratori.
+   Portando eliminaPratica su 'staff' esegui anche sql/003_permessi_pratiche.sql,
+   altrimenti il database rifiuta comunque la cancellazione.
+   --------------------------------------------------------------------------- */
+const PERMESSI = { eliminaPratica: 'admin' };
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -687,6 +698,7 @@ const pn = id => { const p = byId(S.projects, id); return p ? p.name : '-'; };
 const un = id => { const u = byId(S.profs, id); return u ? u.full_name : '-'; };
 const canW = () => !!S.prof && (S.prof.role === 'admin' || S.prof.role === 'collaboratore');
 const isAd = () => !!S.prof && S.prof.role === 'admin';
+const puoEliminarePratica = () => PERMESSI.eliminaPratica === 'staff' ? canW() : isAd();
 
 const ST_TASK = { da_fare:['Da fare','bgr'], in_corso:['In corso','bb'], revisione:['In revisione','by'], completato:['Completata','bg'] };
 const ST_FASE = { non_avviata:['Non avviata','bgr'], in_corso:['In corso','bb'], completata:['Completata','bg'], non_applicabile:['Non applicabile','bgr'] };
@@ -2274,7 +2286,7 @@ function tabellaPratiche(list, nLette, mostraCommessa) {
   return '<div class="tw"><table class="tsm"><thead><tr>'
     + (mostraCommessa ? '<th>Commessa</th>' : '')
     + '<th>Pratica</th><th>Stato</th><th>Protocollo</th><th>Invio</th><th>Scadenza</th>'
-    + '<th>Responsabile</th><th></th></tr></thead><tbody>'
+    + '<th>Responsabile</th><th></th><th></th></tr></thead><tbody>'
     + list.map(p => {
         const late = praticaLate(p);
         const gg = p.data_scadenza && praticaOpen(p) ? diffD(p.data_scadenza, todayISO()) : null;
@@ -2295,6 +2307,10 @@ function tabellaPratiche(list, nLette, mostraCommessa) {
             : '<span style="color:var(--mut2)">-</span>') + '</td>'
         + '<td class="ac" style="font-size:12px;color:' + (nLette.has(p.id) ? 'var(--blue);font-weight:700' : 'var(--mut2)') + '">'
           + (nm ? '💬 ' + nm + (nLette.has(p.id) ? ' •' : '') : '') + '</td>'
+        + '<td class="ac">'
+          + (canW() && praticaOpen(p) ? '<button class="btn btn-xs" data-nonnec="' + p.id + '" title="Segna come non necessaria (reversibile)">&#8856;</button> ' : '')
+          + (puoEliminarePratica() ? '<button class="btn btn-xs btn-d" data-delprat="' + p.id + '" title="Elimina definitivamente">&#128465;</button>' : '')
+        + '</td>'
         + '</tr>';
       }).join('')
     + '</tbody></table></div>';
@@ -3015,7 +3031,8 @@ function openPratica(id, presetPid, presetFase) {
   el('pr-refe').value  = p ? (p.referente_ente || '') : '';
   el('pr-rif').value   = p ? (p.rif_normativo || '') : '';
   el('pr-note').value  = p ? (p.note || '') : '';
-  el('pr-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+  el('pr-del').style.display = (id && puoEliminarePratica()) ? 'inline-flex' : 'none';
+  el('pr-nonnec').style.display = (id && canW() && p && praticaOpen(p)) ? 'inline-flex' : 'none';
 
   /* Conversazione: disponibile solo su pratiche gia' salvate */
   el('ev-tipo').innerHTML = EVENTI_PRATICA.filter(t => t !== 'messaggio')
@@ -3240,10 +3257,30 @@ async function savePratica() {
   toast('Pratica salvata', 'success');
 }
 async function delPratica(id) {
-  if (!confirm('Eliminare questa pratica e il suo diario?')) return;
+  const p = byId(S.pratiche, id); if (!p) return;
+  const nm = S.chat[id] || 0;
+  if (!confirm('Eliminare definitivamente "' + p.ente + ' \u2014 ' + p.tipo + '"?\n\n'
+    + 'Vengono persi anche protocollo, date, diario'
+    + (nm ? ' e ' + nm + (nm === 1 ? ' messaggio' : ' messaggi') + ' di conversazione' : '') + '.\n\n'
+    + 'Se la pratica semplicemente non serve per questa commessa, annulla e usa '
+    + '"Non necessaria": esce dai conteggi ma resta tracciata, ed \u00e8 reversibile.')) return;
   const { error } = await SB.from('commessa_pratiche').delete().eq('id', id);
   if (error) return sbErr(error, 'elimina pratica');
   closeM('m-prat'); await loadAll(true); render(); toast('Pratica eliminata');
+}
+
+/* Alternativa non distruttiva: la pratica resta a memoria della valutazione fatta */
+async function nonNecessaria(id) {
+  const p = byId(S.pratiche, id); if (!p) return;
+  if (!confirm('Segnare "' + p.ente + ' \u2014 ' + p.tipo + '" come non necessaria?\n\n'
+    + 'Esce dai conteggi e dallo scadenzario ma resta consultabile: documenta che la '
+    + 'valutazione \u00e8 stata fatta. Puoi riattivarla quando vuoi.')) return;
+  const { error } = await SB.from('commessa_pratiche').update({ stato:'non_necessaria' }).eq('id', id);
+  if (error) return sbErr(error, 'pratica');
+  SB.from('pratica_eventi').insert({ pratica_id:id, tipo:'nota', created_by:S.me.id,
+    descrizione:'Segnata come non necessaria da ' + (S.prof.full_name || '') });
+  closeM('m-prat'); await loadAll(true); render();
+  toast('Pratica segnata come non necessaria', 'success');
 }
 
 /* ===========================================================================
@@ -3438,6 +3475,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('tt-p').onchange  = () => fillFasiSel(el('tt-p').value, '');
   el('pr-save').onclick = savePratica;
   el('pr-del').onclick  = () => delPratica(el('pr-id').value);
+  el('pr-nonnec').onclick = () => nonNecessaria(el('pr-id').value);
   el('pr-inv').onchange = recalcScadenza;
   el('pr-gg').onchange  = recalcScadenza;
   qsa('.mtab').forEach(b => b.onclick = () => mtab(b.dataset.mtab));
@@ -3481,6 +3519,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj')))  { return goProject(n.dataset.proj); }
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
+    if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
+    if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
     if ((n = f('data-usr')))   { return openUser(n.dataset.usr); }
     if ((n = f('data-delte'))) { return delOre(n.dataset.delte); }

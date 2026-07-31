@@ -288,6 +288,33 @@ function launchOpts(){
     await p.keyboard.press('Escape'); await p.waitForTimeout(300);
   });
 
+
+  await t('pratiche: eliminazione e alternativa reversibile',async()=>{
+    await p.click('.sn[data-page="pratiche"]'); await p.waitForTimeout(600);
+    must(await p.locator('tbody [data-nonnec]').count()>0,'azione "non necessaria" assente in elenco');
+    must(await p.locator('tbody [data-delprat]').count()>0,'azione elimina assente in elenco (admin)');
+    const pre=await p.evaluate(()=>__DB.commessa_pratiche.length);
+    p.once('dialog',d=>d.accept());
+    await p.locator('tbody [data-nonnec]').first().click(); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>__DB.commessa_pratiche.some(x=>x.stato==='non_necessaria')),'stato non applicato');
+    must(await p.evaluate(()=>__DB.pratica_eventi.some(e=>/non necessaria/i.test(e.descrizione||''))),'scelta non tracciata nel diario');
+    must(await p.evaluate(n=>__DB.commessa_pratiche.length===n,pre),'"non necessaria" ha cancellato la pratica');
+    p.once('dialog',d=>d.accept());
+    await p.locator('tbody [data-delprat]').first().click(); await p.waitForTimeout(900);
+    must(await p.evaluate(n=>__DB.commessa_pratiche.length===n-1,pre),'eliminazione dalla lista non eseguita');
+  });
+  await t('pratiche: permessi rispettati per ruolo',async()=>{
+    await p.evaluate(()=>{ S.prof.role='collaboratore'; render(); });
+    await p.waitForTimeout(400);
+    must(await p.locator('tbody [data-delprat]').count()===0,'collaboratore vede elimina con PERMESSI=admin');
+    must(await p.locator('tbody [data-nonnec]').count()>0,'collaboratore non vede "non necessaria"');
+    await p.evaluate(()=>{ S.prof.role='viewer'; render(); });
+    await p.waitForTimeout(400);
+    must(await p.locator('tbody [data-nonnec]').count()===0,'viewer puo modificare le pratiche');
+    await p.evaluate(()=>{ S.prof.role='admin'; render(); });
+    await p.waitForTimeout(300);
+  });
+
   // --- ATTIVITÀ / ORE ---
   await t('crea attività manuale',async()=>{
     await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);

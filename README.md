@@ -139,6 +139,22 @@ Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo
   Sotto il campo di scrittura è indicato **chi riceverà la notifica**; se la pratica
   non ha un responsabile te lo dice invece di inviare nel vuoto. In elenco ogni
   pratica mostra 💬 con il numero di messaggi, evidenziato se ce ne sono di non letti.
+- **Togliere una pratica** — due strade, entrambe raggiungibili sia dall'elenco
+  (colonna a destra) sia dalla finestra della pratica:
+  - **⊘ Non necessaria** (tutti i collaboratori, reversibile): la pratica esce dai
+    conteggi e dallo scadenzario ma resta consultabile, a documentare che la
+    valutazione è stata fatta. La scelta finisce nel diario con nome e data.
+    È la strada giusta quando la generazione automatica ha creato una pratica che
+    per quella commessa non serve.
+  - **🗑 Elimina** (di default solo admin, irreversibile): cancella anche protocollo,
+    date, diario e conversazione. La conferma dice quanti messaggi si perdono e
+    ricorda l'alternativa.
+
+  Per lasciare eliminare anche ai collaboratori: esegui
+  [`sql/003_permessi_pratiche.sql`](sql/003_permessi_pratiche.sql) e porta
+  `PERMESSI.eliminaPratica` da `'admin'` a `'staff'` in cima a `index.html`.
+  Servono entrambe le modifiche: il solo cambio nel file non basta, perché la
+  cancellazione è bloccata anche dalle policy del database.
 - **Chiudere una commessa**: dal dettaglio → *Modifica* trovi due operazioni distinte.
   - **Archivia** (collaboratori e admin, reversibile): la commessa esce dagli elenchi
     e dai menu a tendina ma resta consultabile dal filtro *Archiviate*, con tutto lo
@@ -187,7 +203,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 65 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 67 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
