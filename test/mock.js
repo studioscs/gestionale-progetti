@@ -61,9 +61,13 @@
   window.supabase={createClient:()=>({
     from:t=>Q(t),
     auth:{
-      getSession:()=>Promise.resolve({data:{session:{user:{id:UID,email:'f@scs.it'}}}}),
+      getSession:()=>Promise.resolve({data:{session:window.__NOSESSION?null:{user:{id:UID,email:'f@scs.it'}}}}),
       getUser:()=>Promise.resolve({data:{user:{id:UID,email:'f@scs.it'}}}),
-      onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),
+      onAuthStateChange:(cb)=>{ window.__AUTHCB=cb; return {data:{subscription:{unsubscribe(){}}}}; },
+      updateUser:(attrs)=>{ window.__UPDATED=attrs;
+        if(attrs.password==='VecchiaPass1') return Promise.resolve({data:null,error:{message:'New password should be different from the old password.'}});
+        return Promise.resolve({data:{user:{id:'u-me'}},error:null}); },
+      resetPasswordForEmail:(em,o)=>{ window.__RESET={email:em,opts:o}; return Promise.resolve({data:{},error:null}); },
       signOut:()=>Promise.resolve({error:null})
     },
     storage:{from:()=>({

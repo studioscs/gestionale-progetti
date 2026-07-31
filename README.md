@@ -48,7 +48,14 @@ i propri** messaggi.
 Serve un bucket **privato** chiamato `commesse`. I file finiscono in
 `commesse/<id-commessa>/`. Il download avviene con URL firmati a 120 secondi.
 
-### 3. Utenti
+### 3. URL di reindirizzamento (necessario per il recupero password)
+
+Supabase → **Authentication → URL Configuration**: inserisci l'indirizzo da cui
+servi l'app in **Site URL** e aggiungilo anche fra i **Redirect URLs**
+(es. `https://tuodominio.it/index.html`). Senza questo passaggio il link di
+recupero password ricevuto per email rimanda a una pagina che Supabase rifiuta.
+
+### 4. Utenti
 
 Invita da Supabase → Authentication → Users, oppure fai usare "Registrati".
 Chi si registra nasce **Viewer** (sola lettura): un admin lo promuove a
@@ -123,6 +130,9 @@ Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo
   con preset *oggi / domani / +1 settimana / +2 settimane / +1 mese*.
 - **Scorciatoie:** `n` nuova attività · `p` nuova commessa · `o` registra ore ·
   `/` cerca · `Esc` chiude.
+- **Password dimenticata**: dal link ricevuto per email si arriva a una schermata
+  che chiede la nuova password. Se il link è scaduto lo dice e invita a
+  richiederne uno nuovo.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -203,6 +213,7 @@ il problema si ripete, richiama il file con un parametro, ad esempio
 | Popover *(introdotto e corretto in questa versione)* | Si chiudeva sul `mousedown`, quindi il `click` sulla voce non arrivava mai |
 | Avanzamento fase *(idem)* | Stato salvato correttamente ma badge a schermo non aggiornato |
 | Barra superiore *(idem)* | I pulsanti azione erano fuori dall'area con delega eventi e non rispondevano |
+| Recupero password *(idem)* | Il link ricevuto per email autentica già l'utente: la sessione veniva trattata come un login normale e si entrava nell'app **senza mai poter cambiare la password**. Ora il link porta a una schermata dedicata; il link scaduto viene riconosciuto e spiegato |
 
 Correzioni trasversali: parsing date senza slittamento UTC (una scadenza *oggi* non
 risulta più scaduta), `esc()` che gestisce apostrofi e lo zero, messaggi d'errore

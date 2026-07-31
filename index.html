@@ -315,14 +315,30 @@ tbody tr:hover td { background:#f0f4f9; }
       <p id="aver" style="font-size:10px;color:var(--mut2);margin-top:6px"></p>
     </div>
     <div class="aerr" id="aerr"></div>
-    <div class="fg"><label class="fl">Email</label><input class="fc" type="email" id="aemail" autocomplete="username" placeholder="nome@studiotecnicoscs.com"></div>
-    <div class="fg"><label class="fl">Password</label><input class="fc" type="password" id="apass" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"></div>
-    <button class="btn btn-p btn-full" id="abtn">Accedi</button>
-    <p style="text-align:center;margin-top:14px">
-      <a href="#" id="aforgot" style="font-size:12px;color:var(--mut)">Password dimenticata?</a>
-      &nbsp;&middot;&nbsp;
-      <a href="#" id="areglink" style="font-size:12px">Registrati</a>
-    </p>
+    <div id="loginpanel">
+      <div class="fg"><label class="fl">Email</label><input class="fc" type="email" id="aemail" autocomplete="username" placeholder="nome@studiotecnicoscs.com"></div>
+      <div class="fg"><label class="fl">Password</label><input class="fc" type="password" id="apass" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"></div>
+      <button class="btn btn-p btn-full" id="abtn">Accedi</button>
+      <p style="text-align:center;margin-top:14px">
+        <a href="#" id="aforgot" style="font-size:12px;color:var(--mut)">Password dimenticata?</a>
+        &nbsp;&middot;&nbsp;
+        <a href="#" id="areglink" style="font-size:12px">Registrati</a>
+      </p>
+    </div>
+
+    <!-- Schermata raggiunta cliccando il link di recupero ricevuto per email -->
+    <div id="resetpanel" style="display:none">
+      <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px">Imposta una nuova password</div>
+      <p class="hint" id="reswho" style="margin-bottom:14px"></p>
+      <div class="aerr" id="reserr"></div>
+      <div class="fg"><label class="fl">Nuova password *</label>
+        <input class="fc" type="password" id="np1" autocomplete="new-password" placeholder="Minimo 8 caratteri"></div>
+      <div class="fg"><label class="fl">Conferma password *</label>
+        <input class="fc" type="password" id="np2" autocomplete="new-password" placeholder="Ripeti la password"></div>
+      <button class="btn btn-p btn-full" id="nbtn">Salva la nuova password</button>
+      <p style="text-align:center;margin-top:12px">
+        <a href="#" id="nskip" style="font-size:12px;color:var(--mut)">Entra senza cambiarla</a></p>
+    </div>
     <div id="regpanel" style="display:none;margin-top:18px;border-top:1px solid var(--bord);padding-top:18px">
       <div style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px">Crea Account</div>
       <div class="aerr" id="rerr"></div>
@@ -625,7 +641,7 @@ const PERMESSI = { eliminaPratica: 'admin' };
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.07.31.4';
+const VERSIONE = '2026.07.31.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1664,9 +1680,70 @@ async function doRegister() {
 
 async function doForgot() {
   const email = el('aemail').value.trim();
-  if (!email) return toast('Inserisci prima la tua email.', 'error');
-  const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
-  error ? toast(error.message, 'error') : toast('Email di reset inviata.', 'success');
+  if (!/.+@.+\..+/.test(email)) return toast('Inserisci prima la tua email nel campo qui sopra.', 'error');
+  /* URL pulito: se la pagina ha gia' un frammento di un tentativo precedente,
+     Supabase lo rimanderebbe indietro sporcato e il flusso si romperebbe. */
+  const base = location.origin + location.pathname;
+  setLoading('abtn', true);
+  const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: base });
+  setLoading('abtn', false);
+  if (error) return toast(error.message, 'error');
+  toast('Ti abbiamo inviato una email: apri il link per scegliere la nuova password.', 'success');
+}
+
+/* ===========================================================================
+   RECUPERO PASSWORD
+   Il link ricevuto per email autentica gia' l'utente: senza questo passaggio
+   si finirebbe dentro l'app senza mai poter cambiare la password.
+   =========================================================================== */
+let RECOVERY = false;
+
+function paramsUrl() {
+  const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const q = new URLSearchParams(location.search || '');
+  return { get: k => h.get(k) || q.get(k) };
+}
+function pulisciUrl() {
+  history.replaceState(null, '', location.origin + location.pathname);
+}
+function mostraReset(email) {
+  RECOVERY = true;
+  el('auth').classList.remove('hide');
+  el('app').classList.remove('show');
+  el('loginpanel').style.display = 'none';
+  el('regpanel').style.display = 'none';
+  el('aerr').style.display = 'none';
+  el('resetpanel').style.display = 'block';
+  el('reswho').textContent = email
+    ? 'Stai reimpostando la password di ' + email + '.'
+    : 'Scegli la password che userai da adesso in poi.';
+  setTimeout(() => el('np1').focus(), 50);
+}
+function chiudiReset() {
+  RECOVERY = false;
+  el('resetpanel').style.display = 'none';
+  el('loginpanel').style.display = 'block';
+  pulisciUrl();
+}
+
+async function salvaNuovaPassword() {
+  const e = el('reserr'); e.style.display = 'none';
+  const p1 = el('np1').value, p2 = el('np2').value;
+  const fail = m => { e.textContent = m; e.style.display = 'block'; };
+  if (p1.length < 8) return fail('La password deve avere almeno 8 caratteri.');
+  if (p1 !== p2)     return fail('Le password non coincidono.');
+
+  setLoading('nbtn', true);
+  const { error } = await SB.auth.updateUser({ password: p1 });
+  setLoading('nbtn', false);
+  if (error) {
+    return fail(/same.*password|different from the old/i.test(error.message)
+      ? 'La nuova password deve essere diversa da quella attuale.'
+      : error.message);
+  }
+  chiudiReset();
+  toast('Password aggiornata. Da ora accedi con questa.', 'success');
+  boot();
 }
 
 async function doLogout() {
@@ -3437,6 +3514,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   el('rbacklink').onclick = e => { e.preventDefault(); el('regpanel').style.display = 'none'; };
   el('rbtn').onclick = doRegister;
+  el('nbtn').onclick = salvaNuovaPassword;
+  el('np2').onkeydown = ev => { if (ev.key === 'Enter') salvaNuovaPassword(); };
+  el('np1').onkeydown = ev => { if (ev.key === 'Enter') el('np2').focus(); };
+  el('nskip').onclick = ev => { ev.preventDefault(); chiudiReset(); boot(); };
   el('rpass2').onkeydown = e => { if (e.key === 'Enter') doRegister(); };
   el('sout').onclick = doLogout;
   el('refresh').onclick = async () => { if (await loadAll()) { render(); toast('Dati aggiornati'); } };
@@ -3574,8 +3655,30 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* Sessione */
-  SB.auth.getSession().then(({data}) => { if (data && data.session) boot(); });
-  SB.auth.onAuthStateChange((ev) => {
+  /* Il link di recupero puo' arrivare come frammento (#type=recovery) oppure
+     come query (?type=recovery) a seconda del flusso configurato su Supabase:
+     controlliamo entrambi, e in piu' ascoltiamo l'evento PASSWORD_RECOVERY. */
+  const P = paramsUrl();
+  const errDesc = P.get('error_description');
+  if (P.get('type') === 'recovery') RECOVERY = true;
+  if (errDesc || RECOVERY) pulisciUrl();
+
+  SB.auth.getSession().then(({data}) => {
+    const sess = data && data.session;
+    if (RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '');
+    if (errDesc) {
+      /* Tipico link scaduto. Se una sessione valida c'e' gia', non ha senso
+         bloccare l'accesso: entriamo e segnaliamo con un avviso. */
+      const msg = decodeURIComponent(errDesc.replace(/\+/g, ' '));
+      if (sess) { boot(); toast(msg + ' Richiedi un nuovo link.', 'error'); }
+      else showErr(msg + ' Richiedi un nuovo link dalla voce "Password dimenticata?".');
+      return;
+    }
+    if (sess) boot();
+  });
+  SB.auth.onAuthStateChange((ev, sess) => {
+    if (ev === 'PASSWORD_RECOVERY') return mostraReset(sess && sess.user ? sess.user.email : '');
+    if (ev === 'SIGNED_IN' && RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '');
     if (ev === 'SIGNED_OUT') {
       if (S.pollTimer) clearInterval(S.pollTimer);
       S.me = null; S.prof = null;
