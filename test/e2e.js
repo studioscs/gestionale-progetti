@@ -31,6 +31,10 @@ function launchOpts(){
   await t('login automatico e app visibile',async()=>must(await p.isVisible('#app')));
   await t('nome utente in sidebar',async()=>must((await p.textContent('#snm')).includes('Francesco')));
   await t('sezione admin visibile',async()=>must(await p.isVisible('#sec-admin')));
+  await t('versione mostrata in barra laterale',async()=>{
+    const v=await p.textContent('#sver');
+    must(/^versione \d{4}\.\d{2}\.\d{2}/.test(v),'versione assente o malformata: '+v);
+  });
 
   // --- WIZARD ---
   await t('apre wizard commessa',async()=>{ await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show'); });

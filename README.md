@@ -168,6 +168,20 @@ Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo
 
 ---
 
+## Sto usando la versione giusta?
+
+In fondo alla barra laterale (e sotto il logo nella schermata di accesso) compare
+`versione 2026.07.31.4`. Se dopo aver caricato un `index.html` nuovo il numero non
+cambia, il browser ti sta servendo la copia in cache: forza il ricaricamento con
+**Ctrl+Shift+R** (Windows/Linux) o **Cmd+Shift+R** (Mac).
+
+È la causa più comune di "ho aggiornato ma non vedo le modifiche": un file singolo
+non può invalidare la propria cache da solo. Se pubblichi su un hosting statico e
+il problema si ripete, richiama il file con un parametro, ad esempio
+`index.html?v=4`.
+
+---
+
 ## Bug corretti rispetto alla versione precedente
 
 | Punto | Problema |
@@ -203,7 +217,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 67 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 68 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
