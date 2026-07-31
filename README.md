@@ -118,6 +118,14 @@ Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo
   `/` cerca · `Esc` chiude.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
+- **Chiudere una commessa**: dal dettaglio → *Modifica* trovi due operazioni distinte.
+  - **Archivia** (collaboratori e admin, reversibile): la commessa esce dagli elenchi
+    e dai menu a tendina ma resta consultabile dal filtro *Archiviate*, con tutto lo
+    storico di ore e file. È quello che serve quasi sempre a fine lavori.
+  - **Elimina** (solo admin, irreversibile): mostra prima quante fasi, attività,
+    pratiche, ore e file verranno distrutti e chiede di **riscrivere il nome della
+    commessa** per procedere. Cancella anche i file dallo Storage e i figli in ordine
+    esplicito, senza dipendere dagli `ON DELETE CASCADE` delle tabelle preesistenti.
 - I dati si ricaricano da soli ogni 60 secondi (in pausa quando la scheda è in
   secondo piano o mentre stai compilando una modale).
 
@@ -158,13 +166,15 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 40 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 47 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
 riapertura di un'attività, avanzamento automatico delle fasi, popover di
 assegnazione e scadenza, drag & drop Kanban, calcolo dei termini di legge,
-Gantt pluriennale, tutte le pagine e l'assenza di errori in console.
+Gantt pluriennale, archiviazione con ripristino, eliminazione con conferma e
+verifica che non restino record orfani, tutte le pagine e l'assenza di errori
+in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
 
 ---

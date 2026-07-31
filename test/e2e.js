@@ -195,6 +195,87 @@ function launchOpts(){
     must(o<=1,'overflow '+o+'px');
   });
 
+
+  // --- ARCHIVIAZIONE ED ELIMINAZIONE ---
+  // Lavora su una commessa usa-e-getta, cosi' la principale resta per gli screenshot
+  await t('prepara commessa di prova',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Commessa da eliminare',status:'attivo',
+        start_date:'2026-07-01'}).select().single();
+      await generaStruttura(data.id,'strutture',['strutture','geologia'],'2026-07-01');
+      await SB.from('time_entries').insert({project_id:data.id,hours:5,entry_date:'2026-07-10',operator_id:'u-me'});
+      await SB.from('files').insert({project_id:data.id,name:'calcoli.pdf',storage_path:data.id+'/calcoli.pdf',
+        size_bytes:2048,uploaded_by:'u-me'});
+      await SB.storage.from('commesse').upload(data.id+'/calcoli.pdf',null);
+      await loadAll(true); go('projects');
+    });
+    await p.waitForTimeout(500);
+    must(await p.locator('[data-proj]').count()===2,'commessa di prova non creata');
+  });
+  const apri=async()=>{ await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.locator('.card:has-text("Commessa da eliminare")').first().click(); await p.waitForTimeout(500); };
+  await t('archivia: esce dagli elenchi',async()=>{
+    const n0=await p.locator('[data-proj]').count();
+    await apri();
+    await p.click('[data-act="editproj"]'); await p.waitForSelector('#m-proj.show');
+    must(await p.isVisible('#mp-arch'),'pulsante Archivia assente');
+    p.once('dialog',d=>d.accept());
+    await p.click('#mp-arch'); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>__DB.projects.some(x=>x.archiviato)),'non archiviata');
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    must(await p.locator('[data-proj]').count()===n0-1,'ancora in elenco');
+  });
+  await t('archivia: esclusa dai menu a tendina',async()=>{
+    await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);
+    await p.click('[data-act="newtask"]'); await p.waitForSelector('#m-task.show');
+    const opts=await p.locator('#tt-p option').allTextContents();
+    const arch=await p.evaluate(()=>__DB.projects.find(x=>x.archiviato).name);
+    must(!opts.some(o=>o===arch),'commessa archiviata ancora selezionabile');
+    await p.keyboard.press('Escape');
+  });
+  await t('ripristino da banner e reset del filtro',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(300);
+    await p.selectOption('#p-ar','arch'); await p.waitForTimeout(300);
+    must(await p.locator('[data-proj]').count()===1,'filtro Archiviate vuoto');
+    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(500);
+    must(await p.locator('.wbox:has-text("archiviata")').count()>0,'banner assente');
+    await p.click('[data-act="ripristina"]'); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>__DB.projects.every(x=>!x.archiviato)),'non ripristinata');
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    must(await p.inputValue('#p-ar')==='','filtro non riportato su Attive');
+  });
+  await t('elimina: bloccata finché il nome non combacia',async()=>{
+    await apri();
+    await p.click('[data-act="editproj"]'); await p.waitForSelector('#m-proj.show');
+    must(await p.isVisible('#mp-del'),'pulsante Elimina assente per admin');
+    await p.click('#mp-del'); await p.waitForSelector('#m-del.show'); await p.waitForTimeout(500);
+    must(await p.isDisabled('#del-go'),'attivo senza conferma');
+    await p.fill('#del-conf','nome sbagliato'); await p.waitForTimeout(150);
+    must(await p.isDisabled('#del-go'),'attivo con nome errato');
+    const txt=await p.textContent('#del-body');
+    must(/Attività/.test(txt)&&/File caricati/.test(txt),'riepilogo di impatto incompleto');
+  });
+  await t('elimina: rimuove commessa, contenuto, ore, file e storage',async()=>{
+    const nome=await p.evaluate(()=>{const x=byId(S.projects,DEL_ID);return x?x.name:'';});
+    must(nome,'DEL_ID non impostato');
+    const pre=await p.evaluate(()=>({p:__DB.projects.length,t:__DB.tasks.length,f:__DB.commessa_fasi.length,
+      pr:__DB.commessa_pratiche.length,te:__DB.time_entries.length,fi:__DB.files.length}));
+    await p.fill('#del-conf',nome); await p.waitForTimeout(150);
+    must(!(await p.isDisabled('#del-go')),'ancora disabilitato col nome corretto');
+    await p.click('#del-go'); await p.waitForTimeout(1600);
+    const post=await p.evaluate(()=>({p:__DB.projects.length,t:__DB.tasks.length,f:__DB.commessa_fasi.length,
+      pr:__DB.commessa_pratiche.length,te:__DB.time_entries.length,fi:__DB.files.length}));
+    must(post.p===pre.p-1&&post.t<pre.t&&post.f<pre.f&&post.pr<pre.pr,JSON.stringify(post));
+  });
+  await t('elimina: nessun record orfano',async()=>{
+    const orf=await p.evaluate(()=>{const ids=__DB.projects.map(x=>x.id);
+      return __DB.tasks.filter(x=>!ids.includes(x.project_id)).length
+           + __DB.commessa_fasi.filter(x=>!ids.includes(x.project_id)).length
+           + __DB.commessa_pratiche.filter(x=>!ids.includes(x.project_id)).length
+           + __DB.time_entries.filter(x=>!ids.includes(x.project_id)).length;});
+    must(orf===0,'record orfani: '+orf);
+  });
+
   await p.screenshot({path:path.join(__dirname,'shot-oggi.png')});
   await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(300);
   await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);

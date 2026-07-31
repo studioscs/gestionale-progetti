@@ -359,11 +359,33 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mp-t">Nuova Commessa</h3><button class="mx" data-close="m-proj">&#10005;</button></div>
     <div class="mb" id="mp-body"></div>
     <div class="mf">
-      <span class="left" id="mp-step" style="font-size:12px;color:var(--mut);align-self:center"></span>
+      <span class="left row">
+        <span id="mp-step" style="font-size:12px;color:var(--mut)"></span>
+        <button class="btn btn-sm" id="mp-arch" style="display:none">Archivia</button>
+        <button class="btn btn-sm btn-d" id="mp-del" style="display:none">Elimina</button>
+      </span>
       <button class="btn" data-close="m-proj">Annulla</button>
       <button class="btn" id="mp-back" style="display:none">&larr; Indietro</button>
       <button class="btn btn-p" id="mp-next">Avanti &rarr;</button>
       <button class="btn btn-p" id="mp-save" style="display:none">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Eliminazione commessa: conferma forte -->
+<div class="ov" id="m-del">
+  <div class="modal modal-sm">
+    <div class="mh"><h3>Eliminare la commessa?</h3><button class="mx" data-close="m-del">&#10005;</button></div>
+    <div class="mb">
+      <div id="del-body"></div>
+      <div class="fg" style="margin-top:14px">
+        <label class="fl">Scrivi <span id="del-name" style="text-transform:none;color:var(--text)"></span> per confermare</label>
+        <input class="fc" id="del-conf" autocomplete="off" placeholder="Nome esatto della commessa">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-del">Annulla</button>
+      <button class="btn btn-d" id="del-go" disabled>Elimina definitivamente</button>
     </div>
   </div>
 </div>
@@ -1786,8 +1808,9 @@ function projCard(p) {
   const pr = progressOf(p.id);
   const late = tasksOf(p.id).filter(t => isOpen(t) && isLate(t.due_date)).length;
   const pl   = praticheOf(p.id).filter(praticaLate).length;
-  return '<div class="card" style="cursor:pointer" data-proj="' + p.id + '">'
-    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">' + esc(p.name) + '</span>' + bdg(p.status, ST_PROJ) + '</div>'
+  return '<div class="card" style="cursor:pointer' + (p.archiviato ? ';opacity:.65' : '') + '" data-proj="' + p.id + '">'
+    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">' + esc(p.name) + '</span>'
+    + (p.archiviato ? '<span class="chip">archiviata</span>' : bdg(p.status, ST_PROJ)) + '</div>'
     + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">' + esc(p.client || 'Cliente non indicato')
     + (p.comune ? ' · ' + esc(p.comune) : '') + '</div>'
     + '<div class="pb"><div class="pbf" style="width:' + pr.pct + '%"></div></div>'
@@ -1907,20 +1930,26 @@ function rProjects() {
     + '<select class="sel" id="p-st"><option value="">Tutti gli stati</option>'
     + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + (S.pst === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
     + '</select>'
+    + '<select class="sel" id="p-ar"><option value="">Attive</option>'
+    + '<option value="arch">Archiviate</option><option value="all">Tutte</option></select>'
     + (canW() ? '<button class="btn btn-p btn-sm" data-act="newproj">＋ Nuova Commessa</button>' : '');
+  el('p-ar').value = S.par || '';
   el('p-q').oninput  = e => { S.pq = e.target.value; drawProjects(); };
   el('p-st').onchange = e => { S.pst = e.target.value; drawProjects(); };
+  el('p-ar').onchange = e => { S.par = e.target.value; drawProjects(); };
   drawProjects();
 }
 function drawProjects() {
   const q = (S.pq || '').toLowerCase();
-  const list = S.projects.filter(p => !p.archiviato)
+  const ar = S.par || '';
+  const list = S.projects.filter(p => ar === 'all' ? true : ar === 'arch' ? p.archiviato : !p.archiviato)
     .filter(p => !S.pst || p.status === S.pst)
     .filter(p => !q || (p.name + ' ' + (p.client || '') + ' ' + (p.comune || '') + ' ' + (p.codice || '')).toLowerCase().includes(q));
 
   if (!list.length) return el('page').innerHTML =
-    '<div class="card"><div class="empty"><i>◫</i><p>Nessuna commessa trovata.</p>'
-    + (canW() ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
+    '<div class="card"><div class="empty"><i>◫</i><p>'
+    + (ar === 'arch' ? 'Nessuna commessa archiviata.' : 'Nessuna commessa trovata.') + '</p>'
+    + (canW() && ar !== 'arch' ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
 
   el('page').innerHTML = '<div class="g3">' + list.map(projCard).join('') + '</div>';
 }
@@ -1947,7 +1976,12 @@ function rProject() {
     + (canW() ? '<button class="btn btn-sm" data-act="editproj">Modifica</button>' : '')
     + (canW() ? '<button class="btn btn-p btn-sm" data-newt="">＋ Attività</button>' : '');
 
-  let body = '<div class="card mb16"><div class="spread" style="flex-wrap:wrap;gap:16px">'
+  let body = (p.archiviato
+    ? '<div class="wbox mb16 spread"><span>📦 Questa commessa è <b>archiviata</b>: non compare negli elenchi '
+      + 'né nei menu a tendina.</span>'
+      + (canW() ? '<button class="btn btn-sm" data-act="ripristina">Ripristina</button>' : '') + '</div>'
+    : '')
+    + '<div class="card mb16"><div class="spread" style="flex-wrap:wrap;gap:16px">'
     + '<div style="flex:1;min-width:220px"><div class="spread mb8">'
       + '<span style="font-size:12px;color:var(--mut)">Avanzamento complessivo</span>'
       + '<b>' + pr.pct + '% (' + pr.done + '/' + pr.tot + ')</b></div>'
@@ -2459,6 +2493,11 @@ function drawWizard() {
   el('mp-save').style.display = (WZ.edit || WZ.step === last) ? 'inline-flex' : 'none';
   el('mp-save').textContent = WZ.edit ? 'Salva Modifiche' : 'Crea Commessa e Genera Struttura';
 
+  const p = WZ.edit ? byId(S.projects, WZ.edit) : null;
+  el('mp-arch').style.display = (p && canW()) ? 'inline-flex' : 'none';
+  el('mp-arch').textContent   = (p && p.archiviato) ? 'Ripristina' : 'Archivia';
+  el('mp-del').style.display  = (p && isAd()) ? 'inline-flex' : 'none';
+
   let h = '';
   if (WZ.step === 1) {
     const uopts = '<option value="">- Nessuno -</option>' + activeProfs()
@@ -2569,6 +2608,100 @@ async function wzSave() {
   }
 }
 
+/* ===========================================================================
+   ARCHIVIAZIONE ED ELIMINAZIONE DELLA COMMESSA
+   Archiviare e' reversibile e va bene quasi sempre: la commessa esce dagli
+   elenchi ma resta consultabile. Eliminare distrugge anche ore e file ed e'
+   riservato agli admin.
+   =========================================================================== */
+async function archiviaProj(pid, val) {
+  const p = byId(S.projects, pid); if (!p) return;
+  if (val && !confirm('Archiviare "' + p.name + '"?\n\nEsce dagli elenchi e dai menu a tendina, '
+    + 'ma resta consultabile dal filtro "Archiviate" e non perdi nulla.')) return;
+  const { error } = await SB.from('projects').update({ archiviato: !!val }).eq('id', pid);
+  if (error) return sbErr(error, 'archivia');
+  p.archiviato = !!val;
+  closeM('m-proj');
+  await loadAll(true);
+  toast(val ? 'Commessa archiviata' : 'Commessa ripristinata', 'success');
+  /* Ripristinando, riporto il filtro sulle attive: altrimenti l'elenco
+     "Archiviate" resta aperto e sembra che la commessa sia sparita. */
+  if (!val) S.par = '';
+  val ? go('projects') : render();
+}
+
+async function openDelProj(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  DEL_ID = pid;
+  el('del-name').textContent = '“' + p.name + '”';
+  el('del-conf').value = '';
+  el('del-go').disabled = true;
+  el('del-body').innerHTML = '<div class="empty" style="padding:20px"><span class="spin dk"></span></div>';
+  openM('m-del');
+
+  const { count: nFile } = await SB.from('files').select('id', {count:'exact', head:true}).eq('project_id', pid);
+  const ore = S.time.filter(e => e.project_id === pid);
+  const oreTot = ore.reduce((a, e) => a + Number(e.hours || 0), 0);
+  const righe = [
+    ['Fasi di lavoro',        fasiOf(pid).length],
+    ['Attività',              tasksOf(pid).length],
+    ['Pratiche verso gli enti', praticheOf(pid).length],
+    ['Registrazioni di ore',  ore.length + (oreTot ? ' (' + oreTot.toFixed(1) + ' h)' : '')],
+    ['File caricati',         nFile || 0]
+  ];
+  el('del-body').innerHTML =
+      '<div class="wbox mb16"><b>L’operazione non è reversibile.</b> Verrà eliminato in modo '
+    + 'definitivo tutto il contenuto della commessa, compresi i file su Storage.</div>'
+    + '<div style="font-size:13px">' + righe.map(r =>
+        '<div class="spread" style="padding:5px 0;border-bottom:1px solid var(--bord)">'
+        + '<span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('') + '</div>'
+    + '<div class="ibox" style="margin-top:14px">Se ti serve solo togliere la commessa dagli elenchi, '
+    + 'chiudi qui e usa <b>Archivia</b>: è reversibile e conserva lo storico delle ore.</div>';
+}
+
+async function delProj() {
+  const pid = DEL_ID, p = byId(S.projects, pid);
+  if (!pid || !p) return;
+  setLoading('del-go', true);
+  try {
+    /* Svuota la cartella su Storage (best effort: i permessi possono negarlo) */
+    try {
+      const { data: files } = await SB.storage.from('commesse').list(pid, { limit: 1000 });
+      const paths = (files || []).map(f => pid + '/' + f.name);
+      if (paths.length) await SB.storage.from('commesse').remove(paths);
+    } catch (e) { console.warn('storage', e); }
+
+    /* Elimina i figli in ordine esplicito: non dipendiamo dalla presenza
+       di ON DELETE CASCADE sulle tabelle preesistenti.
+       Le tabelle "opzionali" (legacy o accessorie) possono non esistere in
+       tutte le installazioni: un loro errore non deve bloccare il resto. */
+    const essenziali = ['time_entries', 'files', 'tasks', 'commessa_pratiche', 'commessa_fasi'];
+    const opzionali  = ['project_sottofasi', 'project_fasi', 'notifiche'];
+
+    for (const t of opzionali) {
+      try {
+        const { error } = await SB.from(t).delete().eq('project_id', pid);
+        if (error) console.warn('elimina ' + t, error.message);
+      } catch (e) { console.warn('elimina ' + t, e); }
+    }
+    for (const t of essenziali) {
+      const { error } = await SB.from(t).delete().eq('project_id', pid);
+      if (error) { sbErr(error, 'elimina ' + t); return; }
+    }
+    const { error } = await SB.from('projects').delete().eq('id', pid);
+    if (error) return sbErr(error, 'elimina commessa');
+
+    closeM('m-del'); closeM('m-proj');
+    DEL_ID = null;
+    await loadAll(true);
+    toast('Commessa "' + p.name + '" eliminata', 'success');
+    go('projects');
+  } finally {
+    setLoading('del-go', false);
+  }
+}
+let DEL_ID = null;
+
 /* Rigenera / integra le fasi mancanti su una commessa esistente */
 async function rigenera(pid) {
   const p = byId(S.projects, pid); if (!p) return;
@@ -2590,8 +2723,10 @@ function fillSel(id, items, val, empty) {
 function projItems() { return S.projects.filter(p => !p.archiviato).map(p => ({v:p.id, l:p.name})); }
 /* Ricorda l'ultima commessa usata: evita di riselezionarla ogni volta */
 function lastProj() {
-  try { const v = localStorage.getItem('scs_last_proj'); return byId(S.projects, v) ? v : ''; }
-  catch (e) { return ''; }
+  try {
+    const v = localStorage.getItem('scs_last_proj'), p = byId(S.projects, v);
+    return (p && !p.archiviato) ? v : '';
+  } catch (e) { return ''; }
 }
 function setLastProj(pid) { try { if (pid) localStorage.setItem('scs_last_proj', pid); } catch (e) {} }
 function defaultProj(preset) {
@@ -2961,6 +3096,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('mp-next').onclick = () => { wzCollect(); if (WZ.step === 1 && !WZ.d.name) return toast('Inserisci il nome della commessa.', 'error'); WZ.step++; drawWizard(); };
   el('mp-back').onclick = () => { wzCollect(); WZ.step--; drawWizard(); };
   el('mp-save').onclick = wzSave;
+  el('mp-arch').onclick = () => {
+    const p = byId(S.projects, WZ.edit);
+    archiviaProj(WZ.edit, !(p && p.archiviato));
+  };
+  el('mp-del').onclick  = () => openDelProj(WZ.edit);
+  el('del-go').onclick  = delProj;
+  el('del-conf').oninput = e => {
+    const p = byId(S.projects, DEL_ID);
+    el('del-go').disabled = !p || e.target.value.trim().toLowerCase() !== p.name.trim().toLowerCase();
+  };
+  el('del-conf').onkeydown = e => { if (e.key === 'Enter' && !el('del-go').disabled) delProj(); };
   el('mp-body').addEventListener('click', e => {
     const t = e.target.closest('[data-tpl]');
     if (t) { WZ.tpl = t.dataset.tpl; drawWizard(); return; }
@@ -3028,6 +3174,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'newtask')  return openTask(null, S.projId);
       if (a === 'ore')      return openOre(S.projId);
       if (a === 'genera')   return rigenera(S.projId);
+      if (a === 'ripristina') return archiviaProj(S.projId, false);
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'back')     return go('projects');

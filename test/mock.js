@@ -5,7 +5,8 @@
     profiles:[{id:UID,full_name:'Francesco Neri',email:'f@scs.it',role:'admin',attivo:true},
               {id:U2,full_name:'Anna Verdi',email:'a@scs.it',role:'collaboratore',attivo:true}],
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
-    pratica_eventi:[], notifiche:[], time_entries:[], files:[]
+    pratica_eventi:[], notifiche:[], time_entries:[], files:[],
+    project_fasi:[], project_sottofasi:[]
   };
   window.__DB=DB;
   let seq=0; const uid=()=>'id'+(++seq);
@@ -15,7 +16,7 @@
     let rows=()=>clone(DB[table]||[]);
     const flt=[]; let ord=null, lim=null, single=false, maybe=false;
     const api={
-      select(){ return api; },
+      select(c,o){ if(o&&o.head){api._count=true;} return api; },
       order(c,o){ ord={c,asc:!o||o.ascending!==false}; return api; },
       limit(n){ lim=n; return api; },
       eq(c,v){ flt.push(r=>r[c]===v); return api; },
@@ -40,6 +41,7 @@
           if(api._del){ DB[table]=DB[table].filter(r=>!flt.every(f=>f(r))); return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }
           let d=rows().filter(r=>flt.every(f=>f(r)));
+          if(api._count) return res({data:null,count:d.length,error:null});
           if(ord) d.sort((a,b)=>{const x=a[ord.c],y=b[ord.c];
             if(x==null&&y==null)return 0; if(x==null)return 1; if(y==null)return -1;
             return (x>y?1:x<y?-1:0)*(ord.asc?1:-1);});
@@ -59,8 +61,10 @@
       signOut:()=>Promise.resolve({error:null})
     },
     storage:{from:()=>({
-      upload:()=>Promise.resolve({data:{},error:null}),
-      remove:()=>Promise.resolve({data:{},error:null}),
+      list:(prefix)=>Promise.resolve({data:(window.__STORAGE||[]).filter(x=>x.startsWith(prefix+'/'))
+              .map(x=>({name:x.split('/').slice(1).join('/')})),error:null}),
+      upload:(p)=>{ (window.__STORAGE=window.__STORAGE||[]).push(p); return Promise.resolve({data:{},error:null}); },
+      remove:(ps)=>{ window.__STORAGE=(window.__STORAGE||[]).filter(x=>!ps.includes(x)); return Promise.resolve({data:{},error:null}); },
       createSignedUrl:()=>Promise.resolve({data:{signedUrl:'#'},error:null})
     })}
   })};
