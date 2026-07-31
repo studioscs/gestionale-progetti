@@ -255,6 +255,40 @@ tbody tr:hover td { background:#f0f4f9; }
 .spin { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; vertical-align:middle; }
 .spin.dk { border-color:rgba(0,0,0,.15); border-top-color:var(--navy); }
 
+/* ---------- FILTRI RAPIDI ---------- */
+.fbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.fchip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:18px; border:1px solid var(--bord); background:#fff; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+.fchip:hover { border-color:var(--blue); }
+.fchip.on { background:var(--navy); border-color:var(--navy); color:#fff; font-weight:600; }
+.fchip .c { font-size:11px; font-weight:700; background:rgba(0,0,0,.07); border-radius:9px; padding:1px 6px; }
+.fchip.on .c { background:rgba(255,255,255,.22); }
+.fchip.warn { border-color:#f1aeb5; color:var(--red); }
+.fchip.warn.on { background:var(--red); border-color:var(--red); color:#fff; }
+.fchip.warn .c { background:rgba(176,42,55,.12); }
+
+/* ---------- CHAT DI PRATICA ---------- */
+.mtabs { display:flex; gap:4px; border-bottom:1px solid var(--bord); margin:-18px -20px 16px; padding:0 20px; }
+.mtab { padding:9px 14px; font-size:13px; border:none; background:none; cursor:pointer; color:var(--mut); border-bottom:2px solid transparent; }
+.mtab.on { color:var(--navy); font-weight:600; border-bottom-color:var(--navy); }
+.mtab .n { font-size:10px; background:var(--bord); border-radius:8px; padding:1px 5px; margin-left:5px; }
+.mtab.on .n { background:var(--navy); color:#fff; }
+.chat { max-height:46vh; overflow-y:auto; padding:4px 2px; background:var(--bg); border:1px solid var(--bord); border-radius:8px; }
+.chat-in { padding:10px 12px; }
+.msg { display:flex; gap:8px; margin-bottom:11px; align-items:flex-end; }
+.msg.me { flex-direction:row-reverse; }
+.bub { background:#fff; border:1px solid var(--bord); border-radius:12px; padding:7px 11px; max-width:78%; font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+.msg.me .bub { background:var(--bluelt); border-color:#B5D4F4; }
+.bmeta { font-size:10px; color:var(--mut); margin-top:3px; display:flex; gap:6px; align-items:center; }
+.msg.me .bmeta { justify-content:flex-end; }
+.bdel { border:none; background:none; color:var(--mut2); cursor:pointer; font-size:11px; padding:0 2px; }
+.bdel:hover { color:var(--red); }
+.sys { display:flex; align-items:center; gap:8px; margin:10px 0; font-size:11px; color:var(--mut); }
+.sys::before, .sys::after { content:''; flex:1; height:1px; background:var(--bord); }
+.sys b { font-weight:600; }
+.chat-box { display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
+.chat-box textarea { flex:1; min-height:38px; max-height:120px; resize:none; }
+.daysep { text-align:center; font-size:10.5px; color:var(--mut2); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 8px; }
+
 /* ---------- WIZARD ---------- */
 .cond { display:flex; align-items:flex-start; gap:9px; padding:9px 11px; border:1px solid var(--bord); border-radius:7px; cursor:pointer; margin-bottom:6px; }
 .cond:hover { border-color:var(--blue); background:#fafcff; }
@@ -359,11 +393,33 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mp-t">Nuova Commessa</h3><button class="mx" data-close="m-proj">&#10005;</button></div>
     <div class="mb" id="mp-body"></div>
     <div class="mf">
-      <span class="left" id="mp-step" style="font-size:12px;color:var(--mut);align-self:center"></span>
+      <span class="left row">
+        <span id="mp-step" style="font-size:12px;color:var(--mut)"></span>
+        <button class="btn btn-sm" id="mp-arch" style="display:none">Archivia</button>
+        <button class="btn btn-sm btn-d" id="mp-del" style="display:none">Elimina</button>
+      </span>
       <button class="btn" data-close="m-proj">Annulla</button>
       <button class="btn" id="mp-back" style="display:none">&larr; Indietro</button>
       <button class="btn btn-p" id="mp-next">Avanti &rarr;</button>
       <button class="btn btn-p" id="mp-save" style="display:none">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Eliminazione commessa: conferma forte -->
+<div class="ov" id="m-del">
+  <div class="modal modal-sm">
+    <div class="mh"><h3>Eliminare la commessa?</h3><button class="mx" data-close="m-del">&#10005;</button></div>
+    <div class="mb">
+      <div id="del-body"></div>
+      <div class="fg" style="margin-top:14px">
+        <label class="fl">Scrivi <span id="del-name" style="text-transform:none;color:var(--text)"></span> per confermare</label>
+        <input class="fc" id="del-conf" autocomplete="off" placeholder="Nome esatto della commessa">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-del">Annulla</button>
+      <button class="btn btn-d" id="del-go" disabled>Elimina definitivamente</button>
     </div>
   </div>
 </div>
@@ -414,6 +470,11 @@ tbody tr:hover td { background:#f0f4f9; }
   <div class="modal">
     <div class="mh"><h3 id="mpr-t">Pratica / Autorizzazione</h3><button class="mx" data-close="m-prat">&#10005;</button></div>
     <div class="mb">
+      <div class="mtabs">
+        <button class="mtab on" data-mtab="dati">Dati della pratica</button>
+        <button class="mtab" data-mtab="chat">Conversazione<span class="n" id="pr-nmsg">0</span></button>
+      </div>
+      <div id="pr-tab-dati">
       <div class="fg2">
         <div class="fg"><label class="fl">Commessa *</label><select class="fc" id="pr-proj"></select></div>
         <div class="fg"><label class="fl">Modello pratica</label><select class="fc" id="pr-cat"></select></div>
@@ -449,12 +510,28 @@ tbody tr:hover td { background:#f0f4f9; }
       </div>
       <div class="fg"><label class="fl">Riferimento normativo</label><input class="fc" id="pr-rif"></div>
       <div class="fg"><label class="fl">Note</label><textarea class="fc" id="pr-note" rows="2"></textarea></div>
-      <div id="pr-diario"></div>
+      </div>
+      <div id="pr-tab-chat" style="display:none">
+        <div class="ibox mb16">Scambio rapido di informazioni fra chi segue la pratica.
+          I cambi di stato e gli eventi formali compaiono nella stessa cronologia.</div>
+        <div class="chat" id="pr-chat"></div>
+        <div class="chat-box">
+          <textarea class="fc" id="pr-msg" rows="1" placeholder="Scrivi un messaggio… (Invio per inviare)"></textarea>
+          <button class="btn btn-p" id="pr-send">Invia</button>
+        </div>
+        <div id="pr-dest" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+        <div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--mut)">Registra evento:</span>
+          <select class="sel" id="ev-tipo" style="font-size:12px"></select>
+          <input class="fc" id="ev-desc" placeholder="Es. protocollo 12345 del 12/03" style="flex:1;min-width:180px;font-size:12px">
+          <button class="btn btn-sm" id="ev-add">Aggiungi</button>
+        </div>
+      </div>
       <input type="hidden" id="pr-id"><input type="hidden" id="pr-fase">
     </div>
     <div class="mf">
       <button class="btn btn-d left" id="pr-del" style="display:none">Elimina</button>
-      <button class="btn" data-close="m-prat">Annulla</button>
+      <button class="btn" data-close="m-prat">Chiudi</button>
       <button class="btn btn-p" id="pr-save">Salva Pratica</button>
     </div>
   </div>
@@ -540,7 +617,8 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), loaded: false, pollTimer: null
+  openGrp: new Set(), chat: {}, loaded: false, pollTimer: null,
+  prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
 /* --------------------------------- UTIL ---------------------------------- */
@@ -1168,7 +1246,7 @@ vuoto: {
 };
 
 /* Etichette rapide per priorità e tipi di evento pratica */
-const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','parere','rilascio','nota'];
+const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','sopralluogo','parere','rilascio','nota'];
 </script>
 <script>
 /* ===========================================================================
@@ -1182,14 +1260,15 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
       SB.from('commessa_fasi').select('*').order('ordine'),
       SB.from('commessa_pratiche').select('*').order('data_scadenza', {nullsFirst:false}),
       SB.from('notifiche').select('*').order('created_at', {ascending:false}).limit(40),
-      SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000)
+      SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000),
+      SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1200,6 +1279,8 @@ async function loadAll(silent) {
     S.pratiche  = rr.data || [];
     S.notifiche = rn.error ? [] : (rn.data || []);
     S.time      = re.error ? S.time : (re.data || []);
+    S.chat      = {};
+    if (!rc.error) (rc.data || []).forEach(r => S.chat[r.pratica_id] = r.messaggi || 0);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -1410,7 +1491,8 @@ function drawNotifiche() {
     + '<b style="font-size:12px">Notifiche</b>'
     + '<button class="btn btn-xs" id="n-all">Segna tutte lette</button></div>'
     + S.notifiche.map(n =>
-        '<div class="nit ' + (n.letta ? '' : 'unread') + '" data-n="' + n.id + '" data-p="' + (n.project_id || '') + '">'
+        '<div class="nit ' + (n.letta ? '' : 'unread') + '" data-n="' + n.id + '" data-p="' + (n.project_id || '')
+        + '" data-pr="' + (n.pratica_id || '') + '">'
         + '<b>' + esc(n.titolo) + '</b>'
         + (n.corpo ? '<div class="nd">' + esc(n.corpo) + '</div>' : '')
         + '<div class="nd">' + fdate(n.created_at) + '</div></div>').join('');
@@ -1426,6 +1508,8 @@ function drawNotifiche() {
     const n = byId(S.notifiche, id);
     if (n && !n.letta) { n.letta = true; paintBell(); await SB.from('notifiche').update({letta:true}).eq('id', id); }
     el('ndrop').classList.remove('show');
+    const prid = it.dataset.pr;
+    if (prid && byId(S.pratiche, prid)) { S.prTab = 'chat'; return openPratica(prid); }
     if (pid) goProject(pid);
   });
 }
@@ -1786,8 +1870,9 @@ function projCard(p) {
   const pr = progressOf(p.id);
   const late = tasksOf(p.id).filter(t => isOpen(t) && isLate(t.due_date)).length;
   const pl   = praticheOf(p.id).filter(praticaLate).length;
-  return '<div class="card" style="cursor:pointer" data-proj="' + p.id + '">'
-    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">' + esc(p.name) + '</span>' + bdg(p.status, ST_PROJ) + '</div>'
+  return '<div class="card" style="cursor:pointer' + (p.archiviato ? ';opacity:.65' : '') + '" data-proj="' + p.id + '">'
+    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">' + esc(p.name) + '</span>'
+    + (p.archiviato ? '<span class="chip">archiviata</span>' : bdg(p.status, ST_PROJ)) + '</div>'
     + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">' + esc(p.client || 'Cliente non indicato')
     + (p.comune ? ' · ' + esc(p.comune) : '') + '</div>'
     + '<div class="pb"><div class="pbf" style="width:' + pr.pct + '%"></div></div>'
@@ -1907,20 +1992,26 @@ function rProjects() {
     + '<select class="sel" id="p-st"><option value="">Tutti gli stati</option>'
     + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + (S.pst === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
     + '</select>'
+    + '<select class="sel" id="p-ar"><option value="">Attive</option>'
+    + '<option value="arch">Archiviate</option><option value="all">Tutte</option></select>'
     + (canW() ? '<button class="btn btn-p btn-sm" data-act="newproj">＋ Nuova Commessa</button>' : '');
+  el('p-ar').value = S.par || '';
   el('p-q').oninput  = e => { S.pq = e.target.value; drawProjects(); };
   el('p-st').onchange = e => { S.pst = e.target.value; drawProjects(); };
+  el('p-ar').onchange = e => { S.par = e.target.value; drawProjects(); };
   drawProjects();
 }
 function drawProjects() {
   const q = (S.pq || '').toLowerCase();
-  const list = S.projects.filter(p => !p.archiviato)
+  const ar = S.par || '';
+  const list = S.projects.filter(p => ar === 'all' ? true : ar === 'arch' ? p.archiviato : !p.archiviato)
     .filter(p => !S.pst || p.status === S.pst)
     .filter(p => !q || (p.name + ' ' + (p.client || '') + ' ' + (p.comune || '') + ' ' + (p.codice || '')).toLowerCase().includes(q));
 
   if (!list.length) return el('page').innerHTML =
-    '<div class="card"><div class="empty"><i>◫</i><p>Nessuna commessa trovata.</p>'
-    + (canW() ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
+    '<div class="card"><div class="empty"><i>◫</i><p>'
+    + (ar === 'arch' ? 'Nessuna commessa archiviata.' : 'Nessuna commessa trovata.') + '</p>'
+    + (canW() && ar !== 'arch' ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
 
   el('page').innerHTML = '<div class="g3">' + list.map(projCard).join('') + '</div>';
 }
@@ -1947,7 +2038,12 @@ function rProject() {
     + (canW() ? '<button class="btn btn-sm" data-act="editproj">Modifica</button>' : '')
     + (canW() ? '<button class="btn btn-p btn-sm" data-newt="">＋ Attività</button>' : '');
 
-  let body = '<div class="card mb16"><div class="spread" style="flex-wrap:wrap;gap:16px">'
+  let body = (p.archiviato
+    ? '<div class="wbox mb16 spread"><span>📦 Questa commessa è <b>archiviata</b>: non compare negli elenchi '
+      + 'né nei menu a tendina.</span>'
+      + (canW() ? '<button class="btn btn-sm" data-act="ripristina">Ripristina</button>' : '') + '</div>'
+    : '')
+    + '<div class="card mb16"><div class="spread" style="flex-wrap:wrap;gap:16px">'
     + '<div style="flex:1;min-width:220px"><div class="spread mb8">'
       + '<span style="font-size:12px;color:var(--mut)">Avanzamento complessivo</span>'
       + '<b>' + pr.pct + '% (' + pr.done + '/' + pr.tot + ')</b></div>'
@@ -2062,45 +2158,152 @@ function orePanel(pid) {
 /* ===========================================================================
    PAGINA: PRATICHE (trasversale)
    =========================================================================== */
+const BUCKET = {
+  todo: { l:'Da preparare',      f: p => ['da_preparare','in_preparazione'].includes(p.stato) },
+  ente: { l:'Presso l\'ente',    f: p => ['inviata','integrazioni','sospesa'].includes(p.stato) },
+  late: { l:'In ritardo',        f: p => praticaLate(p), warn:1 },
+  done: { l:'Concluse',          f: p => ['rilasciata','respinta','non_necessaria'].includes(p.stato) }
+};
+
+/* Pratiche non lette: hai una notifica di chat ancora da aprire */
+function praticheNonLette() {
+  const set = new Set();
+  S.notifiche.forEach(n => { if (!n.letta && n.pratica_id) set.add(n.pratica_id); });
+  return set;
+}
+
+function filtraPratiche() {
+  const q = (S.prQ || '').toLowerCase();
+  return S.pratiche.filter(p => {
+    if (S.prBucket && !BUCKET[S.prBucket].f(p)) return false;
+    if (S.prProj && p.project_id !== S.prProj) return false;
+    if (S.prEnte && p.ente !== S.prEnte) return false;
+    if (S.prResp === 'me' && p.responsabile_id !== S.me.id) return false;
+    if (S.prResp && S.prResp !== 'me' && S.prResp !== 'none' && p.responsabile_id !== S.prResp) return false;
+    if (S.prResp === 'none' && p.responsabile_id) return false;
+    if (q && !((p.ente || '') + ' ' + (p.tipo || '') + ' ' + (p.oggetto || '') + ' '
+             + (p.protocollo || '') + ' ' + (p.rif_normativo || '') + ' ' + pn(p.project_id))
+             .toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
 function rPratiche() {
   el('top-act').innerHTML =
-      '<select class="sel" id="pr-f"><option value="aperte">Solo aperte</option><option value="scadute">Scadute</option><option value="">Tutte</option></select>'
+      '<input class="srch" id="pf-q" placeholder="Cerca ente, pratica, protocollo..." value="' + esc(S.prQ) + '">'
     + (canW() ? '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button>' : '');
-  el('pr-f').value = S.prf === undefined ? 'aperte' : S.prf;
-  el('pr-f').onchange = e => { S.prf = e.target.value; render(); };
+  el('pf-q').oninput = e => { S.prQ = e.target.value; drawPratiche(); };
+  drawPratiche();
+}
 
-  const f = S.prf === undefined ? 'aperte' : S.prf;
-  let list = S.pratiche.slice();
-  if (f === 'aperte')  list = list.filter(praticaOpen);
-  if (f === 'scadute') list = list.filter(praticaLate);
-  list.sort((a, b) => {
+function drawPratiche() {
+  const enti = Array.from(new Set(S.pratiche.map(p => p.ente).filter(Boolean))).sort();
+  const nLette = praticheNonLette();
+
+  /* --- barra dei filtri --- */
+  const chip = (k, lbl, n, warn) =>
+    '<button class="fchip ' + (S.prBucket === k ? 'on ' : '') + (warn ? 'warn' : '') + '" data-bucket="' + k + '">'
+    + lbl + '<span class="c">' + n + '</span></button>';
+
+  let bar = '<div class="fbar">'
+    + chip('', 'Tutte', S.pratiche.length)
+    + Object.keys(BUCKET).map(k =>
+        chip(k, BUCKET[k].l, S.pratiche.filter(BUCKET[k].f).length, BUCKET[k].warn)).join('')
+    + '</div>'
+    + '<div class="fbar">'
+    + '<select class="sel" id="pf-proj"><option value="">Tutte le commesse</option>'
+      + S.projects.filter(x => !x.archiviato).map(x => '<option value="' + x.id + '"'
+        + (S.prProj === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select>'
+    + '<select class="sel" id="pf-ente"><option value="">Tutti gli enti</option>'
+      + enti.map(e => '<option value="' + esc(e) + '"' + (S.prEnte === e ? ' selected' : '') + '>' + esc(e) + '</option>').join('') + '</select>'
+    + '<select class="sel" id="pf-resp"><option value="">Chiunque</option>'
+      + '<option value="me"' + (S.prResp === 'me' ? ' selected' : '') + '>Di cui sono responsabile</option>'
+      + '<option value="none"' + (S.prResp === 'none' ? ' selected' : '') + '>Senza responsabile</option>'
+      + activeProfs().map(u => '<option value="' + u.id + '"' + (S.prResp === u.id ? ' selected' : '') + '>' + esc(u.full_name) + '</option>').join('') + '</select>'
+    + '<span style="margin-left:auto;font-size:12px;color:var(--mut)">Raggruppa</span>'
+    + '<select class="sel" id="pf-grp">'
+      + [['ente','Per ente'],['proj','Per commessa'],['stato','Per stato'],['','Elenco per scadenza']]
+        .map(o => '<option value="' + o[0] + '"' + (S.prGroup === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('')
+    + '</select>'
+    + (S.prQ || S.prBucket || S.prProj || S.prEnte || S.prResp
+        ? '<button class="btn btn-sm" data-act="prreset">Azzera filtri</button>' : '')
+    + '</div>';
+
+  const list = filtraPratiche().sort((a, b) => {
     const A = pd(a.data_scadenza), B = pd(b.data_scadenza);
-    if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
+    if (!A && !B) return (a.ente || '').localeCompare(b.ente || '');
+    if (!A) return 1; if (!B) return -1; return A - B;
   });
 
-  if (!list.length) return el('page').innerHTML = '<div class="card"><div class="empty"><i>🏛️</i><p>Nessuna pratica.</p></div></div>';
+  if (!list.length) {
+    el('page').innerHTML = bar + '<div class="card"><div class="empty"><i>🏛️</i>'
+      + '<p>Nessuna pratica corrisponde ai filtri.</p></div></div>';
+    return wirePratiche();
+  }
 
-  const perEnte = {};
-  list.forEach(p => { const k = p.ente || 'Altro'; (perEnte[k] = perEnte[k] || []).push(p); });
+  /* --- raggruppamento --- */
+  const key = { ente: p => p.ente || 'Altro',
+                proj: p => pn(p.project_id),
+                stato: p => (ST_PRAT[p.stato] || ['Altro'])[0] }[S.prGroup];
 
-  el('page').innerHTML = Object.keys(perEnte).sort().map(ente =>
-    '<div class="card mb16"><div class="card-h"><span class="card-t">🏛️ ' + esc(ente)
-    + ' <span class="chip">' + perEnte[ente].length + '</span></span></div>'
-    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th>Pratica</th><th>Stato</th>'
-    + '<th>Protocollo</th><th>Invio</th><th>Scadenza</th><th>Responsabile</th></tr></thead><tbody>'
-    + perEnte[ente].map(p => {
+  let corpo;
+  if (!key) {
+    corpo = '<div class="card">' + tabellaPratiche(list, nLette, true) + '</div>';
+  } else {
+    const g = {};
+    list.forEach(p => (g[key(p)] = g[key(p)] || []).push(p));
+    corpo = Object.keys(g).sort().map(k => {
+      const late = g[k].filter(praticaLate).length;
+      return '<div class="card mb16"><div class="card-h"><span class="card-t">'
+        + (S.prGroup === 'ente' ? '🏛️ ' : S.prGroup === 'proj' ? '◫ ' : '')
+        + esc(k) + ' <span class="chip">' + g[k].length + '</span>'
+        + (late ? ' <span class="chip chip-a">' + late + ' in ritardo</span>' : '') + '</span></div>'
+        + tabellaPratiche(g[k], nLette, S.prGroup !== 'proj') + '</div>';
+    }).join('');
+  }
+
+  el('page').innerHTML = bar
+    + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">' + list.length
+    + (list.length === 1 ? ' pratica' : ' pratiche')
+    + (list.length !== S.pratiche.length ? ' su ' + S.pratiche.length : '') + '</div>'
+    + corpo;
+  wirePratiche();
+}
+
+function tabellaPratiche(list, nLette, mostraCommessa) {
+  return '<div class="tw"><table class="tsm"><thead><tr>'
+    + (mostraCommessa ? '<th>Commessa</th>' : '')
+    + '<th>Pratica</th><th>Stato</th><th>Protocollo</th><th>Invio</th><th>Scadenza</th>'
+    + '<th>Responsabile</th><th></th></tr></thead><tbody>'
+    + list.map(p => {
         const late = praticaLate(p);
+        const gg = p.data_scadenza && praticaOpen(p) ? diffD(p.data_scadenza, todayISO()) : null;
+        const nm = S.chat[p.id] || 0;
         return '<tr data-prat="' + p.id + '" style="cursor:pointer">'
-        + '<td style="font-size:12px"><b>' + esc(pn(p.project_id)) + '</b></td>'
-        + '<td>' + esc(p.tipo) + (p.rif_normativo ? '<div style="font-size:10px;color:var(--mut)">' + esc(p.rif_normativo) + '</div>' : '') + '</td>'
+        + (mostraCommessa ? '<td style="font-size:12px"><b>' + esc(pn(p.project_id)) + '</b></td>' : '')
+        + '<td><b>' + esc(p.ente) + '</b> — ' + esc(p.tipo)
+          + (p.rif_normativo ? '<div style="font-size:10px;color:var(--mut)">' + esc(p.rif_normativo) + '</div>' : '') + '</td>'
         + '<td>' + bdg(p.stato, ST_PRAT) + '</td>'
         + '<td style="font-size:12px">' + esc(p.protocollo || '-') + '</td>'
         + '<td style="font-size:12px;color:var(--mut)">' + fdate(p.data_invio) + '</td>'
         + '<td style="font-size:12px;color:' + (late ? 'var(--red);font-weight:600' : 'var(--mut)') + '">'
-          + (p.data_scadenza ? fdate(p.data_scadenza) + (late ? ' ⚠' : '') : '-') + '</td>'
-        + '<td style="font-size:12px">' + (p.responsabile_id ? esc(un(p.responsabile_id)) : '-') + '</td></tr>';
+          + (p.data_scadenza ? fdate(p.data_scadenza)
+              + (gg !== null ? '<div style="font-size:10px">' + (late ? Math.abs(gg) + ' gg di ritardo' : 'tra ' + gg + ' gg') + '</div>' : '')
+            : '-') + '</td>'
+        + '<td style="font-size:12px">' + (p.responsabile_id
+            ? '<span class="row">' + av(p.responsabile_id, 20) + esc(un(p.responsabile_id)) + '</span>'
+            : '<span style="color:var(--mut2)">-</span>') + '</td>'
+        + '<td class="ac" style="font-size:12px;color:' + (nLette.has(p.id) ? 'var(--blue);font-weight:700' : 'var(--mut2)') + '">'
+          + (nm ? '💬 ' + nm + (nLette.has(p.id) ? ' •' : '') : '') + '</td>'
+        + '</tr>';
       }).join('')
-    + '</tbody></table></div></div>').join('');
+    + '</tbody></table></div>';
+}
+
+function wirePratiche() {
+  qsa('[data-bucket]').forEach(b => b.onclick = () => { S.prBucket = b.dataset.bucket; drawPratiche(); });
+  const set = (id, k) => { const e = el(id); if (e) e.onchange = ev => { S[k] = ev.target.value; drawPratiche(); }; };
+  set('pf-proj', 'prProj'); set('pf-ente', 'prEnte'); set('pf-resp', 'prResp'); set('pf-grp', 'prGroup');
 }
 
 /* ===========================================================================
@@ -2459,6 +2662,11 @@ function drawWizard() {
   el('mp-save').style.display = (WZ.edit || WZ.step === last) ? 'inline-flex' : 'none';
   el('mp-save').textContent = WZ.edit ? 'Salva Modifiche' : 'Crea Commessa e Genera Struttura';
 
+  const p = WZ.edit ? byId(S.projects, WZ.edit) : null;
+  el('mp-arch').style.display = (p && canW()) ? 'inline-flex' : 'none';
+  el('mp-arch').textContent   = (p && p.archiviato) ? 'Ripristina' : 'Archivia';
+  el('mp-del').style.display  = (p && isAd()) ? 'inline-flex' : 'none';
+
   let h = '';
   if (WZ.step === 1) {
     const uopts = '<option value="">- Nessuno -</option>' + activeProfs()
@@ -2569,6 +2777,100 @@ async function wzSave() {
   }
 }
 
+/* ===========================================================================
+   ARCHIVIAZIONE ED ELIMINAZIONE DELLA COMMESSA
+   Archiviare e' reversibile e va bene quasi sempre: la commessa esce dagli
+   elenchi ma resta consultabile. Eliminare distrugge anche ore e file ed e'
+   riservato agli admin.
+   =========================================================================== */
+async function archiviaProj(pid, val) {
+  const p = byId(S.projects, pid); if (!p) return;
+  if (val && !confirm('Archiviare "' + p.name + '"?\n\nEsce dagli elenchi e dai menu a tendina, '
+    + 'ma resta consultabile dal filtro "Archiviate" e non perdi nulla.')) return;
+  const { error } = await SB.from('projects').update({ archiviato: !!val }).eq('id', pid);
+  if (error) return sbErr(error, 'archivia');
+  p.archiviato = !!val;
+  closeM('m-proj');
+  await loadAll(true);
+  toast(val ? 'Commessa archiviata' : 'Commessa ripristinata', 'success');
+  /* Ripristinando, riporto il filtro sulle attive: altrimenti l'elenco
+     "Archiviate" resta aperto e sembra che la commessa sia sparita. */
+  if (!val) S.par = '';
+  val ? go('projects') : render();
+}
+
+async function openDelProj(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  DEL_ID = pid;
+  el('del-name').textContent = '“' + p.name + '”';
+  el('del-conf').value = '';
+  el('del-go').disabled = true;
+  el('del-body').innerHTML = '<div class="empty" style="padding:20px"><span class="spin dk"></span></div>';
+  openM('m-del');
+
+  const { count: nFile } = await SB.from('files').select('id', {count:'exact', head:true}).eq('project_id', pid);
+  const ore = S.time.filter(e => e.project_id === pid);
+  const oreTot = ore.reduce((a, e) => a + Number(e.hours || 0), 0);
+  const righe = [
+    ['Fasi di lavoro',        fasiOf(pid).length],
+    ['Attività',              tasksOf(pid).length],
+    ['Pratiche verso gli enti', praticheOf(pid).length],
+    ['Registrazioni di ore',  ore.length + (oreTot ? ' (' + oreTot.toFixed(1) + ' h)' : '')],
+    ['File caricati',         nFile || 0]
+  ];
+  el('del-body').innerHTML =
+      '<div class="wbox mb16"><b>L’operazione non è reversibile.</b> Verrà eliminato in modo '
+    + 'definitivo tutto il contenuto della commessa, compresi i file su Storage.</div>'
+    + '<div style="font-size:13px">' + righe.map(r =>
+        '<div class="spread" style="padding:5px 0;border-bottom:1px solid var(--bord)">'
+        + '<span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('') + '</div>'
+    + '<div class="ibox" style="margin-top:14px">Se ti serve solo togliere la commessa dagli elenchi, '
+    + 'chiudi qui e usa <b>Archivia</b>: è reversibile e conserva lo storico delle ore.</div>';
+}
+
+async function delProj() {
+  const pid = DEL_ID, p = byId(S.projects, pid);
+  if (!pid || !p) return;
+  setLoading('del-go', true);
+  try {
+    /* Svuota la cartella su Storage (best effort: i permessi possono negarlo) */
+    try {
+      const { data: files } = await SB.storage.from('commesse').list(pid, { limit: 1000 });
+      const paths = (files || []).map(f => pid + '/' + f.name);
+      if (paths.length) await SB.storage.from('commesse').remove(paths);
+    } catch (e) { console.warn('storage', e); }
+
+    /* Elimina i figli in ordine esplicito: non dipendiamo dalla presenza
+       di ON DELETE CASCADE sulle tabelle preesistenti.
+       Le tabelle "opzionali" (legacy o accessorie) possono non esistere in
+       tutte le installazioni: un loro errore non deve bloccare il resto. */
+    const essenziali = ['time_entries', 'files', 'tasks', 'commessa_pratiche', 'commessa_fasi'];
+    const opzionali  = ['project_sottofasi', 'project_fasi', 'notifiche'];
+
+    for (const t of opzionali) {
+      try {
+        const { error } = await SB.from(t).delete().eq('project_id', pid);
+        if (error) console.warn('elimina ' + t, error.message);
+      } catch (e) { console.warn('elimina ' + t, e); }
+    }
+    for (const t of essenziali) {
+      const { error } = await SB.from(t).delete().eq('project_id', pid);
+      if (error) { sbErr(error, 'elimina ' + t); return; }
+    }
+    const { error } = await SB.from('projects').delete().eq('id', pid);
+    if (error) return sbErr(error, 'elimina commessa');
+
+    closeM('m-del'); closeM('m-proj');
+    DEL_ID = null;
+    await loadAll(true);
+    toast('Commessa "' + p.name + '" eliminata', 'success');
+    go('projects');
+  } finally {
+    setLoading('del-go', false);
+  }
+}
+let DEL_ID = null;
+
 /* Rigenera / integra le fasi mancanti su una commessa esistente */
 async function rigenera(pid) {
   const p = byId(S.projects, pid); if (!p) return;
@@ -2590,8 +2892,10 @@ function fillSel(id, items, val, empty) {
 function projItems() { return S.projects.filter(p => !p.archiviato).map(p => ({v:p.id, l:p.name})); }
 /* Ricorda l'ultima commessa usata: evita di riselezionarla ogni volta */
 function lastProj() {
-  try { const v = localStorage.getItem('scs_last_proj'); return byId(S.projects, v) ? v : ''; }
-  catch (e) { return ''; }
+  try {
+    const v = localStorage.getItem('scs_last_proj'), p = byId(S.projects, v);
+    return (p && !p.archiviato) ? v : '';
+  } catch (e) { return ''; }
 }
 function setLastProj(pid) { try { if (pid) localStorage.setItem('scs_last_proj', pid); } catch (e) {} }
 function defaultProj(preset) {
@@ -2712,38 +3016,177 @@ function openPratica(id, presetPid, presetFase) {
   el('pr-rif').value   = p ? (p.rif_normativo || '') : '';
   el('pr-note').value  = p ? (p.note || '') : '';
   el('pr-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
-  el('pr-diario').innerHTML = '';
-  if (id) caricaDiario(id);
+
+  /* Conversazione: disponibile solo su pratiche gia' salvate */
+  el('ev-tipo').innerHTML = EVENTI_PRATICA.filter(t => t !== 'messaggio')
+    .map(t => '<option>' + t + '</option>').join('');
+  el('pr-msg').value = '';
+  mtab(id ? (S.prTab || 'dati') : 'dati');
+  qsa('.mtab')[1].style.display = id ? 'block' : 'none';
+  el('pr-chat').innerHTML = '';
+  el('pr-nmsg').textContent = '0';
+  if (id) caricaChat(id);
   openM('m-prat');
+}
+function mtab(which) {
+  S.prTab = which;
+  qsa('.mtab').forEach(b => b.classList.toggle('on', b.dataset.mtab === which));
+  el('pr-tab-dati').style.display = which === 'dati' ? 'block' : 'none';
+  el('pr-tab-chat').style.display = which === 'chat' ? 'block' : 'none';
+  if (which === 'chat') setTimeout(() => { el('pr-msg').focus(); scrollChat(); }, 30);
 }
 function recalcScadenza() {
   const inv = el('pr-inv').value, gg = parseInt(el('pr-gg').value, 10);
   if (inv && !isNaN(gg)) el('pr-scad').value = iso(addD(pd(inv), gg));
 }
-async function caricaDiario(id) {
-  const { data } = await SB.from('pratica_eventi').select('*').eq('pratica_id', id).order('data', {ascending:false});
-  const ev = data || [];
-  el('pr-diario').innerHTML = '<div class="fg"><label class="fl">Diario della pratica</label>'
-    + (ev.length ? '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--bord);border-radius:6px;padding:8px">'
-        + ev.map(e => '<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #eef1f5">'
-          + '<b>' + fdate(e.data) + '</b> <span class="chip">' + esc(e.tipo) + '</span> ' + esc(e.descrizione || '')
-          + '<span style="color:var(--mut)"> — ' + esc(un(e.created_by)) + '</span></div>').join('') + '</div>'
-      : '<div class="hint">Nessun evento registrato.</div>')
-    + '<div class="row" style="margin-top:8px">'
-    + '<select class="sel" id="ev-tipo">' + EVENTI_PRATICA.map(t => '<option>' + t + '</option>').join('') + '</select>'
-    + '<input class="fc" id="ev-desc" placeholder="Descrizione evento" style="flex:1">'
-    + '<button class="btn btn-sm" id="ev-add">Aggiungi</button></div></div>';
-  el('ev-add').onclick = async () => {
-    const d = el('ev-desc').value.trim();
-    if (!d) return;
-    const { error } = await SB.from('pratica_eventi').insert({
-      pratica_id: id, tipo: el('ev-tipo').value, descrizione: d, created_by: S.me.id
-    });
-    if (error) return sbErr(error, 'diario');
-    el('ev-desc').value = '';
-    caricaDiario(id);
-  };
+/* ===========================================================================
+   CONVERSAZIONE DI PRATICA
+   Messaggi ed eventi formali nella stessa cronologia: quando segui una
+   pratica ti interessa l'ordine dei fatti, non la loro categoria.
+   =========================================================================== */
+async function caricaChat(id) {
+  const { data, error } = await SB.from('pratica_eventi').select('*')
+    .eq('pratica_id', id).order('created_at', { ascending: true });
+  if (error) { el('pr-chat').innerHTML = '<div class="empty" style="padding:20px"><p>Conversazione non disponibile.</p></div>'; return sbErr(error, 'chat'); }
+  CHAT_CACHE = data || [];
+  const n = CHAT_CACHE.filter(e => e.tipo === 'messaggio').length;
+  el('pr-nmsg').textContent = n;
+  S.chat[id] = n;
+  disegnaChat(CHAT_CACHE);
+  paintDestinatari(id);
 }
+
+function disegnaChat(ev) {
+  const box = el('pr-chat');
+  if (!ev.length) {
+    box.innerHTML = '<div class="empty" style="padding:26px"><i>💬</i>'
+      + '<p>Nessun messaggio.</p><p style="font-size:12px;margin-top:4px">'
+      + 'Scrivi qui le informazioni rapide su questa pratica: restano legate a lei, non si perdono nelle mail.</p></div>';
+    return;
+  }
+  let giorno = '';
+  box.innerHTML = '<div class="chat-in">' + ev.map(e => {
+    let out = '';
+    const g = String(e.created_at || '').split('T')[0];
+    if (g && g !== giorno) { giorno = g; out += '<div class="daysep">' + etichettaGiorno(g) + '</div>'; }
+
+    if (e.tipo !== 'messaggio') {
+      return out + '<div class="sys"><span><b>' + esc(e.tipo) + '</b> · ' + esc(e.descrizione || '')
+        + ' <span style="color:var(--mut2)">(' + esc(un(e.created_by)) + ')</span></span></div>';
+    }
+    const mio = e.created_by === S.me.id;
+    return out + '<div class="msg ' + (mio ? 'me' : '') + '">'
+      + av(e.created_by, 26)
+      + '<div><div class="bub">' + esc(e.descrizione || '') + '</div>'
+      + '<div class="bmeta">' + (mio ? '' : esc(un(e.created_by)) + ' · ') + oraDi(e.created_at)
+      + (mio || isAd() ? ' <button class="bdel" data-delmsg="' + e.id + '" title="Elimina">✕</button>' : '')
+      + '</div></div></div>';
+  }).join('') + '</div>';
+
+  qsa('[data-delmsg]', box).forEach(b => b.onclick = () => elimiaMsg(b.dataset.delmsg));
+  scrollChat();
+}
+function scrollChat() { const b = el('pr-chat'); if (b) b.scrollTop = b.scrollHeight; }
+function oraDi(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return isNaN(d) ? '' : String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function etichettaGiorno(g) {
+  const n = diffD(g, todayISO());
+  if (n === 0) return 'Oggi';
+  if (n === -1) return 'Ieri';
+  return fdate(g);
+}
+
+async function inviaMsg() {
+  const id = el('pr-id').value;
+  const txt = el('pr-msg').value.trim();
+  if (!id || !txt) return;
+  if (!canW()) return toast('Non hai i permessi per scrivere.', 'error');
+
+  /* Inserimento ottimistico: il messaggio compare subito */
+  el('pr-msg').value = '';
+  const tmp = { id: 'tmp' + Date.now(), tipo: 'messaggio', descrizione: txt,
+                created_by: S.me.id, created_at: new Date().toISOString() };
+  CHAT_CACHE.push(tmp);
+  disegnaChat(CHAT_CACHE);
+  el('pr-nmsg').textContent = CHAT_CACHE.filter(e => e.tipo === 'messaggio').length;
+
+  const { error } = await SB.from('pratica_eventi').insert({
+    pratica_id: id, tipo: 'messaggio', descrizione: txt, created_by: S.me.id
+  });
+  if (error) {
+    CHAT_CACHE = CHAT_CACHE.filter(e => e.id !== tmp.id);
+    disegnaChat(CHAT_CACHE);
+    el('pr-msg').value = txt;
+    return sbErr(error, 'invio messaggio');
+  }
+  await ricaricaChat(id);
+  avvisaPartecipanti(id, txt);
+}
+
+/* Chi segue la pratica: responsabile, titolare della commessa, responsabile
+   della fase collegata e chiunque abbia gia' scritto qui dentro. */
+function destinatariChat(id) {
+  const pr = byId(S.pratiche, id); if (!pr) return [];
+  const proj = byId(S.projects, pr.project_id);
+  const fase = pr.fase_id ? byId(S.fasi, pr.fase_id) : null;
+  const dest = [pr.responsabile_id, proj && proj.owner_id, fase && fase.responsabile_id]
+    .concat(CHAT_CACHE.filter(e => e.tipo === 'messaggio').map(e => e.created_by));
+  return Array.from(new Set(dest.filter(u => u && u !== S.me.id)));
+}
+
+/* Dice a chiare lettere chi ricevera' la notifica: senza responsabile un
+   messaggio non raggiungerebbe nessuno, ed e' bene saperlo prima di scriverlo. */
+function paintDestinatari(id) {
+  const box = el('pr-dest'); if (!box) return;
+  const d = destinatariChat(id);
+  box.innerHTML = d.length
+    ? '<span style="color:var(--mut)">Verranno avvisati:</span> ' + d.map(u => esc(un(u))).join(', ')
+    : '<span style="color:var(--ora)">⚠ Nessuno segue questa pratica: il messaggio resta qui ma non '
+      + 'arriva a nessuno. Assegna un <b>responsabile</b> nella scheda Dati.</span>';
+}
+
+function avvisaPartecipanti(id, txt) {
+  const pr = byId(S.pratiche, id); if (!pr) return;
+  const rows = destinatariChat(id)
+    .map(u => ({ user_id:u, project_id:pr.project_id, pratica_id:id, created_by:S.me.id,
+                 titolo: (S.prof.full_name || '') + ' — ' + pr.ente,
+                 corpo: txt.length > 140 ? txt.slice(0, 140) + '…' : txt }));
+  if (rows.length) SB.from('notifiche').insert(rows).then(({error}) => { if (error) console.warn('notifica chat', error); });
+}
+
+async function ricaricaChat(id) {
+  const { data } = await SB.from('pratica_eventi').select('*')
+    .eq('pratica_id', id).order('created_at', { ascending: true });
+  CHAT_CACHE = data || [];
+  const n = CHAT_CACHE.filter(e => e.tipo === 'messaggio').length;
+  el('pr-nmsg').textContent = n;
+  S.chat[id] = n;                       // tiene allineato il contatore in elenco
+  disegnaChat(CHAT_CACHE);
+  paintDestinatari(id);
+  if (S.page === 'pratiche') render();  // la modale vive fuori da #page: resta aperta
+}
+
+async function elimiaMsg(eid) {
+  if (!confirm('Eliminare questo messaggio?')) return;
+  const { error } = await SB.from('pratica_eventi').delete().eq('id', eid);
+  if (error) return sbErr(error, 'elimina messaggio');
+  await ricaricaChat(el('pr-id').value);
+}
+
+async function aggiungiEvento() {
+  const id = el('pr-id').value, d = el('ev-desc').value.trim();
+  if (!id || !d) return;
+  const { error } = await SB.from('pratica_eventi').insert({
+    pratica_id: id, tipo: el('ev-tipo').value, descrizione: d, created_by: S.me.id
+  });
+  if (error) return sbErr(error, 'evento');
+  el('ev-desc').value = '';
+  await ricaricaChat(id);
+}
+let CHAT_CACHE = [];
 
 async function savePratica() {
   const pid = el('pr-proj').value;
@@ -2785,8 +3228,15 @@ async function savePratica() {
         'Pratica rilasciata: ' + ente, tipo + ' — ' + (proj ? proj.name : ''), pid);
     }
   }
-  closeM('m-prat');
   await loadAll(true); render();
+  if (!id) {                       // pratica appena creata: riapro per abilitare la chat
+    const nuova = S.pratiche.find(x => x.project_id === pid && x.ente === ente && x.tipo === tipo);
+    closeM('m-prat');
+    toast('Pratica creata', 'success');
+    if (nuova) openPratica(nuova.id);
+    return;
+  }
+  closeM('m-prat');
   toast('Pratica salvata', 'success');
 }
 async function delPratica(id) {
@@ -2961,6 +3411,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('mp-next').onclick = () => { wzCollect(); if (WZ.step === 1 && !WZ.d.name) return toast('Inserisci il nome della commessa.', 'error'); WZ.step++; drawWizard(); };
   el('mp-back').onclick = () => { wzCollect(); WZ.step--; drawWizard(); };
   el('mp-save').onclick = wzSave;
+  el('mp-arch').onclick = () => {
+    const p = byId(S.projects, WZ.edit);
+    archiviaProj(WZ.edit, !(p && p.archiviato));
+  };
+  el('mp-del').onclick  = () => openDelProj(WZ.edit);
+  el('del-go').onclick  = delProj;
+  el('del-conf').oninput = e => {
+    const p = byId(S.projects, DEL_ID);
+    el('del-go').disabled = !p || e.target.value.trim().toLowerCase() !== p.name.trim().toLowerCase();
+  };
+  el('del-conf').onkeydown = e => { if (e.key === 'Enter' && !el('del-go').disabled) delProj(); };
   el('mp-body').addEventListener('click', e => {
     const t = e.target.closest('[data-tpl]');
     if (t) { WZ.tpl = t.dataset.tpl; drawWizard(); return; }
@@ -2979,6 +3440,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pr-del').onclick  = () => delPratica(el('pr-id').value);
   el('pr-inv').onchange = recalcScadenza;
   el('pr-gg').onchange  = recalcScadenza;
+  qsa('.mtab').forEach(b => b.onclick = () => mtab(b.dataset.mtab));
+  el('pr-send').onclick = inviaMsg;
+  el('ev-add').onclick  = aggiungiEvento;
+  el('ev-desc').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); aggiungiEvento(); } };
+  el('pr-msg').onkeydown = e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inviaMsg(); }
+  };
+  el('pr-msg').oninput = e => {           // il campo cresce col testo
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px';
+  };
   el('pr-cat').onchange = () => {
     const c = PRATICHE_CAT.find(x => x.k === el('pr-cat').value);
     if (!c) return;
@@ -3028,6 +3500,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'newtask')  return openTask(null, S.projId);
       if (a === 'ore')      return openOre(S.projId);
       if (a === 'genera')   return rigenera(S.projId);
+      if (a === 'ripristina') return archiviaProj(S.projId, false);
+      if (a === 'prreset')  { S.prQ=''; S.prBucket=''; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'back')     return go('projects');
