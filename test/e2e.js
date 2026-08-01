@@ -126,7 +126,7 @@ function launchOpts(){
   // --- NAVIGAZIONE ---
   for(const [pg,sel] of [['pratiche','.card'],['tasks','.card'],['kanban','.kboard'],
                          ['timeline','.gi'],['scadenzario','.card'],['time','.kgrid'],
-                         ['files','#filepanel'],['users','table'],['projects','.card'],['oggi','.kgrid']]){
+                         ['chat','.card'],['users','table'],['projects','.card'],['oggi','.kgrid']]){
     await t('pagina '+pg,async()=>{ await p.click('.sn[data-page="'+pg+'"]');
       await p.waitForSelector('#page '+sel,{timeout:5000}); });
   }
@@ -867,6 +867,97 @@ function launchOpts(){
     must(f&&f.numero_fattura,'numero non riportato sullo scaglione');
     must(f.stato==='emessa','stato non aggiornato: '+f.stato);
     must(f.xml_generato_at,'generazione non registrata');
+  });
+
+  // --- CONVERSAZIONE DENTRO L'ATTIVITÀ ---
+  await t('la sezione File Commesse non esiste più',async()=>{
+    must(await p.locator('.sn[data-page="files"]').count()===0,'voce di menu ancora presente');
+    await p.evaluate(()=>{ S.projId=__DB.projects[0].id; S.tab='avanzamento'; go('project'); });
+    await p.waitForTimeout(400);
+    must(await p.locator('#page [data-tab="file"]').count()===0,'scheda File ancora presente');
+  });
+  await t('c è la voce Chat nel menu',async()=>{
+    must(await p.locator('.sn[data-page="chat"]').count()===1,'voce Chat assente');
+  });
+  await t('l attività ha la scheda Conversazione',async()=>{
+    const tid=await p.evaluate(()=>{
+      const x=__DB.tasks.find(y=>y.project_id===S.projId);
+      openTask(x.id); return x.id;
+    });
+    await p.waitForSelector('#m-task.show'); await p.waitForTimeout(400);
+    must(await p.isVisible('#tt-tabs'),'schede assenti su un attività salvata');
+    must(await p.locator('[data-ttab="chat"]').count()===1,'scheda Conversazione assente');
+    await p.click('[data-ttab="chat"]'); await p.waitForTimeout(250);
+    must(await p.isVisible('#tt-chat'),'riquadro conversazione non mostrato');
+    must(/Nessun messaggio/.test(await p.textContent('#tt-chat')),'non parte vuota');
+    global.__TID=tid;
+  });
+  await t('scrive un messaggio e lo salva',async()=>{
+    await p.fill('#tt-msg','La quota del pianerottolo non torna');
+    await p.click('#tt-send'); await p.waitForTimeout(900);
+    const m=await p.evaluate(()=>__DB.task_messaggi);
+    must(m.length===1,'messaggi salvati: '+m.length);
+    must(m[0].testo==='La quota del pianerottolo non torna','testo: '+m[0].testo);
+    must(m[0].task_id,'messaggio senza attività');
+    must(/pianerottolo/.test(await p.textContent('#tt-chat')),'non compare nella conversazione');
+  });
+  await t('dice chi riceverà la notifica',async()=>{
+    const d=await p.textContent('#tt-dest');
+    must(/notifica|Nessuno/.test(d),'nessuna indicazione sui destinatari: '+d);
+  });
+  await t('il contatore dei messaggi si aggiorna',async()=>{
+    must((await p.textContent('#tt-nmsg'))==='1','contatore: '+(await p.textContent('#tt-nmsg')));
+    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  });
+  await t('la riga di checklist segnala la conversazione',async()=>{
+    await p.evaluate(()=>{ S.tab='avanzamento'; render(); });
+    await p.waitForTimeout(400);
+    await p.evaluate(()=>{ document.querySelectorAll('.grp-h').forEach(g=>g.click()); });
+    await p.waitForTimeout(400);
+    must(await p.locator('[data-chat]').count()>=1,'nessun segnalatore di conversazione');
+  });
+  await t('una attività nuova non ha ancora la conversazione',async()=>{
+    await p.evaluate(()=>openTask(null,S.projId));
+    await p.waitForSelector('#m-task.show'); await p.waitForTimeout(300);
+    must(!(await p.isVisible('#tt-tabs')),'schede mostrate su un attività non ancora salvata');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+  });
+  await t('la pagina Chat elenca i messaggi',async()=>{
+    await p.click('.sn[data-page="chat"]'); await p.waitForTimeout(600);
+    const h=await p.textContent('#page');
+    must(/pianerottolo/.test(h),'il messaggio non compare in elenco');
+    must(await p.locator('[data-msgto]').count()>=1,'riga non cliccabile');
+  });
+  await t('la pagina Chat dice dove si scrive',async()=>{
+    must(/Clicca un messaggio/.test(await p.textContent('#crumb')),'nessuna indicazione');
+  });
+  await t('cliccando il messaggio si apre la sua attività sulla conversazione',async()=>{
+    await p.locator('[data-msgto]').first().click();
+    await p.waitForSelector('#m-task.show',{timeout:4000});
+    await p.waitForTimeout(600);
+    must(await p.isVisible('#tt-tab-chat'),'non si apre sulla conversazione');
+    must(/pianerottolo/.test(await p.textContent('#tt-chat')),'apre l attività sbagliata');
+    const tid=await p.inputValue('#tt-id');
+    must(tid===global.__TID,'attività diversa da quella del messaggio');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+  });
+  await t('la ricerca nella chat filtra',async()=>{
+    await p.click('.sn[data-page="chat"]'); await p.waitForTimeout(500);
+    await p.fill('#ch-q','zzzznessuno'); await p.waitForTimeout(400);
+    must(/Nessun messaggio con questi filtri/.test(await p.textContent('#page')),'la ricerca non filtra');
+    await p.fill('#ch-q','pianerottolo'); await p.waitForTimeout(400);
+    must(await p.locator('[data-msgto]').count()===1,'la ricerca non ritrova il messaggio');
+    await p.fill('#ch-q',''); await p.waitForTimeout(300);
+  });
+  await t('il badge laterale conta i messaggi',async()=>{
+    must((await p.textContent('#b-chat'))==='1','badge: '+(await p.textContent('#b-chat')));
+  });
+  await t('elimina il messaggio',async()=>{
+    await p.evaluate(()=>{ const m=__DB.task_messaggi[0]; openTask(m.task_id); ttab('chat'); });
+    await p.waitForTimeout(600);
+    await p.locator('[data-delmsgt]').first().click(); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>__DB.task_messaggi.length===0),'messaggio non eliminato');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   });
 
   // --- EDILIZIA PRIVATA: PERCORSO COMPLETO E PRATICHE IN ORDINE ---

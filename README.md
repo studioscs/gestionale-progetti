@@ -31,6 +31,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 10. [`sql/011_fatturazione_pa.sql`](sql/011_fatturazione_pa.sql) — fatturazione alla PA, registro uffici, CIG/CUP separati
 11. [`sql/012_dl_sal_varianti.sql`](sql/012_dl_sal_varianti.sql) — SAL, varianti e maturazione del compenso di DL
 12. [`sql/013_ordine_pratiche.sql`](sql/013_ordine_pratiche.sql) — ordine di esecuzione delle pratiche
+13. [`sql/014_chat_attivita.sql`](sql/014_chat_attivita.sql) — conversazione dentro ogni attività
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -85,8 +86,13 @@ storage, altrimenti gli allegati restano scaricabili da chiunque conosca l'URL.
 
 ### 3. Storage
 
-Serve un bucket **privato** chiamato `commesse`. I file finiscono in
-`commesse/<id-commessa>/`. Il download avviene con URL firmati a 120 secondi.
+La sezione *File Commesse* è stata rimossa: i documenti si tengono dove lo studio
+già li tiene, e un archivio in più da mantenere allineato è un archivio in meno
+di cui fidarsi.
+
+Il bucket privato `commesse` resta previsto dalla 006 e continua a essere svuotato
+quando una commessa viene eliminata, perché nelle installazioni già in uso può
+contenere file caricati prima. Su un'installazione nuova non serve crearlo.
 
 ### 4. URL di reindirizzamento (necessario per il recupero password)
 
@@ -303,6 +309,18 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   calcola la percentuale sull'importo contrattuale dei lavori e apre lo scaglione
   di fatturazione corrispondente, già pronto da emettere: compenso di DL per la
   percentuale del SAL, meno quanto già fatturato sui SAL precedenti.
+- **La conversazione sta dentro l'attività.** Ogni attività ha una scheda
+  *Conversazione*: lì si scrivono dubbi, misure da ricontrollare, risposte del
+  committente — accanto al lavoro di cui parlano. Chi è assegnato e chi verifica
+  ricevono la notifica, e il riquadro dice **prima** chi la riceverà: se
+  l'attività non ha né assegnatario né verificatore lo segnala, invece di
+  lasciarti scrivere nel vuoto. In elenco, le attività con una conversazione
+  mostrano 💬 con il numero di messaggi.
+- **La pagina Chat non è dove si scrive: è dove si vede.** Raccoglie tutti i
+  messaggi in ordine di tempo, raggruppati per giorno, con ricerca e filtro per
+  commessa. Cliccando un messaggio si apre la sua attività, già sulla scheda
+  della conversazione: si riprende il discorso dov'era rimasto invece di doverlo
+  ritrovare.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -399,7 +417,7 @@ cd test
 npm install          # solo playwright
 node audit.js        # audit statico: funzioni, id, stato, migrazioni, cataloghi
 node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 164 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 178 test end-to-end in Chromium su un mock di Supabase
 node walk.js         # giro completo dell'interfaccia a caccia di errori a runtime
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale

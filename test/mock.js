@@ -7,7 +7,7 @@
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
-    profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[]
+    profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa

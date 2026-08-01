@@ -268,10 +268,10 @@ tbody tr:hover td { background:#f0f4f9; }
 
 /* ---------- CHAT DI PRATICA ---------- */
 .mtabs { display:flex; gap:4px; border-bottom:1px solid var(--bord); margin:-18px -20px 16px; padding:0 20px; }
-.mtab { padding:9px 14px; font-size:13px; border:none; background:none; cursor:pointer; color:var(--mut); border-bottom:2px solid transparent; }
-.mtab.on { color:var(--navy); font-weight:600; border-bottom-color:var(--navy); }
-.mtab .n { font-size:10px; background:var(--bord); border-radius:8px; padding:1px 5px; margin-left:5px; }
-.mtab.on .n { background:var(--navy); color:#fff; }
+.mtab, .ttab { padding:9px 14px; font-size:13px; border:none; background:none; cursor:pointer; color:var(--mut); border-bottom:2px solid transparent; }
+.mtab.on, .ttab.on { color:var(--navy); font-weight:600; border-bottom-color:var(--navy); }
+.mtab .n, .ttab .n { font-size:10px; background:var(--bord); border-radius:8px; padding:1px 5px; margin-left:5px; }
+.mtab.on .n, .ttab.on .n { background:var(--navy); color:#fff; }
 .chat { max-height:46vh; overflow-y:auto; padding:4px 2px; background:var(--bg); border:1px solid var(--bord); border-radius:8px; }
 .chat-in { padding:10px 12px; }
 .msg { display:flex; gap:8px; margin-bottom:11px; align-items:flex-end; }
@@ -380,7 +380,7 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="ssec">
       <span class="slbl">Gestione</span>
       <button class="sn" data-page="time"><span class="snic">&#9202;</span>Ore</button>
-      <button class="sn" data-page="files"><span class="snic">&#128193;</span>File Commesse</button>
+      <button class="sn" data-page="chat"><span class="snic">&#128172;</span>Chat<span class="snb" id="b-chat">0</span></button>
     </div>
     <div class="ssec" id="sec-admin">
       <span class="slbl">Amministrazione</span>
@@ -648,6 +648,11 @@ tbody tr:hover td { background:#f0f4f9; }
   <div class="modal">
     <div class="mh"><h3 id="mt-t">Attivit&agrave;</h3><button class="mx" data-close="m-task">&#10005;</button></div>
     <div class="mb">
+      <div class="mtabs" id="tt-tabs">
+        <button class="ttab on" data-ttab="dati">Dati dell&rsquo;attivit&agrave;</button>
+        <button class="ttab" data-ttab="chat">Conversazione<span class="n" id="tt-nmsg">0</span></button>
+      </div>
+      <div id="tt-tab-dati">
       <div class="fg"><label class="fl">Titolo *</label><input class="fc" id="tt-n"></div>
       <div class="fg2">
         <div class="fg"><label class="fl">Commessa *</label><select class="fc" id="tt-p"></select></div>
@@ -674,7 +679,21 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Ente / riferimento</label><input class="fc" id="tt-ente" placeholder="Es. Soprintendenza"><div class="hint" id="tt-rif"></div></div>
       </div>
       <div id="tt-cont"></div>
-      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="tt-no" rows="3"></textarea></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="tt-no" rows="3"></textarea>
+        <div class="hint">Le note sono tue e restano ferme. Per parlarne con gli altri usa la
+          <b>Conversazione</b>: i messaggi avvisano chi segue l&rsquo;attivit&agrave;.</div></div>
+      </div>
+
+      <div id="tt-tab-chat" style="display:none">
+        <div class="ibox mb16">Quello che riguarda questa attivit&agrave; si scrive qui, accanto al lavoro
+          di cui parla. Chi &egrave; assegnato e chi verifica ricevono la notifica.</div>
+        <div class="chat" id="tt-chat"></div>
+        <div class="chat-box">
+          <textarea class="fc" id="tt-msg" rows="1" placeholder="Scrivi un messaggio… (Invio per inviare)"></textarea>
+          <button class="btn btn-p" id="tt-send">Invia</button>
+        </div>
+        <div id="tt-dest" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+      </div>
       <input type="hidden" id="tt-id">
     </div>
     <div class="mf">
@@ -887,7 +906,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.03.4';
+const VERSIONE = '2026.08.04.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -899,7 +918,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati',
 
   /* Filtri e ricerche delle pagine. Dichiararli qui non e' pignoleria: se una
@@ -909,6 +928,7 @@ const S = {
   pq:'',  pst:'', par:'',        // commesse: ricerca, stato, archiviate
   tq:'',  tst:'', two:false,     // attivita': ricerca, stato, solo mie
   clQ:'',                        // clienti: ricerca
+  chatQ:'', chatProj:'',         // chat: ricerca e commessa
   kp:'',  kw:'',                 // kanban: commessa, persona
   gp:'',                         // gantt: commessa
   scadFiltro:'',                 // scadenzario: persona
@@ -969,13 +989,6 @@ function dueLabel(d) {
 function feuro(n) {
   if (n === null || n === undefined || n === '') return '-';
   return Number(n).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
-}
-function fsize(b) {
-  if (!b) return '-';
-  if (b < 1024) return b + ' B';
-  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  if (b < 1073741824) return (b/1048576).toFixed(1) + ' MB';
-  return (b/1073741824).toFixed(2) + ' GB';
 }
 const byId = (arr, id) => { for (const x of arr) if (x.id === id) return x; return null; };
 const pn = id => { const p = byId(S.projects, id); return p ? p.name : '-'; };
@@ -1049,7 +1062,8 @@ const MIGRAZIONI = {
                            'rif_incarico_data','rif_incarico_tipo','oggetto_servizio','ente_pa_id','enti_pa'],
   '012_dl_sal_varianti':  ['importo_lavori','compenso_dl','contenuto','sal_id',
                            'commessa_sal','commessa_varianti'],
-  '013_ordine_pratiche':  ['ordine']
+  '013_ordine_pratiche':  ['ordine'],
+  '014_chat_attivita':    ['task_messaggi','testo']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2040,7 +2054,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2054,7 +2068,8 @@ async function loadAll(silent) {
       SB.from('profili_costi').select('*').order('valido_dal', {ascending:false}),
       SB.from('enti_pa').select('*').order('denominazione'),
       SB.from('commessa_sal').select('*').order('numero'),
-      SB.from('commessa_varianti').select('*').order('numero')
+      SB.from('commessa_varianti').select('*').order('numero'),
+      SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300)
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2075,11 +2090,15 @@ async function loadAll(silent) {
     S.enti      = ren.error ? [] : (ren.data || []);
     S.sal       = rsa.error ? [] : (rsa.data || []);
     S.varianti  = rva.error ? [] : (rva.data || []);
+    S.msgRecenti = rms.error ? [] : (rms.data || []);
+    S.chatTask = {};
+    S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
     /* Se una tabella non esiste ancora, e' una migrazione non eseguita: va
        detto subito, non al primo salvataggio che fallisce. */
     controllaSchema([[rfa, 'commessa_fatture'], [rcl, 'clienti'],
                      [rco, 'profili_costi'],    [ren, 'enti_pa'],
-                     [rsa, 'commessa_sal'],     [rva, 'commessa_varianti']]);
+                     [rsa, 'commessa_sal'],     [rva, 'commessa_varianti'],
+                     [rms, 'task_messaggi']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -2582,7 +2601,7 @@ function render() {
     oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
-    time:rTime, files:rFiles, users:rUsers
+    time:rTime, chat:rChat, users:rUsers
   };
   (P[S.page] || rOggi)();
   updBadges();
@@ -2601,6 +2620,7 @@ function updBadges() {
 
   el('b-proj').textContent = S.projects.filter(p => p.status === 'attivo' && !p.archiviato).length;
   el('b-cli').textContent = S.clienti.filter(c => c.attivo !== false).length;
+  el('b-chat').textContent = S.msgRecenti.length;
 
   const nfa = S.fatture.filter(fattAperta).length;
   el('b-fatt').textContent = nfa;
@@ -2704,6 +2724,10 @@ function itemRow(t, showProj) {
      ma al momento di redigere l'elaborato e' quello che serve avere sott'occhio. */
   if (t.contenuto) sub.push('<span class="lnk" data-cont="' + t.id + '" '
     + 'style="cursor:pointer;color:var(--blue)">cosa deve contenere</span>');
+  /* Se c'e' una conversazione si vede da qui, senza aprire l'attivita' */
+  const nm = S.chatTask[t.id] || 0;
+  if (nm) sub.push('<span data-chat="' + t.id + '" style="cursor:pointer;color:var(--vio)" '
+    + 'title="Apri la conversazione">💬 ' + nm + '</span>');
   if (t.status === 'revisione') sub.push('<span style="color:var(--yel)">in verifica: ' + esc(un(t.responsabile_id)) + '</span>');
 
   return '<div class="it ' + (done ? 'done ' : '') + (t.opzionale ? 'opt' : '') + '">'
@@ -4340,8 +4364,7 @@ function rProject() {
     ['fatture',     'Fatturazione', fattureOf(p.id).length],
     ['contabilita', 'Contabilità & SAL', salOf(p.id).length || null],
     ['anagrafica',  'Anagrafica', null],
-    ['ore',         'Ore', null],
-    ['file',        'File', null]
+    ['ore',         'Ore', null]
   ];
   el('top-act').innerHTML = bdg(p.status, ST_PROJ)
     + (canW() ? '<button class="btn btn-sm" data-act="editproj">Modifica</button>' : '')
@@ -4383,9 +4406,6 @@ function rProject() {
     body += anagraficaPanel(p);
   } else if (S.tab === 'ore') {
     body += (isAd() ? costoPanel(p.id) + '<div style="height:16px"></div>' : '') + orePanel(p.id);
-  } else if (S.tab === 'file') {
-    body += '<div id="filepanel"><div class="empty"><i>⏳</i><p>Caricamento file...</p></div></div>';
-    setTimeout(() => drawFiles(p.id), 0);
   }
   el('page').innerHTML = body;
 }
@@ -4890,6 +4910,89 @@ function rTimeline() {
 /* ===========================================================================
    PAGINA: ORE
    =========================================================================== */
+/* ===========================================================================
+   PAGINA: CHAT
+   Non e' un posto dove si scrive: e' il posto da cui si vede che cosa e' stato
+   scritto in giro. I messaggi si scrivono dentro l'attivita' di cui parlano, e
+   da qui ci si torna con un clic.
+   =========================================================================== */
+function rChat() {
+  el('crumb').textContent = 'Tutto quello che è stato scritto sulle attività. Clicca un messaggio per aprire la sua attività.';
+
+  const proj = S.chatProj || '';
+  el('top-act').innerHTML =
+      '<input class="sel" id="ch-q" placeholder="Cerca nei messaggi…" value="' + esc(S.chatQ || '') + '" style="min-width:220px">'
+    + '<select class="sel" id="ch-p"><option value="">Tutte le commesse</option>'
+    + S.projects.filter(p => !p.archiviato).map(p => '<option value="' + p.id + '"'
+        + (proj === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
+
+  el('ch-q').oninput  = e => { S.chatQ = e.target.value; disegnaChat2(); };
+  el('ch-p').onchange = e => { S.chatProj = e.target.value; disegnaChat2(); };
+  disegnaChat2();
+}
+
+/* Separata dal disegno dei filtri: ridisegnare anche quelli a ogni battuta
+   farebbe perdere il fuoco dal campo di ricerca a ogni lettera. */
+function disegnaChat2() {
+  const proj = S.chatProj || '';
+  const q = (S.chatQ || '').toLowerCase();
+  const list = S.msgRecenti.filter(m => {
+    if (proj && m.project_id !== proj) return false;
+    if (!q) return true;
+    const t = byId(S.tasks, m.task_id);
+    return (m.testo || '').toLowerCase().indexOf(q) >= 0
+        || (t && (t.title || '').toLowerCase().indexOf(q) >= 0)
+        || pn(m.project_id).toLowerCase().indexOf(q) >= 0;
+  });
+
+  if (!list.length) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>💬</i>'
+      + '<p>' + (q || proj ? 'Nessun messaggio con questi filtri.' : 'Ancora nessun messaggio.') + '</p>'
+      + '<p style="font-size:12px;margin-top:6px">I messaggi si scrivono dentro l’attività di cui parlano: '
+      + 'apri un’attività e usa la scheda <b>Conversazione</b>.</p></div></div>';
+    return;
+  }
+
+  /* Raggruppati per giorno: quando si cerca "cosa ci siamo detti" si cerca
+     sempre a partire da quando. */
+  let giorno = '';
+  const righe = list.map(m => {
+    const t = byId(S.tasks, m.task_id);
+    let out = '';
+    const g = String(m.created_at || '').split('T')[0];
+    if (g && g !== giorno) { giorno = g; out += '<div class="daysep">' + etichettaGiorno(g) + '</div>'; }
+    return out + '<div class="it" data-msgto="' + m.task_id + '" style="cursor:pointer">'
+      + av(m.created_by, 30)
+      + '<div class="it-m">'
+        + '<div class="it-t">' + esc(t ? t.title : 'attività non più presente')
+          + (t && t.status === 'completato' ? ' <span class="chip">completata</span>' : '') + '</div>'
+        + '<div style="font-size:13px;margin:3px 0">' + esc(m.testo || '') + '</div>'
+        + '<div class="it-s"><span>' + esc(un(m.created_by)) + '</span>'
+          + '<span style="color:var(--mut2)">·</span><span>' + esc(pn(m.project_id)) + '</span>'
+          + '<span style="color:var(--mut2)">·</span><span>' + oraDi(m.created_at) + '</span></div>'
+      + '</div>'
+      + '<span style="color:var(--mut2);font-size:18px">›</span></div>';
+  }).join('');
+
+  el('page').innerHTML = '<div class="card"><div class="card-h">'
+    + '<span class="card-t">Messaggi <span class="chip">' + list.length + '</span></span>'
+    + '<span style="font-size:12px;color:var(--mut)">dal più recente</span></div>'
+    + righe + '</div>';
+}
+
+/* Dalla riga della chat all'attivita': si apre la commessa sulla fase giusta e
+   si apre l'attivita' sulla conversazione, cosi' si riprende il discorso dove
+   era rimasto invece di doverlo ritrovare. */
+function vaiAttivita(taskId) {
+  const t = byId(S.tasks, taskId);
+  if (!t) return toast('Questa attività non esiste più.', 'error');
+  if (t.commessa_fase_id) S.openGrp.add(t.commessa_fase_id);
+  S.projId = t.project_id;
+  S.tab = 'avanzamento';
+  go('project');
+  setTimeout(() => { openTask(taskId); ttab('chat'); }, 60);
+}
+
 async function rTime() {
   el('top-act').innerHTML = canW() ? '<button class="btn btn-p btn-sm" data-act="ore">＋ Registra Ore</button>' : '';
   el('page').innerHTML = '<div class="empty"><i>⏳</i><p>Caricamento...</p></div>';
@@ -4936,91 +5039,6 @@ async function rTime() {
 /* ===========================================================================
    PAGINA: FILE
    =========================================================================== */
-function rFiles() {
-  el('page').innerHTML = '<div id="filepanel"><div class="empty"><i>⏳</i><p>Caricamento...</p></div></div>';
-  drawFiles(null);
-}
-async function drawFiles(pid) {
-  let q = SB.from('files').select('*').order('created_at', {ascending:false}).limit(500);
-  if (pid) q = q.eq('project_id', pid);
-  const { data, error } = await q;
-  const box = el('filepanel');
-  if (!box) return;
-  if (error) { box.innerHTML = ''; return sbErr(error, 'file'); }
-  const files = data || [];
-
-  const popts = S.projects.filter(p => !p.archiviato)
-    .map(p => '<option value="' + p.id + '"' + (pid === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
-
-  const up = canW()
-    ? (pid ? '<input type="hidden" id="up-p" value="' + pid + '">'
-           : '<div class="fg"><label class="fl">Commessa *</label><select class="fc" id="up-p" style="max-width:420px">'
-             + '<option value="">- Seleziona commessa -</option>' + popts + '</select></div>')
-      + '<div class="dz" id="dz"><div style="font-size:26px;color:var(--mut2);margin-bottom:6px">📤</div>'
-      + '<div style="font-size:13px;color:var(--mut)"><b>Trascina i file qui</b> o clicca per selezionarli<br>'
-      + '<span style="font-size:11.5px">Vengono salvati in commesse/&lt;id-commessa&gt;/ su Supabase Storage</span></div></div>'
-      + '<input type="file" id="ufi" multiple style="display:none"><div id="ul" style="margin-top:12px"></div>'
-    : '<div style="font-size:13px;color:var(--mut)">Solo Admin e Collaboratori possono caricare file.</div>';
-
-  box.innerHTML = '<div class="card mb16"><div class="card-h"><span class="card-t">Carica file</span></div>' + up + '</div>'
-    + '<div class="card"><div class="card-h"><span class="card-t">File ' + (pid ? 'della commessa' : 'caricati') + ' <span class="chip">' + files.length + '</span></span></div>'
-    + (files.length
-      ? '<div class="tw"><table class="tsm"><thead><tr><th>Nome</th>' + (pid ? '' : '<th>Commessa</th>')
-        + '<th>Caricato da</th><th>Dimensione</th><th>Data</th><th></th></tr></thead><tbody>'
-        + files.map(f => '<tr><td style="font-weight:600">' + esc(f.name) + '</td>'
-          + (pid ? '' : '<td style="font-size:12px;color:var(--mut)">' + esc(pn(f.project_id)) + '</td>')
-          + '<td style="font-size:12px">' + esc(un(f.uploaded_by)) + '</td>'
-          + '<td style="font-size:12px;color:var(--mut)">' + fsize(f.size_bytes) + '</td>'
-          + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.created_at) + '</td>'
-          + '<td class="ac"><button class="btn btn-xs" data-dl="' + esc(f.storage_path) + '" data-nm="' + esc(f.name) + '">⬇</button>'
-          + (isAd() ? ' <button class="btn btn-xs btn-d" data-delf="' + f.id + '" data-path="' + esc(f.storage_path) + '">🗑</button>' : '')
-          + '</td></tr>').join('') + '</tbody></table></div>'
-      : '<div class="empty"><i>📁</i><p>Nessun file caricato.</p></div>') + '</div>';
-
-  if (!canW()) return;
-  const dz = el('dz'), fi = el('ufi');
-  dz.onclick = () => fi.click();
-  dz.ondragover  = e => { e.preventDefault(); dz.classList.add('over'); };
-  dz.ondragleave = () => dz.classList.remove('over');
-  dz.ondrop      = e => { e.preventDefault(); dz.classList.remove('over'); handleFiles(e.dataTransfer.files, pid); };
-  fi.onchange    = () => handleFiles(fi.files, pid);
-}
-
-function handleFiles(list, pidFixed) {
-  const pid = pidFixed || (el('up-p') ? el('up-p').value : '');
-  if (!pid) return toast('Seleziona prima una commessa.', 'error');
-  const arr = Array.prototype.slice.call(list);
-  Promise.all(arr.map(f => upFile(f, pid))).then(() => setTimeout(() => drawFiles(pidFixed), 600));
-}
-async function upFile(file, pid) {
-  const MAX = 50 * 1024 * 1024;
-  const ul = el('ul'); if (!ul) return;
-  const uid = 'u' + Math.random().toString(36).slice(2, 8);
-  const div = document.createElement('div');
-  div.className = 'urow';
-  div.innerHTML = '<span>📄</span><div style="flex:1;min-width:0"><div class="un">' + esc(file.name) + '</div>'
-    + '<div class="uprg"><div class="upgf" id="' + uid + 'p" style="width:10%"></div></div></div>'
-    + '<span style="font-size:12px;color:var(--mut);min-width:58px;text-align:right">' + fsize(file.size) + '</span>'
-    + '<span id="' + uid + 's" style="font-size:12px;color:var(--mut)">Caricamento…</span>';
-  ul.appendChild(div);
-  const st = m => { const s = el(uid + 's'); if (s) s.textContent = m; };
-  const bar = w => { const b = el(uid + 'p'); if (b) b.style.width = w; };
-
-  if (file.size > MAX) { st('✗ Oltre 50 MB'); return; }
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const path = pid + '/' + Date.now() + '_' + safe;
-  const { error } = await SB.storage.from('commesse').upload(path, file, { cacheControl:'3600', upsert:false });
-  if (error) { st('✗ ' + error.message); return; }
-  bar('80%'); st('Salvo…');
-  const { error: e2 } = await SB.from('files').insert({
-    project_id: pid, name: file.name, storage_path: path,
-    size_bytes: file.size, mime_type: file.type || null, uploaded_by: S.me.id
-  });
-  bar('100%');
-  if (e2) { st('⚠ metadati'); sbErr(e2, 'file meta'); } else { st('✓ Caricato'); }
-}
-
-
 /* ===========================================================================
    COSTO DEL PERSONALE E DELLA COMMESSA
    I costi sono storicizzati: un aumento non riscrive il valore delle commesse
@@ -5713,8 +5731,119 @@ function openTask(id, presetPid, presetFase) {
   });
 
   el('tt-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+
+  /* La conversazione esiste solo per un'attivita' gia' salvata: su una nuova
+     non c'e' ancora niente a cui agganciare i messaggi. */
+  el('tt-tabs').style.display = id ? 'flex' : 'none';
+  ttab('dati');
+  el('tt-chat').innerHTML = '';
+  el('tt-nmsg').textContent = id ? (S.chatTask[id] || 0) : 0;
+  TASK_CHAT = [];
+  if (id) caricaChatTask(id);
+
   openM('m-task');
 }
+
+/* ===========================================================================
+   CONVERSAZIONE DELL'ATTIVITA'
+   Quello che riguarda un lavoro si scrive accanto al lavoro. Se non ha un posto
+   ovvio finisce in una mail o in un messaggio sul telefono, e li' non lo ritrova
+   piu' nessuno.
+   =========================================================================== */
+let TASK_CHAT = [];
+
+function ttab(which) {
+  el('tt-tab-dati').style.display = which === 'dati' ? '' : 'none';
+  el('tt-tab-chat').style.display = which === 'chat' ? '' : 'none';
+  qsa('.ttab').forEach(b => b.classList.toggle('on', b.dataset.ttab === which));
+  if (which === 'chat') setTimeout(() => { const b = el('tt-chat'); if (b) b.scrollTop = b.scrollHeight; }, 0);
+}
+
+async function caricaChatTask(id) {
+  const { data, error } = await SB.from('task_messaggi').select('*')
+    .eq('task_id', id).order('created_at', { ascending: true });
+  if (error) {
+    el('tt-chat').innerHTML = '<div class="empty" style="padding:20px"><p>Conversazione non disponibile.</p></div>';
+    return sbErr(error, 'conversazione');
+  }
+  TASK_CHAT = data || [];
+  S.chatTask[id] = TASK_CHAT.length;
+  el('tt-nmsg').textContent = TASK_CHAT.length;
+  disegnaChatTask();
+  destinatariTask(id);
+}
+
+function disegnaChatTask() {
+  const box = el('tt-chat'); if (!box) return;
+  if (!TASK_CHAT.length) {
+    box.innerHTML = '<div class="empty" style="padding:26px"><i>💬</i><p>Nessun messaggio.</p>'
+      + '<p style="font-size:12px;margin-top:4px">Scrivi qui dubbi, misure da ricontrollare, '
+      + 'risposte del committente: restano legati a questa attività.</p></div>';
+    return;
+  }
+  let giorno = '';
+  box.innerHTML = '<div class="chat-in">' + TASK_CHAT.map(m => {
+    let out = '';
+    const g = String(m.created_at || '').split('T')[0];
+    if (g && g !== giorno) { giorno = g; out += '<div class="daysep">' + etichettaGiorno(g) + '</div>'; }
+    const mio = m.created_by === S.me.id;
+    return out + '<div class="msg ' + (mio ? 'me' : '') + '">'
+      + av(m.created_by, 26)
+      + '<div><div class="bub">' + esc(m.testo || '') + '</div>'
+      + '<div class="bmeta">' + (mio ? '' : esc(un(m.created_by)) + ' · ') + oraDi(m.created_at)
+      + (mio || isAd() ? ' <button class="bdel" data-delmsgt="' + m.id + '" title="Elimina">✕</button>' : '')
+      + '</div></div></div>';
+  }).join('') + '</div>';
+  qsa('[data-delmsgt]', box).forEach(b => b.onclick = () => elimiaMsgTask(b.dataset.delmsgt));
+  box.scrollTop = box.scrollHeight;
+}
+
+/* Chi riceve la notifica: lo si dice prima di scrivere, non dopo aver inviato
+   nel vuoto. */
+function destinatariTask(id) {
+  const t = byId(S.tasks, id); if (!t) return;
+  const dest = [t.assignee_id, t.responsabile_id]
+    .filter((u, i, a) => u && u !== S.me.id && a.indexOf(u) === i);
+  el('tt-dest').innerHTML = dest.length
+    ? '<span style="color:var(--mut)">Riceveranno la notifica:</span> '
+      + dest.map(u => '<b>' + esc(un(u)) + '</b>').join(', ')
+    : '<span style="color:var(--ora)">Nessuno riceverà la notifica: questa attività non ha '
+      + 'assegnatario né verificatore. Assegnala, o il messaggio lo leggerai solo tu.</span>';
+}
+
+async function inviaMsgTask() {
+  const id = el('tt-id').value;
+  const txt = el('tt-msg').value.trim();
+  if (!id || !txt) return;
+
+  /* Inserimento ottimistico: il messaggio compare subito */
+  el('tt-msg').value = '';
+  const tmp = { id: 'tmp' + Date.now(), testo: txt, created_by: S.me.id,
+                created_at: new Date().toISOString() };
+  TASK_CHAT.push(tmp);
+  disegnaChatTask();
+  el('tt-nmsg').textContent = TASK_CHAT.length;
+
+  const { error } = await SB.from('task_messaggi')
+    .insert({ task_id: id, testo: txt, created_by: S.me.id });
+  if (error) {
+    TASK_CHAT = TASK_CHAT.filter(m => m.id !== tmp.id);
+    disegnaChatTask();
+    el('tt-msg').value = txt;
+    return sbErr(error, 'invio messaggio');
+  }
+  await caricaChatTask(id);
+  await loadAll(true);
+}
+
+async function elimiaMsgTask(mid) {
+  if (!confirm('Eliminare questo messaggio?')) return;
+  const { error } = await SB.from('task_messaggi').delete().eq('id', mid);
+  if (error) return sbErr(error, 'elimina messaggio');
+  await caricaChatTask(el('tt-id').value);
+  await loadAll(true);
+}
+
 function fillFasiSel(pid, val) {
   fillSel('tt-f', fasiOf(pid).map(f => ({v:f.id, l:f.nome})), val, '- Nessuna fase -');
 }
@@ -6159,21 +6288,6 @@ async function saveUser() {
 /* ===========================================================================
    FILE: download / delete
    =========================================================================== */
-async function dlFile(path, name) {
-  const { data, error } = await SB.storage.from('commesse').createSignedUrl(path, 120);
-  if (error) return sbErr(error, 'download');
-  const a = document.createElement('a');
-  a.href = data.signedUrl; a.download = name; a.target = '_blank';
-  document.body.appendChild(a); a.click(); a.remove();
-}
-async function delFile(id, path) {
-  if (!confirm('Eliminare questo file? L’operazione non è reversibile.')) return;
-  await SB.storage.from('commesse').remove([path]);
-  const { error } = await SB.from('files').delete().eq('id', id);
-  if (error) return sbErr(error, 'elimina file');
-  toast('File eliminato');
-  drawFiles(S.page === 'project' ? S.projId : null);
-}
 
 /* ===========================================================================
    EVENTI (delegazione: un solo handler per tutta la pagina)
@@ -6282,6 +6396,11 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pr-inv').onchange = recalcScadenza;
   el('pr-gg').onchange  = recalcScadenza;
   qsa('.mtab').forEach(b => b.onclick = () => mtab(b.dataset.mtab));
+  qsa('.ttab').forEach(b => b.onclick = () => ttab(b.dataset.ttab));
+  el('tt-send').onclick = inviaMsgTask;
+  el('tt-msg').onkeydown = e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inviaMsgTask(); }
+  };
   el('pr-send').onclick = inviaMsg;
   el('ev-add').onclick  = aggiungiEvento;
   el('ev-desc').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); aggiungiEvento(); } };
@@ -6332,6 +6451,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let n;
     if ((n = f('data-ck')))    { e.stopPropagation(); return toggleTask(n.dataset.ck); }
     if ((n = f('data-cont')))  { e.stopPropagation(); return mostraContenuto(n.dataset.cont); }
+    if ((n = f('data-msgto'))) { return vaiAttivita(n.dataset.msgto); }
+    if ((n = f('data-chat')))  { e.stopPropagation(); openTask(n.dataset.chat); ttab('chat'); return; }
     if ((n = f('data-newsal'))) { e.stopPropagation(); return openSal(S.projId); }
     if ((n = f('data-newvar'))) { e.stopPropagation(); return openVar(S.projId); }
     if ((n = f('data-sal')))   { e.stopPropagation(); return openSal(S.projId, n.dataset.sal); }
@@ -6358,8 +6479,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
     if ((n = f('data-usr')))   { return openUser(n.dataset.usr); }
     if ((n = f('data-delte'))) { return delOre(n.dataset.delte); }
-    if ((n = f('data-dl')))    { return dlFile(n.dataset.dl, n.dataset.nm); }
-    if ((n = f('data-delf')))  { return delFile(n.dataset.delf, n.dataset.path); }
     if ((n = f('data-grp')))   {
       const id = n.dataset.grp;
       S.openGrp.has(id) ? S.openGrp.delete(id) : S.openGrp.add(id);
