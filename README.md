@@ -23,6 +23,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 2. [`sql/002_chat_pratiche.sql`](sql/002_chat_pratiche.sql) — conversazione sulle pratiche
 3. [`sql/004_categorie_attivita.sql`](sql/004_categorie_attivita.sql) — firme del cliente
 4. [`sql/005_fatturazione.sql`](sql/005_fatturazione.sql) — scaglioni di fatturazione
+5. [`sql/006_verifica_sicurezza.sql`](sql/006_verifica_sicurezza.sql) — **RLS sulle tabelle preesistenti: da eseguire**
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -48,19 +49,40 @@ campanella), l'indice cronologico sulla conversazione, la vista `v_pratiche_chat
 con il conteggio messaggi, e le policy che lasciano correggere o cancellare **solo
 i propri** messaggi.
 
-### 2. Storage
+### 2. Sicurezza: perché la 006 non è facoltativa
+
+L'app è una pagina statica: la chiave `anon` di Supabase sta nel sorgente ed è
+leggibile da chiunque. **È corretto** — quella chiave nasce per stare nel browser
+— ma proprio per questo l'unica difesa dei dati sono le policy RLS.
+
+Le migrazioni 001, 002 e 005 impostano RLS sulle tabelle che creano. Le tabelle
+preesistenti (`projects`, `tasks`, `time_entries`, `files`, `profiles` e le
+legacy) potrebbero non averla. Se anche una sola resta scoperta, chiunque
+conosca l'indirizzo dell'app può leggere e modificare commesse, clienti, ore e
+file **senza fare login**.
+
+Il **passo 1** di `006_verifica_sicurezza.sql` è una query di sola diagnosi:
+puoi eseguirla da sola per vedere la situazione prima di cambiare qualcosa. Ogni
+riga con `rls_attiva = false` è una tabella esposta.
+
+Verificato su PostgreSQL 16 dopo l'esecuzione: un utente **anonimo vede zero
+commesse**, un *viewer* legge ma non scrive, un *collaboratore* scrive ma non
+cancella, un *admin* fa tutto. La 006 chiude anche il bucket `commesse` dello
+storage, altrimenti gli allegati restano scaricabili da chiunque conosca l'URL.
+
+### 3. Storage
 
 Serve un bucket **privato** chiamato `commesse`. I file finiscono in
 `commesse/<id-commessa>/`. Il download avviene con URL firmati a 120 secondi.
 
-### 3. URL di reindirizzamento (necessario per il recupero password)
+### 4. URL di reindirizzamento (necessario per il recupero password)
 
 Supabase → **Authentication → URL Configuration**: inserisci l'indirizzo da cui
 servi l'app in **Site URL** e aggiungilo anche fra i **Redirect URLs**
 (es. `https://tuodominio.it/index.html`). Senza questo passaggio il link di
 recupero password ricevuto per email rimanda a una pagina che Supabase rifiuta.
 
-### 4. Utenti
+### 5. Utenti
 
 Invita da Supabase → Authentication → Users, oppure fai usare "Registrati".
 Chi si registra nasce **Viewer** (sola lettura): un admin lo promuove a
@@ -386,6 +408,22 @@ I contenuti normativi e procedurali dei template sono stati verificati su:
 
 Le procedure telematiche variano da Comune a Comune e da Regione a Regione:
 verifica sempre il portale che usi. I termini restano indicativi.
+
+---
+
+## Pubblicazione
+
+Il repository è pubblico e l'app è servita da **GitHub Pages** dal ramo `main`:
+ogni push è già il rilascio, non c'è nulla da caricare a mano. Dopo un
+aggiornamento i collaboratori devono fare **Ctrl+Shift+R** (o Cmd+Shift+R): un
+file singolo non può invalidare la propria cache, e Pages la tiene per qualche
+minuto. Il numero di versione in fondo alla barra laterale dice a colpo d'occhio
+quale copia si sta usando.
+
+Essendo il repository pubblico, non mettere mai in `index.html` dati che non
+possono essere letti da chiunque: niente chiavi API di servizi terzi, niente
+`service_role` di Supabase. La chiave `anon` è l'unica che può stare lì, e solo
+perché protetta da RLS.
 
 ---
 
