@@ -191,6 +191,53 @@ t('senza esproprio il piano particellare non viene generato',
   ctx.pianifica('pubblico',['strutture'],null).fasi
     .find(f=>f.fase_key==='pfte').att.every(a=>!/particellare/i.test(a.title)),null);
 
+console.log('\n— PROGETTO ESECUTIVO SECONDO L ALLEGATO I.7 —');
+const ese=ctx.TEMPLATES.pubblico.fasi.find(f=>f.k==='esecutivo');
+t('la fase esecutivo esiste',!!ese,null);
+const tEs=ese.att.map(a=>a.t);
+/* Le lettere dell'art. 22 c. 1: se una manca, l'elaborato non viene generato */
+[['a','Relazione generale'],['b','Relazioni specialistiche'],['c','Elaborati grafici'],
+ ['d','Calcoli esecutivi'],['e','Piano di manutenzione'],['f','Aggiornamento del piano di sicurezza'],
+ ['g','Quadro di incidenza della manodopera'],['h','Cronoprogramma'],
+ ['i','Elenco dei prezzi unitari'],['l','Computo metrico'],['m','Schema di contratto']
+].forEach(([L,x])=>
+  t('lettera '+L+') presente: '+x, tEs.some(y=>y.indexOf(L+') '+x)===0), tEs.filter(y=>y.indexOf(L+')')===0)));
+t('anche il capitolato speciale, sempre lettera m)',
+  tEs.some(y=>/^m\) Capitolato speciale/.test(y)),null);
+t('anche il quadro economico, sempre lettera l)',
+  tEs.some(y=>/^l\) Quadro economico/.test(y)),null);
+t('tutte le lettere da a) a m) coperte',(()=>{
+  const L=new Set(tEs.map(y=>(y.match(/^([a-m])\)/)||[])[1]).filter(Boolean));
+  return ['a','b','c','d','e','f','g','h','i','l','m'].every(x=>L.has(x));})(),
+  [...new Set(tEs.map(y=>(y.match(/^([a-m])\)/)||[])[1]).filter(Boolean))]);
+t('ogni elaborato richiama l Allegato I.7',
+  ese.att.filter(a=>/^[a-m]\)/.test(a.t)).every(a=>/All\. I\.7/.test(a.rif||'')),
+  ese.att.filter(a=>/^[a-m]\)/.test(a.t)&&!/All\. I\.7/.test(a.rif||'')).map(a=>a.t));
+t('ogni elaborato dice cosa deve contenere',
+  ese.att.filter(a=>/^[a-m]\)/.test(a.t)).every(a=>(a.cont||'').length>80),
+  ese.att.filter(a=>/^[a-m]\)/.test(a.t)&&(a.cont||'').length<=80).map(a=>a.t));
+/* Il piano di manutenzione ha tre parti e vanno nominate: e' l'errore piu'
+   frequente, consegnarne solo una. */
+t('il piano di manutenzione nomina i suoi tre documenti',(()=>{
+  const c=ese.att.find(a=>/^e\)/.test(a.t)).cont;
+  return /MANUALE D.USO/i.test(c)&&/MANUALE DI MANUTENZIONE/i.test(c)&&/PROGRAMMA DI MANUTENZIONE/i.test(c);})(),
+  ese.att.find(a=>/^e\)/.test(a.t)).cont);
+t('i calcoli esecutivi chiedono il giudizio di accettabilita',
+  /accettabilit/i.test(ese.att.find(a=>/^d\) Calcoli esecutivi delle strutture/.test(a.t)).cont),null);
+t('strutture e impianti restano condizionati',
+  ese.att.find(a=>/^d\) Calcoli esecutivi delle strutture/.test(a.t)).cond==='strutture'
+  && ese.att.find(a=>/^d\) Calcoli esecutivi degli impianti/.test(a.t)).cond==='impianti',null);
+t('verifica di completezza sull Allegato I.7',
+  tEs.some(y=>/completezza rispetto all/i.test(y)),null);
+/* Il fascicolo dell'opera accompagna l'esecutivo ma non e' una delle lettere
+   dell'art. 22: nasce dal D.Lgs 81/2008 e va richiamato per quello. */
+t('il fascicolo non e spacciato per una lettera dell art. 22',
+  tEs.some(y=>y==='Fascicolo con le caratteristiche dell’opera'),
+  tEs.filter(y=>/Fascicolo/.test(y)));
+t('senza strutture non si generano i calcoli strutturali',
+  ctx.pianifica('pubblico',['impianti'],null).fasi.find(f=>f.fase_key==='esecutivo')
+    .att.every(a=>!/^d\) Calcoli esecutivi delle strutture/.test(a.title)),null);
+
 console.log('\n— TEMPLATE SOLA DIREZIONE LAVORI —');
 const dl=ctx.TEMPLATES.dl_cse;
 t('il template esiste',!!dl,null);

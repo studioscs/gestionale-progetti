@@ -397,8 +397,8 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
-node logic.js        # 171 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 162 test end-to-end in Chromium su un mock di Supabase
+node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
+node e2e.js          # 164 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
@@ -678,9 +678,31 @@ Codice).
 Le attività del PFTE ricalcano ora gli elaborati dell'**Allegato I.7, art. 6
 c. 7**, lettera per lettera: dalla relazione generale al piano di sicurezza e
 coordinamento, più il piano particellare di esproprio quando la condizione
-*Espropri e asservimenti* è attiva. Ogni attività porta con sé il riferimento
-normativo e un campo **"cosa deve contenere"**, consultabile dalla riga di
-checklist senza aprire l'attività.
+*Espropri e asservimenti* è attiva.
+
+Lo stesso vale per il **progetto esecutivo**, che segue l'**art. 22 c. 1** dalla
+lettera a) alla m): relazione generale, relazioni specialistiche, elaborati
+grafici (architettonici, strutturali e impiantistici), calcoli esecutivi di
+strutture e impianti, piano di manutenzione, aggiornamento del PSC, quadro di
+incidenza della manodopera, cronoprogramma, elenco prezzi, computo e quadro
+economico, schema di contratto e capitolato speciale.
+
+Ogni attività porta con sé il riferimento normativo e un campo **"cosa deve
+contenere"**, consultabile dalla riga di checklist senza aprire l'attività.
+Qualche esempio di ciò che i testi ricordano:
+
+- il **piano di manutenzione** è tre documenti, non uno: manuale d'uso, manuale
+  di manutenzione e programma di manutenzione articolato nei sottoprogrammi
+  delle prestazioni, dei controlli e degli interventi;
+- i **calcoli esecutivi** devono contenere il giudizio motivato di accettabilità
+  dei risultati del calcolo automatico;
+- il **quadro di incidenza della manodopera** serve alla verifica dell'anomalia,
+  quindi un dato sbagliato lì si trascina in tutta la gara;
+- il **computo** va allineato ai grafici: una discordanza diventa una riserva.
+
+Il *fascicolo dell'opera* compare accanto agli elaborati dell'art. 22 ma **non è
+una delle sue lettere**: nasce dall'Allegato XVI del D.Lgs 81/2008 ed è
+richiamato per quello, senza attribuirgli una lettera che non ha.
 
 > **Quei testi sono sintesi operative, non il testo di legge.** Il contenuto
 > degli articoli non è stato trascritto alla lettera: l'ambiente in cui il

@@ -1083,6 +1083,41 @@ function launchOpts(){
     must(/All\. I\.7/.test(ultimoDialogo),'il contenuto non richiama la norma: '+ultimoDialogo);
     must(/Sintesi operativa/.test(ultimoDialogo),'non avverte che è una sintesi');
   });
+  await t('l esecutivo genera gli elaborati dell art. 22',async()=>{
+    const att=await p.evaluate(()=>{
+      const pl=pianifica('pubblico',['strutture','impianti','sicurezza','esproprio'],'2026-01-07');
+      return pl.fasi.find(f=>f.fase_key==='esecutivo').att
+        .map(a=>({t:a.title,r:a.rif_normativo,c:a.contenuto}));
+    });
+    const lettere=[...new Set(att.map(a=>(a.t.match(/^([a-m])\)/)||[])[1]).filter(Boolean))];
+    ['a','b','c','d','e','f','g','h','i','l','m'].forEach(L=>
+      must(lettere.includes(L),'manca la lettera '+L+') — presenti: '+lettere.join(',')));
+    must(att.filter(a=>/^[a-m]\)/.test(a.t)).every(a=>/All\. I\.7/.test(a.r||'')),
+      'elaborati senza richiamo all Allegato I.7');
+    must(att.filter(a=>/^[a-m]\)/.test(a.t)).every(a=>a.c&&a.c.length>80),
+      'elaborati senza il contenuto prescritto');
+  });
+  await t('il contenuto dell esecutivo si legge dalla checklist',async()=>{
+    await p.evaluate(async()=>{
+      const pr=__DB.projects.find(x=>x.name==='Opera pubblica I.7');
+      S.projId=pr.id; S.tab='avanzamento'; go('project');
+    });
+    await p.waitForTimeout(700);
+    await p.evaluate(()=>{ document.querySelectorAll('.grp-h').forEach(g=>g.click()); });
+    await p.waitForTimeout(500);
+    ultimoDialogo='';
+    const n=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Opera pubblica I.7');
+      const t=__DB.tasks.find(x=>x.project_id===pr.id&&/^e\) Piano di manutenzione/.test(x.title));
+      if(t) mostraContenuto(t.id);
+      return t?1:0;
+    });
+    must(n,'attività del piano di manutenzione non generata');
+    await p.waitForTimeout(400);
+    must(/MANUALE D.USO/i.test(ultimoDialogo),'non elenca i tre documenti: '+ultimoDialogo);
+    must(/PROGRAMMA DI MANUTENZIONE/i.test(ultimoDialogo),'manca il programma di manutenzione');
+    must(/art\. 22/.test(ultimoDialogo)||/All\. I\.7/.test(ultimoDialogo),'non richiama la norma');
+  });
   await t('nessuna fase "progetto definitivo" nell opera pubblica',async()=>{
     const fasi=await p.evaluate(()=>{
       const pr=__DB.projects.find(x=>x.name==='Opera pubblica I.7');
