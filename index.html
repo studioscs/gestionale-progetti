@@ -718,7 +718,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.01.7';
+const VERSIONE = '2026.08.01.8';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2518,8 +2518,11 @@ function fatturePanel(pid) {
       + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
-      + '<td class="ac">' + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td>'
-      + '</tr>';
+      + '<td class="ac" style="white-space:nowrap">'
+        + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '')
+        + (canW() && p.referente_email && ['emessa','incassata'].indexOf(f.stato) >= 0
+            ? ' <button class="btn btn-xs" data-mailfatt="' + f.id + '" title="Invia copia al referente amministrativo">&#9993;&#65039;</button>' : '')
+      + '</td></tr>';
   }).join('');
 
   return '<div class="g2 mb16">'
@@ -3008,16 +3011,97 @@ function anagraficaPanel(p) {
       + '<div class="fg2">' + f('Data inizio', fdate(p.start_date)) + f('Fine prevista', fdate(p.end_date)) + '</div>'
       + f('Template applicato', TEMPLATES[p.template_key] ? TEMPLATES[p.template_key].label : p.template_key)
       + f('Descrizione', p.description) + '</div>'
-    + '<div class="card"><div class="card-h"><span class="card-t">Immobile e referenti</span></div>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Immobile</span></div>'
       + '<div class="fg2">' + f('Comune', p.comune) + f('Provincia', p.provincia) + '</div>'
-      + f('Indirizzo', p.indirizzo) + f('Dati catastali', p.dati_catastali)
-      + '<div class="fg2">' + f('Referente', p.referente) + f('Telefono', p.referente_tel) + '</div>'
-      + f('Email referente', p.referente_email) + '</div>'
+      + f('Indirizzo', p.indirizzo) + f('Dati catastali', p.dati_catastali) + '</div>'
+    + '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Referenti del committente</span></div>'
+      + '<div class="g2">'
+        + referenteBox('Amministrativo', 'riceve la copia della fattura', p.referente, p.referente_ruolo,
+                       p.referente_email, p.referente_tel, 'amm')
+        + referenteBox('Operativo', 'comunicazioni tecniche e di cantiere', p.referente_tec, p.referente_tec_ruolo,
+                       p.referente_tec_email, p.referente_tec_tel, 'tec')
+      + '</div></div>'
     + '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Condizioni attive</span></div>'
       + (cond || '<span style="font-size:12px;color:var(--mut)">Nessuna condizione impostata.</span>')
       + '<div class="hint" style="margin-top:8px">Le condizioni determinano quali attività e pratiche vengono generate. '
       + 'Puoi rigenerare la struttura dal tab Avanzamento: le fasi già presenti non vengono duplicate.</div></div>'
     + '</div>';
+}
+
+/* Riquadro di un referente: contatti cliccabili, senza doverli ricopiare */
+function referenteBox(titolo, nota, nome, ruolo, email, tel, kind) {
+  const vuoto = !nome && !email && !tel;
+  return '<div style="border:1px solid var(--bord);border-radius:8px;padding:13px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)">'
+      + titolo + '</div>'
+    + '<div style="font-size:11px;color:var(--mut2);margin-bottom:9px">' + nota + '</div>'
+    + (vuoto
+       ? '<div style="font-size:12.5px;color:var(--mut2)">Non indicato.</div>'
+       : '<div style="font-size:13.5px;font-weight:600">' + esc(nome || '—') + '</div>'
+         + (ruolo ? '<div style="font-size:11.5px;color:var(--mut)">' + esc(ruolo) + '</div>' : '')
+         + '<div style="margin-top:8px;font-size:12.5px;line-height:1.9">'
+         + (email ? '<div>✉️ <a href="mailto:' + esc(email) + '">' + esc(email) + '</a></div>' : '')
+         + (tel ? '<div>📞 <a href="tel:' + esc(String(tel).replace(/\s/g,'')) + '">' + esc(tel) + '</a></div>' : '')
+         + '</div>'
+         + (email && kind === 'tec'
+            ? '<button class="btn btn-sm" data-mailtec="1" style="margin-top:10px">✉️ Scrivi al referente operativo</button>' : ''))
+    + '</div>';
+}
+
+/* Bozza di email al referente operativo, con i riferimenti della commessa gia' scritti */
+function mailTecnico(pid) {
+  const p = byId(S.projects, pid); if (!p || !p.referente_tec_email) return;
+  const rows = [
+    'Gentile ' + (p.referente_tec || 'referente') + ',',
+    '',
+    'in merito alla commessa in oggetto trasmettiamo quanto segue:',
+    '',
+    '',
+    '—',
+    'Commessa: ' + p.name,
+    p.comune ? 'Ubicazione: ' + [p.indirizzo, p.comune, p.provincia].filter(Boolean).join(' - ') : '',
+    p.dati_catastali ? 'Dati catastali: ' + p.dati_catastali : '',
+    '',
+    S.prof.full_name || '',
+    'Studio Tecnico SCS S.r.l. tra Professionisti'
+  ].filter(x => x !== '');
+  const url = 'mailto:' + encodeURIComponent(p.referente_tec_email)
+    + '?subject=' + encodeURIComponent('[' + p.name + '] Comunicazione tecnica')
+    + '&body=' + encodeURIComponent(rows.join('\n'));
+  window.location.href = url;
+}
+
+/* Bozza di email al referente amministrativo con i dati della fattura.
+   L'allegato va aggiunto a mano: il browser non puo' allegare file a un mailto. */
+function mailFattura(fid) {
+  const f = byId(S.fatture, fid); if (!f) return;
+  const p = byId(S.projects, f.project_id) || {};
+  if (!p.referente_email) return toast('La commessa non ha l’email del referente amministrativo.', 'error');
+  const c = calcolaFattura(impFattura(f));
+  const rows = [
+    'Gentile ' + (p.referente || 'referente') + ',',
+    '',
+    'in allegato la copia della fattura relativa alla commessa in oggetto.',
+    '',
+    'Commessa: ' + p.name,
+    'Descrizione: ' + f.descrizione,
+    f.numero_fattura ? 'Fattura n. ' + f.numero_fattura + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '') : '',
+    'Imponibile: ' + feuro(c.imponibile),
+    c.cassa ? 'Contributo cassa: ' + feuro(c.cassa) : '',
+    'IVA: ' + feuro(c.iva),
+    'Totale documento: ' + feuro(c.totale),
+    c.ritenuta ? 'Netto a pagare: ' + feuro(c.netto) : '',
+    '',
+    'Cordiali saluti,',
+    S.prof.full_name || '',
+    'Studio Tecnico SCS S.r.l. tra Professionisti'
+  ].filter(x => x !== '');
+  const url = 'mailto:' + encodeURIComponent(p.referente_email)
+    + '?subject=' + encodeURIComponent('[' + p.name + '] Fattura'
+        + (f.numero_fattura ? ' n. ' + f.numero_fattura : ''))
+    + '&body=' + encodeURIComponent(rows.join('\n'));
+  window.location.href = url;
+  toast('Ricorda di allegare il PDF della fattura prima di inviare.');
 }
 
 function orePanel(pid) {
@@ -3564,19 +3648,30 @@ function drawWizard() {
       .map(p => '<option value="' + p.id + '"' + (d.owner_id === p.id ? ' selected' : '') + '>' + esc(p.full_name) + '</option>').join('');
     h = '<div class="fg2">'
       + fld('Nome commessa *', 'w-name', d.name) + fld('Codice interno', 'w-cod', d.codice, 'Es. 2026-014')
-      + '</div><div class="fg2">'
-      + fld('Cliente', 'w-cli', d.client) + fld('Referente', 'w-ref', d.referente)
-      + '</div><div class="fg2">'
-      + fld('Email referente', 'w-refe', d.referente_email) + fld('Telefono referente', 'w-reft', d.referente_tel)
-      + '</div><div class="fg3">'
+      + '</div><div class="fg">'
+      + fld('Cliente / committente', 'w-cli', d.client)
+      + '</div>'
+      + sez('Referente amministrativo', 'riceve la copia della fattura')
+      + '<div class="fg3">'
+      + fld('Nominativo', 'w-ref', d.referente) + fld('Ruolo', 'w-refr', d.referente_ruolo, 'Es. Amministrazione')
+      + fld('Telefono', 'w-reft', d.referente_tel)
+      + '</div><div class="fg">'
+      + fld('Email', 'w-refe', d.referente_email, 'amministrazione@cliente.it')
+      + '</div>'
+      + sez('Referente operativo', 'riceve le comunicazioni tecniche e di cantiere')
+      + '<div class="fg3">'
+      + fld('Nominativo', 'w-ref2', d.referente_tec) + fld('Ruolo', 'w-ref2r', d.referente_tec_ruolo, 'Es. Responsabile tecnico')
+      + fld('Telefono', 'w-ref2t', d.referente_tec_tel)
+      + '</div><div class="fg">'
+      + fld('Email', 'w-ref2e', d.referente_tec_email, 'tecnico@cliente.it')
+      + '</div>'
+      + sez('Immobile e commessa')
+      + '<div class="fg3">'
       + fld('Comune', 'w-com', d.comune) + fld('Provincia', 'w-prov', d.provincia) + fld('CIG / CUP', 'w-cig', d.cig)
       + '</div><div class="fg2">'
       + fld('Indirizzo', 'w-ind', d.indirizzo) + fld('Dati catastali', 'w-cat', d.dati_catastali, 'Fg. 12 part. 345 sub 2')
       + '</div>'
-      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;'
-      + 'color:var(--mut);margin:16px 0 8px;border-top:1px solid var(--bord);padding-top:12px">'
-      + 'Dati fiscali del committente <span style="font-weight:400;text-transform:none;letter-spacing:0">'
-      + '— servono solo per generare l’XML della fattura</span></div>'
+      + sez('Dati fiscali del committente', 'servono solo per generare l’XML della fattura')
       + '<div class="fg3">'
       + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
       + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri')
@@ -3628,6 +3723,14 @@ function drawWizard() {
   }
   el('mp-body').innerHTML = h;
 }
+/* Intestazione di sezione dentro il modulo della commessa */
+function sez(titolo, nota) {
+  return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;'
+    + 'color:var(--mut);margin:18px 0 10px;border-top:1px solid var(--bord);padding-top:12px">'
+    + esc(titolo)
+    + (nota ? ' <span style="font-weight:400;text-transform:none;letter-spacing:0">— ' + esc(nota) + '</span>' : '')
+    + '</div>';
+}
 function fld(label, id, val, ph, type) {
   return '<div class="fg"><label class="fl">' + label + '</label><input class="fc" type="' + (type || 'text') + '" id="' + id
     + '" value="' + esc(val === null || val === undefined ? '' : val) + '" placeholder="' + esc(ph || '') + '"></div>';
@@ -3637,7 +3740,10 @@ function wzCollect() {
   const g = id => el(id) ? el(id).value.trim() : '';
   Object.assign(WZ.d, {
     name: g('w-name'), codice: g('w-cod') || null, client: g('w-cli') || null,
-    referente: g('w-ref') || null, referente_email: g('w-refe') || null, referente_tel: g('w-reft') || null,
+    referente: g('w-ref') || null, referente_email: g('w-refe') || null,
+    referente_tel: g('w-reft') || null, referente_ruolo: g('w-refr') || null,
+    referente_tec: g('w-ref2') || null, referente_tec_email: g('w-ref2e') || null,
+    referente_tec_tel: g('w-ref2t') || null, referente_tec_ruolo: g('w-ref2r') || null,
     comune: g('w-com') || null, provincia: g('w-prov') || null, cig: g('w-cig') || null,
     indirizzo: g('w-ind') || null, dati_catastali: g('w-cat') || null,
     status: g('w-st') || 'attivo', owner_id: g('w-own') || null,
@@ -4424,6 +4530,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
     if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
+    if ((n = f('data-mailfatt'))) { e.stopPropagation(); return mailFattura(n.dataset.mailfatt); }
+    if ((n = f('data-mailtec'))) { e.stopPropagation(); return mailTecnico(S.projId); }
     if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
     if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }

@@ -24,6 +24,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 3. [`sql/004_categorie_attivita.sql`](sql/004_categorie_attivita.sql) — firme del cliente
 4. [`sql/005_fatturazione.sql`](sql/005_fatturazione.sql) — scaglioni di fatturazione
 5. [`sql/006_verifica_sicurezza.sql`](sql/006_verifica_sicurezza.sql) — **RLS sulle tabelle preesistenti: da eseguire**
+6. [`sql/007_referente_tecnico.sql`](sql/007_referente_tecnico.sql) — secondo referente di commessa
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -221,6 +222,14 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
 - **Password dimenticata**: dal link ricevuto per email si arriva a una schermata
   che chiede la nuova password. Se il link è scaduto lo dice e invita a
   richiederne uno nuovo.
+- **Due referenti per commessa**, con ruoli distinti perché servono a cose diverse:
+  l'**amministrativo** riceve la copia della fattura, l'**operativo** le
+  comunicazioni tecniche e di cantiere. Di ciascuno si registrano nominativo,
+  ruolo, email e telefono; nella scheda *Anagrafica* i contatti sono cliccabili e
+  ci sono due scorciatoie che aprono una bozza di email già intestata — al
+  referente operativo con i riferimenti della commessa, all'amministrativo con
+  numero, imponibile, IVA e totale della fattura (l'allegato va aggiunto a mano:
+  un `mailto:` non può allegare file).
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -316,7 +325,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 89 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 94 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e

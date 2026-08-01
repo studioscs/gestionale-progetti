@@ -483,6 +483,85 @@ function launchOpts(){
     must(b===atteso,'badge '+b+' contro '+atteso);
   });
 
+
+  // --- DUE REFERENTI ---
+  await t('wizard: due blocchi referenti distinti',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    const txt=await p.textContent('#mp-body');
+    must(/Referente amministrativo/.test(txt),'manca il blocco amministrativo');
+    must(/Referente operativo/.test(txt),'manca il blocco operativo');
+    must(/copia della fattura/.test(txt),'manca la spiegazione del ruolo amministrativo');
+    for(const id of ['#w-ref','#w-refr','#w-refe','#w-reft','#w-ref2','#w-ref2r','#w-ref2e','#w-ref2t'])
+      must(await p.locator(id).count()===1,'campo assente: '+id);
+  });
+  await t('salva entrambi i referenti',async()=>{
+    await p.fill('#w-name','Commessa due referenti');
+    await p.fill('#w-cli','Immobiliare Prova srl');
+    await p.fill('#w-ref','Dott.ssa Bianchi'); await p.fill('#w-refr','Amministrazione');
+    await p.fill('#w-refe','amministrazione@prova.it'); await p.fill('#w-reft','075 1234567');
+    await p.fill('#w-ref2','Geom. Rossi'); await p.fill('#w-ref2r','Responsabile tecnico');
+    await p.fill('#w-ref2e','rossi@prova.it'); await p.fill('#w-ref2t','335 1112223');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1500);
+    const r=await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Commessa due referenti');
+      return x&&{a:x.referente,ae:x.referente_email,ar:x.referente_ruolo,at:x.referente_tel,
+                 t:x.referente_tec,te:x.referente_tec_email,tr:x.referente_tec_ruolo,tt:x.referente_tec_tel};});
+    must(r,'commessa non creata');
+    must(r.a==='Dott.ssa Bianchi'&&r.ae==='amministrazione@prova.it'&&r.ar==='Amministrazione'&&r.at==='075 1234567',
+      'referente amministrativo: '+JSON.stringify(r));
+    must(r.t==='Geom. Rossi'&&r.te==='rossi@prova.it'&&r.tr==='Responsabile tecnico'&&r.tt==='335 1112223',
+      'referente operativo: '+JSON.stringify(r));
+  });
+  await t('anagrafica mostra i due riquadri con contatti cliccabili',async()=>{
+    await p.evaluate(()=>{ const x=S.projects.find(y=>y.name==='Commessa due referenti'); goProject(x.id,'anagrafica'); });
+    await p.waitForTimeout(700);
+    const txt=await p.textContent('#page');
+    must(/Referenti del committente/.test(txt),'sezione assente');
+    must(/Amministrativo/.test(txt)&&/Operativo/.test(txt),'riquadri assenti');
+    must(await p.locator('a[href="mailto:amministrazione@prova.it"]').count()===1,'email amministrativa non cliccabile');
+    must(await p.locator('a[href="mailto:rossi@prova.it"]').count()===1,'email operativa non cliccabile');
+    must(await p.locator('a[href^="tel:"]').count()===2,'telefoni non cliccabili');
+  });
+  await t('scorciatoia "scrivi al referente operativo"',async()=>{
+    must(await p.locator('[data-mailtec]').count()===1,'pulsante assente');
+    const url=await p.evaluate(()=>{
+      const x=S.projects.find(y=>y.name==='Commessa due referenti');
+      let catturato=''; const orig=Object.getOwnPropertyDescriptor(window.location,'href');
+      // intercetta la navigazione mailto senza eseguirla
+      const w=window; const vecchio=w.location.href;
+      try { Object.defineProperty(w.location,'href',{set(v){catturato=v;},get(){return vecchio;},configurable:true}); }
+      catch(e){ return 'NON_INTERCETTABILE'; }
+      mailTecnico(x.id);
+      try { Object.defineProperty(w.location,'href',orig||{value:vecchio,writable:true,configurable:true}); } catch(e){}
+      return catturato;
+    });
+    if(url==='NON_INTERCETTABILE') return;   // ambiente che non consente l'intercettazione
+    must(/^mailto:rossi%40prova\.it/.test(url),'destinatario errato: '+url.slice(0,60));
+    must(/Comunicazione%20tecnica/.test(url),'oggetto errato');
+    must(/Commessa/.test(decodeURIComponent(url)),'corpo senza riferimenti di commessa');
+  });
+  await t('bozza fattura indirizzata al referente amministrativo',async()=>{
+    const url=await p.evaluate(()=>{
+      const pr=S.projects.find(y=>y.name==='Commessa due referenti');
+      const f={id:'x1',project_id:pr.id,descrizione:'Acconto 30%',imponibile:10000,
+               numero_fattura:'2026/020',data_fattura:'2026-09-01',stato:'emessa'};
+      S.fatture.push(f);
+      let catturato=''; const w=window; const vecchio=w.location.href;
+      const orig=Object.getOwnPropertyDescriptor(w.location,'href');
+      try { Object.defineProperty(w.location,'href',{set(v){catturato=v;},get(){return vecchio;},configurable:true}); }
+      catch(e){ return 'NON_INTERCETTABILE'; }
+      mailFattura('x1');
+      try { Object.defineProperty(w.location,'href',orig||{value:vecchio,writable:true,configurable:true}); } catch(e){}
+      return catturato;
+    });
+    if(url==='NON_INTERCETTABILE') return;
+    must(/^mailto:amministrazione%40prova\.it/.test(url),'destinatario errato: '+url.slice(0,60));
+    const corpo=decodeURIComponent(url);
+    must(/2026\/020/.test(corpo),'numero fattura assente');
+    must(/Totale documento/.test(corpo),'totale assente');
+  });
+
   // --- ATTIVITÀ / ORE ---
   await t('crea attività manuale',async()=>{
     await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);
