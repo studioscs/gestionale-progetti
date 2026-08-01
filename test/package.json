@@ -1,6 +1,6 @@
 {
   "name": "scs-gestionale-test",
   "private": true,
-  "scripts": { "logic": "node logic.js", "e2e": "node e2e.js", "password": "node password.js", "test": "node logic.js && node e2e.js && node password.js" },
+  "scripts": { "logic": "node logic.js", "e2e": "node e2e.js", "password": "node password.js", "fattura": "node fattura.js", "test": "node logic.js && node e2e.js && node password.js && node fattura.js" },
   "dependencies": { "playwright": "^1.49.0" }
 }

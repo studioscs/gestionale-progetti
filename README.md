@@ -22,6 +22,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 1. [`sql/001_gestionale_v2.sql`](sql/001_gestionale_v2.sql) — struttura principale
 2. [`sql/002_chat_pratiche.sql`](sql/002_chat_pratiche.sql) — conversazione sulle pratiche
 3. [`sql/004_categorie_attivita.sql`](sql/004_categorie_attivita.sql) — firme del cliente
+4. [`sql/005_fatturazione.sql`](sql/005_fatturazione.sql) — scaglioni di fatturazione
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -293,7 +294,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 79 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 89 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -304,6 +305,58 @@ verifica che non restino record orfani, filtri e raggruppamenti delle pratiche,
 invio ed eliminazione di messaggi in chat, tutte le pagine e l'assenza di errori
 in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
+
+---
+
+## Fatturazione
+
+Il software di fatturazione sa emettere fatture ma **non sa nulla della commessa**:
+non sa che il SAL è chiuso, che la fase autorizzativa è conclusa, che l'acconto
+alla firma dell'incarico non è mai stato emesso. È lì che uno studio perde soldi,
+non nella compilazione della fattura.
+
+### Scaglioni agganciati alle fasi
+
+Nella scheda **Fatturazione** di ogni commessa definisci gli scaglioni (acconto
+alla firma, alla presentazione della pratica, saldo a fine lavori), con importo
+fisso o percentuale dell'importo di commessa. Ogni scaglione può essere
+**agganciato a una fase**: quando quella fase si chiude, lo scaglione passa
+automaticamente a *pronto da emettere*. Il passaggio lo fa un trigger sul
+database, quindi vale anche se nessuno ha l'app aperta.
+
+`Genera scaglioni standard` crea in un click il classico 30/40/30 già collegato
+alle fasi giuste del template in uso.
+
+La pagina **Da fatturare** raccoglie tutto lo studio: pronte da emettere, in
+attesa di maturare, emesse non ancora incassate.
+
+### Esportazione XML per FatturaElettronica APP
+
+Il gestionale genera il file **FatturaPA 1.2 (FPR12)** da trascinare nella
+funzione *"Importa e salva fatture"* di
+[FatturaElettronica APP](https://www.fatturaelettronica-app.it/), che accetta file
+`.xml` e `.p7m`. Non serve alcuna API: così nessuna credenziale finisce nel file
+HTML, che è pubblico per costruzione.
+
+L'XML prodotto è validato contro lo **schema ufficiale dell'Agenzia delle
+Entrate** dalla suite `test/fattura.js` in tre varianti: con contributo cassa,
+con ritenuta d'acconto, e con PEC al posto del codice destinatario.
+
+> **Prima del primo invio compila il blocco `STUDIO`** in cima a `index.html`:
+> denominazione, partita IVA, sede, regime fiscale, cassa di previdenza,
+> eventuale ritenuta e coordinate di pagamento. Finché la partita IVA è vuota la
+> generazione resta bloccata, con l'elenco esatto di cosa manca.
+>
+> I valori predefiniti sono impostati per una **S.r.l. tra Professionisti**:
+> regime ordinario `RF01`, contributo integrativo Inarcassa `TC04` al 4% soggetto
+> a IVA, **nessuna ritenuta d'acconto** (le società di capitali non vi sono
+> soggette). Se lo studio è di geometri usa `TC03`; se la forma giuridica è
+> diversa la ritenuta va riattivata. **Fai verificare la configurazione al tuo
+> commercialista**: il gestionale calcola quello che gli dici, non stabilisce il
+> trattamento fiscale.
+
+I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
+destinatario SDI o PEC) si compilano nella scheda della commessa.
 
 ---
 
@@ -327,6 +380,9 @@ I contenuti normativi e procedurali dei template sono stati verificati su:
 - [Conferenza di servizi art. 38: termini per le amministrazioni — LavoriPubblici](https://www.lavoripubblici.it/news/conferenza-servizi-art-38-termini-amministrazioni-parere-mit-4068-37693)
 - [La conferenza di servizi: indirizzi e istruzioni operative — Regione Lazio](https://www.regione.lazio.it/sites/default/files/cds-indirizzi-istruzioni-operative/DGR-649-31-07-2025-Allegato-A.pdf)
 - [Circolare n. 26/2024 sulla verifica preventiva dell'interesse archeologico — DG ABAP, Ministero della Cultura](https://dgabap.cultura.gov.it/wp-content/uploads/2024/06/Circolare-VPIA_aggiornamenti-normativi-signed-4.pdf)
+- [Come importare fatture da altri software — FatturaElettronica APP](https://intercom.help/fatturaelettronica-app/it/articles/7858536-come-importare-fatture-da-altri-software)
+- [Come scaricare fatture e notifiche in PDF e XML — FatturaElettronica APP](https://intercom.help/fatturaelettronica-app/it/articles/2662530-come-scaricare-fatture-e-notifiche-in-pdf-e-xml)
+- [Specifiche tecniche e schema XSD FatturaPA — Developers Italia](https://developers.italia.it/it/fatturapa/)
 
 Le procedure telematiche variano da Comune a Comune e da Regione a Regione:
 verifica sempre il portale che usi. I termini restano indicativi.
@@ -335,6 +391,13 @@ verifica sempre il portale che usi. I termini restano indicativi.
 
 ## Limiti noti
 
+- L'integrazione con la fatturazione è **per file, non via API**: non ho trovato
+  documentazione pubblica di API per gli utenti finali di FatturaElettronica APP.
+  Se il tuo piano ne prevede, un'integrazione diretta dal browser resterebbe
+  comunque sconsigliata (la chiave sarebbe leggibile da chiunque apra la pagina):
+  servirebbe una Edge Function Supabase a custodire il segreto.
+- La numerazione delle fatture non è gestita dal gestionale: il numero lo scrivi
+  tu, coerente con il registro tenuto nel software di fatturazione.
 - Le notifiche sono **in-app**. Per l'invio email servirebbe una Edge Function
   Supabase con un provider SMTP: non è inclusa.
 - Non c'è gestione documentale versionata: i file sono un elenco piatto per commessa.

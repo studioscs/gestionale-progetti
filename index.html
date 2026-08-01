@@ -366,6 +366,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="sn on" data-page="oggi"><span class="snic">&#9788;</span>Oggi<span class="snb" id="b-oggi">0</span></button>
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
       <button class="sn" data-page="firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
+      <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Da fatturare<span class="snb" id="b-fatt">0</span></button>
     </div>
     <div class="ssec">
       <span class="slbl">Commesse</span>
@@ -423,6 +424,50 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="btn" id="mp-back" style="display:none">&larr; Indietro</button>
       <button class="btn btn-p" id="mp-next">Avanti &rarr;</button>
       <button class="btn btn-p" id="mp-save" style="display:none">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scaglione di fatturazione -->
+<div class="ov" id="m-fatt">
+  <div class="modal">
+    <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="fa-desc" placeholder="Es. Acconto 30% alla sottoscrizione dell'incarico"></div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Percentuale dell'importo commessa</label><input type="number" class="fc" id="fa-perc" step="0.5" min="0" max="100"></div>
+        <div class="fg"><label class="fl">oppure importo fisso €</label><input type="number" class="fc" id="fa-imp" step="0.01" min="0"></div>
+      </div>
+      <div class="hint" id="fa-calc" style="margin:-8px 0 14px"></div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Matura alla chiusura della fase</label><select class="fc" id="fa-fase"></select></div>
+        <div class="fg"><label class="fl">Data prevista</label><input type="date" class="fc" id="fa-prev"></div>
+      </div>
+      <div class="fg"><label class="fl">Stato</label>
+        <select class="fc" id="fa-stato2">
+          <option value="da_emettere">Da emettere</option>
+          <option value="pronta">Pronta da emettere</option>
+          <option value="emessa">Emessa</option>
+          <option value="incassata">Incassata</option>
+          <option value="annullata">Annullata</option>
+        </select>
+      </div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Numero fattura</label><input class="fc" id="fa-num" placeholder="2026/014"></div>
+        <div class="fg"><label class="fl">Data fattura</label><input type="date" class="fc" id="fa-data"></div>
+        <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
+      </div>
+      <div class="fg"><label class="fl">Importo incassato €</label><input type="number" class="fc" id="fa-incimp" step="0.01"></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="fa-note2" rows="2"></textarea></div>
+      <input type="hidden" id="fa-id2">
+    </div>
+    <div class="mf">
+      <span class="left row">
+        <button class="btn btn-d" id="fa-del2" style="display:none">Elimina</button>
+        <button class="btn" id="fa-xml">&#128229; Genera XML</button>
+      </span>
+      <button class="btn" data-close="m-fatt">Chiudi</button>
+      <button class="btn btn-p" id="fa-save2">Salva</button>
     </div>
   </div>
 </div>
@@ -639,10 +684,41 @@ tbody tr:hover td { background:#f0f4f9; }
    --------------------------------------------------------------------------- */
 const PERMESSI = { eliminaPratica: 'admin' };
 
+/* ---------------------------------------------------------------------------
+   DATI FISCALI DELLO STUDIO — DA COMPILARE PRIMA DI GENERARE FATTURE
+   Finche' `piva` resta vuota, la generazione dell'XML e' bloccata: meglio un
+   messaggio chiaro che un file scartato dallo SdI.
+   Valori impostati per una S.r.l. tra Professionisti: regime ordinario RF01,
+   nessuna ritenuta d'acconto (le societa' di capitali non vi sono soggette),
+   contributo integrativo Inarcassa 4% soggetto a IVA. VERIFICA con il tuo
+   commercialista prima del primo invio.
+   --------------------------------------------------------------------------- */
+const STUDIO = {
+  denominazione : '',            // ragione sociale completa
+  piva          : '',            // solo cifre, senza il prefisso IT
+  codiceFiscale : '',            // se diverso dalla partita IVA
+  regimeFiscale : 'RF01',        // RF01 ordinario
+  indirizzo     : '',
+  civico        : '',
+  cap           : '',            // 5 cifre
+  comune        : '',
+  provincia     : '',            // sigla di 2 lettere
+  // Cassa di previdenza: TC04 Inarcassa (ingegneri e architetti) · TC03 Cassa Geometri
+  tipoCassa       : 'TC04',
+  aliquotaCassa   : 4,           // 0 per non esporre alcun contributo
+  cassaSoggettaIva: true,
+  aliquotaIva     : 22,
+  // Ritenuta d'acconto: per una S.r.l. di norma NON si applica. Per attivarla:
+  // ritenuta: { aliquota: 20, causale: 'A', tipo: 'RT02' }
+  ritenuta      : null,
+  pagamento     : { condizioni:'TP02', modalita:'MP05', giorni:30, iban:'' },
+  progressivo   : 1              // contatore locale del nome file
+};
+
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.01.6';
+const VERSIONE = '2026.08.01.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -654,7 +730,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, fatture: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
@@ -1438,7 +1514,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -1446,7 +1522,8 @@ async function loadAll(silent) {
       SB.from('commessa_pratiche').select('*').order('data_scadenza', {nullsFirst:false}),
       SB.from('notifiche').select('*').order('created_at', {ascending:false}).limit(40),
       SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000),
-      SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento')
+      SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento'),
+      SB.from('commessa_fatture').select('*').order('ordine')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1459,6 +1536,7 @@ async function loadAll(silent) {
     S.time      = re.error ? S.time : (re.data || []);
     S.chat      = {};
     if (!rc.error) (rc.data || []).forEach(r => S.chat[r.pratica_id] = r.messaggi || 0);
+    S.fatture   = rfa.error ? [] : (rfa.data || []);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -1925,7 +2003,7 @@ async function doLogout() {
 /* ===========================================================================
    ROUTER
    =========================================================================== */
-const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', projects:'Progetti', pratiche:'Pratiche & Enti',
+const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
 
@@ -1949,7 +2027,7 @@ function render() {
   el('top-act').innerHTML = '';
   closePop();
   const P = {
-    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, projects:rProjects, project:rProject,
+    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
     time:rTime, files:rFiles, users:rUsers
   };
@@ -1969,6 +2047,10 @@ function updBadges() {
   el('b-scad').classList.toggle('alert', sc > 0);
 
   el('b-proj').textContent = S.projects.filter(p => p.status === 'attivo' && !p.archiviato).length;
+
+  const nfa = S.fatture.filter(fattAperta).length;
+  el('b-fatt').textContent = nfa;
+  el('b-fatt').classList.toggle('alert', S.fatture.some(f => f.stato === 'pronta'));
 
   const nf = S.tasks.filter(t => t.categoria === 'firma_cliente' && isOpen(t)).length;
   el('b-firme').textContent = nf;
@@ -2262,6 +2344,415 @@ function rScadenzario() {
 }
 
 /* ===========================================================================
+   FATTURAZIONE
+   Il software di fatturazione non sa nulla della commessa. Qui si tiene
+   traccia di cosa e quando fatturare; l'XML e' un ponte verso FatturaElettronica
+   APP, che importa file in formato FatturaPA.
+   =========================================================================== */
+const ST_FATT = {
+  da_emettere:['Da emettere','bgr'], pronta:['Pronta da emettere','by'],
+  emessa:['Emessa','bb'], incassata:['Incassata','bg'], annullata:['Annullata','bgr']
+};
+
+const fattureOf = pid => S.fatture.filter(f => f.project_id === pid)
+                                  .sort((a,b) => (a.ordine||0) - (b.ordine||0));
+const r2 = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+/* Importo dello scaglione: valore fisso oppure percentuale dell'importo commessa */
+function impFattura(f) {
+  if (f.imponibile !== null && f.imponibile !== undefined && f.imponibile !== '') return r2(f.imponibile);
+  const p = byId(S.projects, f.project_id);
+  if (!p || !p.amount || !f.percentuale) return 0;
+  return r2(Number(p.amount) * Number(f.percentuale) / 100);
+}
+const fattAperta = f => ['da_emettere','pronta'].indexOf(f.stato) >= 0;
+
+/* Calcolo del documento: imponibile, contributo cassa, IVA, totale */
+function calcolaFattura(imponibile) {
+  const cassa = STUDIO.aliquotaCassa ? r2(imponibile * STUDIO.aliquotaCassa / 100) : 0;
+  const base  = r2(imponibile + (STUDIO.cassaSoggettaIva ? cassa : 0));
+  const iva   = r2(base * STUDIO.aliquotaIva / 100);
+  const rit   = STUDIO.ritenuta ? r2(imponibile * STUDIO.ritenuta.aliquota / 100) : 0;
+  return { imponibile: r2(imponibile), cassa, base, iva, totale: r2(base + iva), ritenuta: rit,
+           netto: r2(base + iva - rit) };
+}
+
+/* --------------------------------------------------------------------------
+   GENERAZIONE XML FatturaPA 1.2 (FPR12)
+   Restituisce { nome, xml } oppure { errori: [...] } se manca qualcosa.
+   -------------------------------------------------------------------------- */
+function xmlFattura(f) {
+  const p = byId(S.projects, f.project_id) || {};
+  const e = [];
+  if (!STUDIO.piva)          e.push('Manca la partita IVA dello studio (blocco STUDIO in cima al file).');
+  if (!STUDIO.denominazione) e.push('Manca la denominazione dello studio.');
+  if (!/^\d{5}$/.test(STUDIO.cap || '')) e.push('Il CAP dello studio deve essere di 5 cifre.');
+  if (!STUDIO.indirizzo || !STUDIO.comune) e.push('Manca l’indirizzo o il comune dello studio.');
+  if (!p.client)             e.push('La commessa non ha il nome del committente.');
+  if (!p.cliente_piva && !p.cliente_cf) e.push('Il committente non ha né partita IVA né codice fiscale.');
+  if (!p.cliente_indirizzo || !p.cliente_comune) e.push('Manca l’indirizzo del committente.');
+  if (!/^\d{5}$/.test(p.cliente_cap || '')) e.push('Il CAP del committente deve essere di 5 cifre.');
+  if (!p.cliente_sdi && !p.cliente_pec) e.push('Serve il codice destinatario SDI oppure la PEC del committente.');
+  if (!f.numero_fattura)     e.push('Manca il numero della fattura.');
+  if (!f.data_fattura)       e.push('Manca la data della fattura.');
+  const imp = impFattura(f);
+  if (!(imp > 0))            e.push('L’imponibile dello scaglione è zero.');
+  if (e.length) return { errori: e };
+
+  const c = calcolaFattura(imp);
+  const n2 = v => Number(v).toFixed(2);
+  const x  = v => esc(v === null || v === undefined ? '' : String(v));
+  const el2 = (tag, v) => '<' + tag + '>' + x(v) + '</' + tag + '>';
+  const sdi = (p.cliente_sdi && p.cliente_sdi.trim()) ? p.cliente_sdi.trim().toUpperCase() : '0000000';
+
+  const sede = (ind, civ, cap, com, pr) =>
+      '<Indirizzo>' + x(ind) + '</Indirizzo>'
+    + (civ ? '<NumeroCivico>' + x(civ) + '</NumeroCivico>' : '')
+    + '<CAP>' + x(cap) + '</CAP><Comune>' + x(com) + '</Comune>'
+    + (pr ? '<Provincia>' + x(String(pr).toUpperCase()) + '</Provincia>' : '')
+    + '<Nazione>IT</Nazione>';
+
+  /* Numerazione del file: progressivo alfanumerico su base 36 */
+  const prog = (STUDIO.progressivo || 1).toString(36).toUpperCase().padStart(5, '0').slice(-5);
+
+  const head =
+      '<FatturaElettronicaHeader>'
+    +   '<DatiTrasmissione>'
+    +     '<IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>' + x(STUDIO.piva) + '</IdCodice></IdTrasmittente>'
+    +     el2('ProgressivoInvio', prog)
+    +     '<FormatoTrasmissione>FPR12</FormatoTrasmissione>'
+    +     el2('CodiceDestinatario', sdi)
+    +     (sdi === '0000000' && p.cliente_pec ? el2('PECDestinatario', p.cliente_pec) : '')
+    +   '</DatiTrasmissione>'
+    +   '<CedentePrestatore><DatiAnagrafici>'
+    +     '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(STUDIO.piva) + '</IdCodice></IdFiscaleIVA>'
+    +     (STUDIO.codiceFiscale ? el2('CodiceFiscale', STUDIO.codiceFiscale) : '')
+    +     '<Anagrafica>' + el2('Denominazione', STUDIO.denominazione) + '</Anagrafica>'
+    +     el2('RegimeFiscale', STUDIO.regimeFiscale)
+    +   '</DatiAnagrafici><Sede>'
+    +     sede(STUDIO.indirizzo, STUDIO.civico, STUDIO.cap, STUDIO.comune, STUDIO.provincia)
+    +   '</Sede></CedentePrestatore>'
+    +   '<CessionarioCommittente><DatiAnagrafici>'
+    +     (p.cliente_piva ? '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(p.cliente_piva) + '</IdCodice></IdFiscaleIVA>' : '')
+    +     (p.cliente_cf ? el2('CodiceFiscale', String(p.cliente_cf).toUpperCase()) : '')
+    +     '<Anagrafica>' + el2('Denominazione', p.client) + '</Anagrafica>'
+    +   '</DatiAnagrafici><Sede>'
+    +     sede(p.cliente_indirizzo, '', p.cliente_cap, p.cliente_comune, p.cliente_prov)
+    +   '</Sede></CessionarioCommittente>'
+    + '</FatturaElettronicaHeader>';
+
+  const causale = (p.name ? 'Commessa: ' + p.name + '. ' : '') + f.descrizione;
+  const scad = iso(addD(pd(f.data_fattura), STUDIO.pagamento.giorni || 30));
+
+  const body =
+      '<FatturaElettronicaBody>'
+    +   '<DatiGenerali><DatiGeneraliDocumento>'
+    +     '<TipoDocumento>TD01</TipoDocumento><Divisa>EUR</Divisa>'
+    +     el2('Data', f.data_fattura) + el2('Numero', f.numero_fattura)
+    +     (STUDIO.ritenuta
+        ? '<DatiRitenuta>' + el2('TipoRitenuta', STUDIO.ritenuta.tipo || 'RT02')
+          + el2('ImportoRitenuta', n2(c.ritenuta)) + el2('AliquotaRitenuta', n2(STUDIO.ritenuta.aliquota))
+          + el2('CausalePagamento', STUDIO.ritenuta.causale || 'A') + '</DatiRitenuta>' : '')
+    +     (c.cassa
+        ? '<DatiCassaPrevidenziale>' + el2('TipoCassa', STUDIO.tipoCassa)
+          + el2('AlCassa', n2(STUDIO.aliquotaCassa)) + el2('ImportoContributoCassa', n2(c.cassa))
+          + el2('ImponibileCassa', n2(c.imponibile))
+          + el2('AliquotaIVA', n2(STUDIO.cassaSoggettaIva ? STUDIO.aliquotaIva : 0))
+          + '</DatiCassaPrevidenziale>' : '')
+    +     el2('ImportoTotaleDocumento', n2(c.totale))
+    +     el2('Causale', causale.slice(0, 200))
+    +   '</DatiGeneraliDocumento></DatiGenerali>'
+    +   '<DatiBeniServizi><DettaglioLinee>'
+    +     '<NumeroLinea>1</NumeroLinea>'
+    +     el2('Descrizione', (f.descrizione || 'Prestazioni professionali').slice(0, 1000))
+    +     el2('PrezzoUnitario', n2(c.imponibile)) + el2('PrezzoTotale', n2(c.imponibile))
+    +     el2('AliquotaIVA', n2(STUDIO.aliquotaIva))
+    +   '</DettaglioLinee><DatiRiepilogo>'
+    +     el2('AliquotaIVA', n2(STUDIO.aliquotaIva))
+    +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
+    +     '<EsigibilitaIVA>I</EsigibilitaIVA>'
+    +   '</DatiRiepilogo></DatiBeniServizi>'
+    +   '<DatiPagamento>' + el2('CondizioniPagamento', STUDIO.pagamento.condizioni)
+    +     '<DettaglioPagamento>' + el2('ModalitaPagamento', STUDIO.pagamento.modalita)
+    +       el2('DataScadenzaPagamento', scad) + el2('ImportoPagamento', n2(c.netto))
+    +       (STUDIO.pagamento.iban ? el2('IBAN', STUDIO.pagamento.iban.replace(/\s/g, '')) : '')
+    +     '</DettaglioPagamento></DatiPagamento>'
+    + '</FatturaElettronicaBody>';
+
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<p:FatturaElettronica versione="FPR12"'
+    + ' xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2"'
+    + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+    + head + body + '</p:FatturaElettronica>';
+
+  return { nome: 'IT' + STUDIO.piva + '_' + prog + '.xml', xml, calcolo: c };
+}
+
+
+/* -------------------------- PANNELLO DI COMMESSA -------------------------- */
+function fatturePanel(pid) {
+  const p = byId(S.projects, pid) || {};
+  const list = fattureOf(pid);
+  const tot = n => list.filter(n).reduce((a, f) => a + impFattura(f), 0);
+  const fatturato = tot(f => ['emessa','incassata'].indexOf(f.stato) >= 0);
+  const incassato = list.filter(f => f.stato === 'incassata')
+    .reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0);
+  const daFare = tot(fattAperta);
+  const imp = Number(p.amount || 0);
+
+  const barra = (l, v, col) => '<div style="margin-bottom:9px">'
+    + '<div class="spread" style="font-size:12.5px;margin-bottom:3px"><span>' + l + '</span>'
+    + '<b>' + feuro(v) + '</b></div><div class="pb"><div class="pbf" style="width:'
+    + (imp ? Math.min(100, v / imp * 100) : 0) + '%;background:' + col + '"></div></div></div>';
+
+  const righe = list.map(f => {
+    const c = calcolaFattura(impFattura(f));
+    const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
+    return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
+      + '<td><b>' + esc(f.descrizione) + '</b>'
+        + (fa ? '<div style="font-size:11px;color:var(--mut)">matura con: ' + esc(fa.nome) + '</div>' : '') + '</td>'
+      + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
+      + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
+        + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
+      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
+      + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
+        + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
+      + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
+      + '<td class="ac">' + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return '<div class="g2 mb16">'
+    + '<div class="card"><div class="card-h"><span class="card-t">Situazione economica</span></div>'
+      + '<div class="spread" style="font-size:13px;margin-bottom:12px"><span>Importo di commessa</span><b>' + feuro(imp) + '</b></div>'
+      + barra('Fatturato', fatturato, 'var(--blue)')
+      + barra('Incassato', incassato, 'var(--grn)')
+      + barra('Ancora da fatturare', daFare, 'var(--yel)')
+      + (imp && fatturato + daFare > imp + 0.01
+          ? '<div class="wbox" style="margin-top:10px">Gli scaglioni superano l’importo di commessa di '
+            + feuro(fatturato + daFare - imp) + '.</div>' : '')
+    + '</div>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Dati per la fattura elettronica</span></div>'
+      + (STUDIO.piva
+          ? '<div style="font-size:12.5px;line-height:1.7">'
+            + '<b>' + esc(STUDIO.denominazione) + '</b><br>P.IVA ' + esc(STUDIO.piva)
+            + ' · regime ' + esc(STUDIO.regimeFiscale)
+            + (STUDIO.aliquotaCassa ? '<br>Cassa ' + esc(STUDIO.tipoCassa) + ' al ' + STUDIO.aliquotaCassa + '%' : '')
+            + (STUDIO.ritenuta ? '<br>Ritenuta ' + STUDIO.ritenuta.aliquota + '%' : '<br>Nessuna ritenuta d’acconto')
+            + '</div>'
+          : '<div class="wbox">Compila il blocco <b>STUDIO</b> in cima a index.html con i dati fiscali: '
+            + 'finché la partita IVA è vuota la generazione dell’XML resta bloccata.</div>')
+      + '<div style="margin-top:12px;font-size:12.5px;line-height:1.7">'
+        + '<b>Committente:</b> ' + esc(p.client || '—') + '<br>'
+        + (p.cliente_piva ? 'P.IVA ' + esc(p.cliente_piva) + ' · ' : '')
+        + (p.cliente_cf ? 'C.F. ' + esc(p.cliente_cf) + ' · ' : '')
+        + (p.cliente_sdi ? 'SDI ' + esc(p.cliente_sdi) : p.cliente_pec ? 'PEC ' + esc(p.cliente_pec)
+            : '<span style="color:var(--ora)">manca il codice SDI o la PEC</span>')
+      + '</div>'
+      + (canW() ? '<button class="btn btn-sm" data-act="editproj" style="margin-top:12px">Completa i dati del committente</button>' : '')
+    + '</div></div>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Scaglioni</span>'
+      + (canW() ? '<span class="row">'
+          + (list.length ? '' : '<button class="btn btn-sm" data-act="fattstd">Genera scaglioni standard</button>')
+          + '<button class="btn btn-p btn-sm" data-newfatt="">＋ Scaglione</button></span>' : '') + '</div>'
+    + (list.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>Descrizione</th><th>Stato</th>'
+          + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
+          + '<th>Fattura</th><th>Prevista</th><th></th></tr></thead><tbody>' + righe + '</tbody></table></div>'
+        : '<div class="empty"><i>💶</i><p>Nessuno scaglione definito.</p>'
+          + '<p style="font-size:12px;margin-top:6px">Gli scaglioni agganciati a una fase diventano '
+          + '“pronti da emettere” non appena quella fase si chiude.</p></div>')
+    + '</div>';
+}
+
+/* ------------------------- PAGINA: DA FATTURARE ------------------------- */
+function rFatturare() {
+  el('crumb').textContent = 'Quello che è maturato e non è ancora stato fatturato.';
+  const list = S.fatture.filter(f => {
+    const p = byId(S.projects, f.project_id);
+    return p && !p.archiviato && fattAperta(f);
+  }).sort((a, b) => {
+    if (a.stato !== b.stato) return a.stato === 'pronta' ? -1 : 1;
+    const A = pd(a.data_prevista), B = pd(b.data_prevista);
+    if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
+  });
+
+  const pronte = list.filter(f => f.stato === 'pronta');
+  const totP = pronte.reduce((a, f) => a + impFattura(f), 0);
+  const totT = list.reduce((a, f) => a + impFattura(f), 0);
+  const incassato = S.fatture.filter(f => f.stato === 'incassata')
+    .reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0);
+  const emesse = S.fatture.filter(f => f.stato === 'emessa');
+
+  if (!list.length && !emesse.length) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>💶</i>'
+      + '<p>Nessuno scaglione di fatturazione.</p>'
+      + '<p style="font-size:12px;margin-top:6px">Aprine una commessa, scheda <b>Fatturazione</b>, '
+      + 'e genera gli scaglioni standard.</p></div></div>';
+    return;
+  }
+
+  const riga = f => {
+    const c = calcolaFattura(impFattura(f));
+    const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
+    return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
+      + '<td style="font-size:12px"><b>' + esc(pn(f.project_id)) + '</b>'
+        + '<div style="color:var(--mut)">' + esc((byId(S.projects, f.project_id) || {}).client || '') + '</div></td>'
+      + '<td>' + esc(f.descrizione)
+        + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
+      + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
+      + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
+      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
+      + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
+      + '<td class="ac">' + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '">&#128229;</button>' : '') + '</td></tr>';
+  };
+  const tabella = (arr, titolo, colore) => !arr.length ? '' :
+      '<div class="card mb16"><div class="card-h"><span class="card-t"' + (colore ? ' style="color:' + colore + '"' : '') + '>'
+    + titolo + ' <span class="chip">' + arr.length + '</span></span>'
+    + '<b style="font-size:13px">' + feuro(arr.reduce((a, f) => a + impFattura(f), 0)) + '</b></div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th>Scaglione</th><th>Stato</th>'
+    + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
+    + '<th>Prevista</th><th></th></tr></thead><tbody>' + arr.map(riga).join('') + '</tbody></table></div></div>';
+
+  el('page').innerHTML =
+      '<div class="kgrid">'
+      + kpi('Pronte da emettere', pronte.length, feuro(totP), pronte.length ? 100 : 0, 'var(--yel)')
+      + kpi('In attesa di maturare', list.length - pronte.length, feuro(totT - totP), 60, 'var(--mut2)')
+      + kpi('Emesse non incassate', emesse.length,
+            feuro(emesse.reduce((a, f) => a + impFattura(f), 0)), emesse.length ? 100 : 0, 'var(--blue)')
+      + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
+      + '</div>'
+    + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
+        + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
+    + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
+    + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti')
+    + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)');
+}
+
+/* ----------------------------- MODALE SCAGLIONE ----------------------------- */
+function openFatt(id, presetPid) {
+  const f = id ? byId(S.fatture, id) : null;
+  const pid = f ? f.project_id : (presetPid || S.projId);
+  FATT_PID = pid;
+  el('mfa-t').textContent = f ? 'Scaglione di fatturazione' : 'Nuovo scaglione';
+  el('fa-id2').value   = id || '';
+  el('fa-desc').value  = f ? f.descrizione : '';
+  el('fa-perc').value  = f && f.percentuale !== null ? f.percentuale : '';
+  el('fa-imp').value   = f && f.imponibile !== null ? f.imponibile : '';
+  el('fa-prev').value  = f ? (f.data_prevista || '') : '';
+  el('fa-stato2').value= f ? f.stato : 'da_emettere';
+  el('fa-num').value   = f ? (f.numero_fattura || '') : '';
+  el('fa-data').value  = f ? (f.data_fattura || '') : '';
+  el('fa-inc').value   = f ? (f.data_incasso || '') : '';
+  el('fa-incimp').value= f && f.importo_incassato !== null ? f.importo_incassato : '';
+  el('fa-note2').value = f ? (f.note || '') : '';
+  fillSel('fa-fase', fasiOf(pid).map(x => ({v:x.id, l:x.nome})), f ? f.fase_id : '', '- Nessuna: maturazione manuale -');
+  el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+  el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
+  aggiornaCalcolo();
+  openM('m-fatt');
+}
+let FATT_PID = null;
+
+function aggiornaCalcolo() {
+  const p = byId(S.projects, FATT_PID) || {};
+  const fisso = parseFloat(el('fa-imp').value);
+  const perc  = parseFloat(el('fa-perc').value);
+  let imp = 0;
+  if (!isNaN(fisso) && fisso > 0) imp = fisso;
+  else if (!isNaN(perc) && p.amount) imp = r2(Number(p.amount) * perc / 100);
+  if (!imp) { el('fa-calc').textContent = p.amount
+      ? 'Importo di commessa: ' + feuro(p.amount) + '. Indica una percentuale oppure un importo fisso.'
+      : 'La commessa non ha un importo: usa un valore fisso.'; return; }
+  const c = calcolaFattura(imp);
+  el('fa-calc').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b>'
+    + (c.cassa ? ' · cassa ' + STUDIO.aliquotaCassa + '% ' + feuro(c.cassa) : '')
+    + ' · IVA ' + STUDIO.aliquotaIva + '% ' + feuro(c.iva)
+    + (c.ritenuta ? ' · ritenuta −' + feuro(c.ritenuta) : '')
+    + ' → totale <b>' + feuro(c.totale) + '</b>'
+    + (c.ritenuta ? ', netto a pagare ' + feuro(c.netto) : '');
+}
+
+async function saveFatt() {
+  const desc = el('fa-desc').value.trim();
+  if (!desc) return toast('La descrizione è obbligatoria.', 'error');
+  const perc = el('fa-perc').value, imp = el('fa-imp').value;
+  if (!perc && !imp) return toast('Indica una percentuale oppure un importo fisso.', 'error');
+  const id = el('fa-id2').value;
+  const pay = {
+    project_id: FATT_PID, descrizione: desc,
+    percentuale: perc === '' ? null : parseFloat(perc),
+    imponibile:  imp  === '' ? null : parseFloat(imp),
+    fase_id: el('fa-fase').value || null,
+    data_prevista: el('fa-prev').value || null,
+    stato: el('fa-stato2').value,
+    numero_fattura: el('fa-num').value.trim() || null,
+    data_fattura: el('fa-data').value || null,
+    data_incasso: el('fa-inc').value || null,
+    importo_incassato: el('fa-incimp').value === '' ? null : parseFloat(el('fa-incimp').value),
+    note: el('fa-note2').value.trim() || null
+  };
+  setLoading('fa-save2', true);
+  const { error } = id
+    ? await SB.from('commessa_fatture').update(pay).eq('id', id)
+    : await SB.from('commessa_fatture').insert(Object.assign({
+        created_by:S.me.id, ordine: fattureOf(FATT_PID).length }, pay));
+  setLoading('fa-save2', false);
+  if (error) return sbErr(error, 'scaglione');
+  closeM('m-fatt'); await loadAll(true); render(); toast('Scaglione salvato', 'success');
+}
+
+async function delFatt(id) {
+  const f = byId(S.fatture, id);
+  if (!confirm('Eliminare lo scaglione "' + (f ? f.descrizione : '') + '"?')) return;
+  const { error } = await SB.from('commessa_fatture').delete().eq('id', id);
+  if (error) return sbErr(error, 'scaglione');
+  closeM('m-fatt'); await loadAll(true); render(); toast('Scaglione eliminato');
+}
+
+/* Scaglioni tipici di uno studio tecnico, agganciati alle fasi giuste */
+async function scaglioniStandard(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  if (fattureOf(pid).length) return toast('Ci sono già degli scaglioni.', 'error');
+  const fasi = fasiOf(pid);
+  const trova = k => { const f = fasi.find(x => x.fase_key === k); return f ? f.id : null; };
+  const modello = [
+    { d:'Acconto alla sottoscrizione dell’incarico', perc:30, fase: trova('firme') || trova('avvio') },
+    { d:'Acconto alla presentazione della pratica',  perc:40, fase: trova('titolo') || trova('istanze') || trova('deposito') || trova('esecutivo') },
+    { d:'Saldo a fine lavori',                        perc:30, fase: trova('chiusura') || trova('collaudo') || trova('esecuzione') }
+  ].filter(m => m.fase || true);
+  if (!confirm('Creo tre scaglioni (30% / 40% / 30%) agganciati alle fasi della commessa.\n\n'
+    + 'Diventeranno “pronti da emettere” automaticamente alla chiusura della fase collegata. Procedo?')) return;
+  const rows = modello.map((m, i) => ({
+    project_id: pid, descrizione: m.d, percentuale: m.perc, fase_id: m.fase,
+    ordine: i, stato: 'da_emettere', created_by: S.me.id,
+    data_prevista: m.fase ? (byId(S.fasi, m.fase) || {}).data_fine_prevista || null : null
+  }));
+  const { error } = await SB.from('commessa_fatture').insert(rows);
+  if (error) return sbErr(error, 'scaglioni');
+  await loadAll(true); render();
+  toast('Creati 3 scaglioni di fatturazione', 'success');
+}
+
+/* Scarica l'XML FatturaPA da trascinare nel software di fatturazione */
+async function scaricaXml(id) {
+  const f = byId(S.fatture, id); if (!f) return;
+  const r = xmlFattura(f);
+  if (r.errori) {
+    return alert('Non posso generare l’XML, mancano questi dati:\n\n• ' + r.errori.join('\n• '));
+  }
+  const blob = new Blob([r.xml], { type: 'application/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = r.nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+  STUDIO.progressivo = (STUDIO.progressivo || 1) + 1;
+  await SB.from('commessa_fatture').update({ xml_generato_at: new Date().toISOString() }).eq('id', id);
+  toast('File ' + r.nome + ' scaricato: importalo in FatturaElettronica APP', 'success');
+}
+
+/* ===========================================================================
    PAGINA: FIRME DEL CLIENTE
    Raggruppa tutto cio' che il committente deve firmare, per commessa, cosi'
    da convocarlo una volta sola. La procura speciale vale per una sola pratica:
@@ -2423,6 +2914,7 @@ function rProject() {
   const tabs = [
     ['avanzamento', 'Avanzamento', pr.tot],
     ['pratiche',    'Pratiche & Enti', praticheOf(p.id).length],
+    ['fatture',     'Fatturazione', fattureOf(p.id).length],
     ['anagrafica',  'Anagrafica', null],
     ['ore',         'Ore', null],
     ['file',        'File', null]
@@ -2459,6 +2951,8 @@ function rProject() {
       + checklist(p.id);
   } else if (S.tab === 'pratiche') {
     body += pratichePanel(p.id);
+  } else if (S.tab === 'fatture') {
+    body += fatturePanel(p.id);
   } else if (S.tab === 'anagrafica') {
     body += anagraficaPanel(p);
   } else if (S.tab === 'ore') {
@@ -3078,6 +3572,20 @@ function drawWizard() {
       + fld('Comune', 'w-com', d.comune) + fld('Provincia', 'w-prov', d.provincia) + fld('CIG / CUP', 'w-cig', d.cig)
       + '</div><div class="fg2">'
       + fld('Indirizzo', 'w-ind', d.indirizzo) + fld('Dati catastali', 'w-cat', d.dati_catastali, 'Fg. 12 part. 345 sub 2')
+      + '</div>'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;'
+      + 'color:var(--mut);margin:16px 0 8px;border-top:1px solid var(--bord);padding-top:12px">'
+      + 'Dati fiscali del committente <span style="font-weight:400;text-transform:none;letter-spacing:0">'
+      + '— servono solo per generare l’XML della fattura</span></div>'
+      + '<div class="fg3">'
+      + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
+      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri')
+      + '</div><div class="fg2">'
+      + fld('PEC', 'w-cpec', d.cliente_pec, 'se non c’è il codice SDI')
+      + fld('Indirizzo di fatturazione', 'w-cind', d.cliente_indirizzo)
+      + '</div><div class="fg3">'
+      + fld('CAP', 'w-ccap', d.cliente_cap) + fld('Comune', 'w-ccom', d.cliente_comune)
+      + fld('Provincia', 'w-cprov', d.cliente_prov, 'PG')
       + '</div><div class="fg3">'
       + '<div class="fg"><label class="fl">Stato</label><select class="fc" id="w-st">'
         + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + ((d.status || 'attivo') === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
@@ -3134,6 +3642,10 @@ function wzCollect() {
     indirizzo: g('w-ind') || null, dati_catastali: g('w-cat') || null,
     status: g('w-st') || 'attivo', owner_id: g('w-own') || null,
     amount: g('w-imp') || null, start_date: g('w-di') || null, end_date: g('w-df') || null,
+    cliente_piva: g('w-cpiva') || null, cliente_cf: g('w-ccf') || null,
+    cliente_sdi: g('w-csdi') || null, cliente_pec: g('w-cpec') || null,
+    cliente_indirizzo: g('w-cind') || null, cliente_cap: g('w-ccap') || null,
+    cliente_comune: g('w-ccom') || null, cliente_prov: g('w-cprov') || null,
     description: el('w-desc') ? el('w-desc').value.trim() || null : null
   });
 }
@@ -3886,6 +4398,11 @@ document.addEventListener('DOMContentLoaded', () => {
     recalcScadenza();
   };
   el('fa-save').onclick = saveFase;
+  el('fa-save2').onclick = saveFatt;
+  el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
+  el('fa-xml').onclick   = () => scaricaXml(el('fa-id2').value);
+  el('fa-perc').oninput  = aggiornaCalcolo;
+  el('fa-imp').oninput   = aggiornaCalcolo;
   el('ste-btn').onclick = saveOre;
   el('te-p').onchange   = loadTeTasks;
   el('su-btn').onclick  = saveUser;
@@ -3906,6 +4423,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
     if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
+    if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
+    if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
+    if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
     if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
@@ -3929,6 +4449,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'genera')   return rigenera(S.projId);
       if (a === 'ripristina') return archiviaProj(S.projId, false);
       if (a === 'prreset')  { S.prQ=''; S.prBucket=''; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
+      if (a === 'fattstd')  return scaglioniStandard(S.projId);
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'back')     return go('projects');

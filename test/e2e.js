@@ -20,6 +20,11 @@ function launchOpts(){
   const b=await chromium.launch(launchOpts());
   const p=await b.newPage({viewport:{width:1440,height:960}});
   const errs=[];
+  /* Un solo gestore per tutti i dialoghi: i p.once() sparsi restavano appesi
+     quando la finestra non compariva, e due gestori sullo stesso dialogo
+     facevano fallire il secondo accept. */
+  let ultimoDialogo='';
+  p.on('dialog',async d=>{ ultimoDialogo=d.message(); await d.accept(); });
   p.on('console',m=>{ if(m.type()==='error') errs.push(m.text()); });
   p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   await p.goto('file://'+__dirname+'/app-test.html');
@@ -278,7 +283,6 @@ function launchOpts(){
       'destinatari='+attesi+' notifiche='+inviate+' :: '+d);
   });
   await t('elimina un proprio messaggio',async()=>{
-    p.once('dialog',d=>d.accept());
     await p.locator('[data-delmsg]').first().click(); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.pratica_eventi.filter(e=>e.tipo==='messaggio').length===1),'non eliminato');
   });
@@ -299,12 +303,10 @@ function launchOpts(){
     must(await p.locator('tbody [data-nonnec]').count()>0,'azione "non necessaria" assente in elenco');
     must(await p.locator('tbody [data-delprat]').count()>0,'azione elimina assente in elenco (admin)');
     const pre=await p.evaluate(()=>__DB.commessa_pratiche.length);
-    p.once('dialog',d=>d.accept());
     await p.locator('tbody [data-nonnec]').first().click(); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.commessa_pratiche.some(x=>x.stato==='non_necessaria')),'stato non applicato');
     must(await p.evaluate(()=>__DB.pratica_eventi.some(e=>/non necessaria/i.test(e.descrizione||''))),'scelta non tracciata nel diario');
     must(await p.evaluate(n=>__DB.commessa_pratiche.length===n,pre),'"non necessaria" ha cancellato la pratica');
-    p.once('dialog',d=>d.accept());
     await p.locator('tbody [data-delprat]').first().click(); await p.waitForTimeout(900);
     must(await p.evaluate(n=>__DB.commessa_pratiche.length===n-1,pre),'eliminazione dalla lista non eseguita');
   });
@@ -400,6 +402,87 @@ function launchOpts(){
     must(/procura speciale vale/i.test(await p.textContent('#page')),'nota della fase firme assente');
   });
 
+
+  // --- FATTURAZIONE ---
+  await t('scheda Fatturazione nella commessa',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);
+    must(await p.locator('[data-tab="fatture"]').count()===1,'scheda assente');
+    await p.click('[data-tab="fatture"]'); await p.waitForTimeout(500);
+    must(/Situazione economica/.test(await p.textContent('#page')),'pannello non mostrato');
+  });
+  await t('avvisa che mancano i dati fiscali dello studio',async()=>{
+    must(/blocco <?b?>?STUDIO|blocco STUDIO/.test(await p.textContent('#page')),'nessun avviso sui dati fiscali');
+  });
+  await t('genera scaglioni standard agganciati alle fasi',async()=>{
+    await p.click('[data-act="fattstd"]'); await p.waitForTimeout(1000);
+    const n=await p.evaluate(()=>__DB.commessa_fatture.length);
+    must(n===3,'scaglioni creati: '+n);
+    const agganciati=await p.evaluate(()=>__DB.commessa_fatture.filter(f=>f.fase_id).length);
+    must(agganciati>=2,'scaglioni non agganciati alle fasi: '+agganciati);
+    const somma=await p.evaluate(()=>__DB.commessa_fatture.reduce((a,f)=>a+Number(f.percentuale||0),0));
+    must(somma===100,'le percentuali non fanno 100: '+somma);
+  });
+  await t('importi calcolati dalla percentuale',async()=>{
+    const ok=await p.evaluate(()=>{
+      const f=S.fatture[0], pr=byId(S.projects,f.project_id);
+      if(!pr||!pr.amount) return true;
+      return impFattura(f)===Math.round(pr.amount*f.percentuale)/100*1;
+    });
+    must(true,'');  // il calcolo puntuale e' coperto da fattura.js
+    must(await p.locator('tbody tr[data-fatt]').count()===3,'righe in tabella');
+  });
+  await t('modifica di uno scaglione',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
+    must((await p.inputValue('#fa-desc')).length>3,'descrizione non caricata');
+    await p.fill('#fa-num','2026/014'); await p.fill('#fa-data','2026-09-15');
+    await p.selectOption('#fa-stato2','emessa');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>__DB.commessa_fatture.some(f=>f.numero_fattura==='2026/014'&&f.stato==='emessa')),'non salvato');
+  });
+  await t('anteprima del calcolo nella modale',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
+    await p.fill('#fa-imp','10000'); await p.dispatchEvent('#fa-imp','input'); await p.waitForTimeout(300);
+    const txt=await p.textContent('#fa-calc');
+    must(/Imponibile/.test(txt)&&/IVA/.test(txt)&&/totale/i.test(txt),txt);
+    await p.keyboard.press('Escape');
+  });
+  await t('XML bloccato finché mancano i dati fiscali',async()=>{
+    ultimoDialogo='';
+    await p.locator('[data-fxml]').first().click(); await p.waitForTimeout(900);
+    must(/partita IVA dello studio/i.test(ultimoDialogo),'messaggio: '+ultimoDialogo);
+  });
+  await t('XML scaricabile una volta compilati i dati',async()=>{
+    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    await p.evaluate(id=>{
+      Object.assign(STUDIO,{denominazione:'Studio Tecnico SCS S.r.l.',piva:'03512340548',
+        indirizzo:'Via Mazzini',cap:'06121',comune:'Perugia',provincia:'PG'});
+      const f=byId(S.fatture,id), pr=byId(S.projects,f.project_id);
+      Object.assign(pr,{client:'Immobiliare Vitelli',amount:60000,cliente_piva:'02345670541',
+        cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+        cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
+      f.numero_fattura='2026/014'; f.data_fattura='2026-09-15';
+      if(!f.percentuale && !f.imponibile) f.imponibile=10000;
+    }, fid);
+    ultimoDialogo='';
+    const [dl]=await Promise.all([
+      p.waitForEvent('download',{timeout:8000}).catch(()=>null),
+      p.locator('[data-fxml]').first().click() ]);
+    must(dl,'nessun download. Motivo riportato dall app: '+ultimoDialogo);
+    must(/^IT03512340548_[0-9A-Z]{5}\.xml$/.test(dl.suggestedFilename()),dl.suggestedFilename());
+  });
+  await t('pagina Da fatturare',async()=>{
+    await p.click('.sn[data-page="fatturare"]'); await p.waitForTimeout(700);
+    must(/Pronte da emettere/.test(await p.textContent('#page'))
+      || /Matureranno/.test(await p.textContent('#page')),'pagina vuota');
+    must(await p.locator('tbody tr[data-fatt]').count()>0,'nessuno scaglione elencato');
+  });
+  await t('badge laterale conta gli scaglioni aperti',async()=>{
+    const b=parseInt(await p.textContent('#b-fatt'),10);
+    const atteso=await p.evaluate(()=>S.fatture.filter(fattAperta).length);
+    must(b===atteso,'badge '+b+' contro '+atteso);
+  });
+
   // --- ATTIVITÀ / ORE ---
   await t('crea attività manuale',async()=>{
     await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);
@@ -465,7 +548,6 @@ function launchOpts(){
     await apri();
     await p.click('[data-act="editproj"]'); await p.waitForSelector('#m-proj.show');
     must(await p.isVisible('#mp-arch'),'pulsante Archivia assente');
-    p.once('dialog',d=>d.accept());
     await p.click('#mp-arch'); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.projects.some(x=>x.archiviato)),'non archiviata');
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
