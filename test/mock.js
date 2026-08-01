@@ -10,6 +10,17 @@
     profili_costi:[], enti_pa:[]
   };
   window.__DB=DB;
+  /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
+     PostgREST quando l'app e' piu' avanti dello schema. */
+  window.__COLONNE_ASSENTI=[];
+  function verificaColonne(v){
+    const assenti=window.__COLONNE_ASSENTI||[]; if(!assenti.length) return null;
+    for(const rec of (Array.isArray(v)?v:[v]))
+      for(const k of Object.keys(rec||{}))
+        if(assenti.includes(k))
+          return {message:"Could not find the '"+k+"' column of 'projects' in the schema cache"};
+    return null;
+  }
   let seq=0; const uid=()=>'id'+(++seq);
   const clone=x=>JSON.parse(JSON.stringify(x));
   const giornoPrima=d=>{ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()-1);
@@ -33,7 +44,8 @@
       in(c,a){ flt.push(r=>a.includes(r[c])); return api; },
       single(){ single=true; return api; },
       maybeSingle(){ maybe=true; return api; },
-      insert(v){ const arr=Array.isArray(v)?v:[v];
+      insert(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
+        const arr=Array.isArray(v)?v:[v];
         const made=arr.map(x=>Object.assign({id:uid(),created_at:new Date().toISOString()},x));
         /* Replica il trigger trg_chiudi_costo della migrazione 009: inserendo un
            nuovo costo, il periodo aperto precedente si chiude il giorno prima. */
@@ -47,10 +59,12 @@
           if(dup&&opt&&opt.ignoreDuplicates)return;
           const rec=Object.assign({id:uid(),created_at:new Date().toISOString()},x); DB[table].push(rec); made.push(rec); });
         api._res=made; return api; },
-      update(v){ api._upd=v; return api; },
+      update(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
+        api._upd=v; return api; },
       delete(){ api._del=true; return api; },
       then(res,rej){
         try{
+          if(api._err) return res({data:null,error:api._err});
           if(api._upd){ DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); }); return res({data:null,error:null}); }
           if(api._del){ DB[table]=DB[table].filter(r=>!flt.every(f=>f(r))); return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }

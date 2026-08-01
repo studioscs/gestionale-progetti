@@ -402,6 +402,9 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="btn btn-sm btn-ic" id="refresh" title="Ricarica dati">&#8635;</button>
     </div>
     <div id="ndrop" class="ndrop"></div>
+    <!-- Avviso di database non allineato: compare solo se all'avvio manca
+         qualcosa, cosi' non lo si scopre al primo salvataggio fallito. -->
+    <div id="schema-warn" style="display:none"></div>
     <div id="page"><div class="empty"><i>&#9203;</i><p>Caricamento...</p></div></div>
   </div>
 </div>
@@ -807,7 +810,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.02.12';
+const VERSIONE = '2026.08.02.13';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -934,16 +937,84 @@ function setLoading(id, on) {
   }
 }
 /* Errori Supabase leggibili */
+/* Quale migrazione introduce una data colonna o tabella.
+   Serve a dire "esegui la 010" invece di un generico "esegui la 001": chi legge
+   il messaggio deve sapere quale file aprire, non doverli provare tutti. */
+const MIGRAZIONI = {
+  '001_gestionale_v2': ['email','attivo','telefono','codice','template_key','condizioni','comune',
+    'provincia','indirizzo','dati_catastali','referente','referente_email','referente_tel',
+    'archiviato','sort_order','completed_at','completed_by','is_milestone','opzionale',
+    'rif_normativo','ente','commessa_fase_id',
+    'commessa_fasi','commessa_pratiche','pratica_eventi','notifiche'],
+  '002_chat_pratiche':    ['modificato_at','pratica_id'],
+  '004_categorie_attivita': ['categoria'],
+  '005_fatturazione':     ['cliente_piva','cliente_cf','cliente_sdi','cliente_pec','cliente_indirizzo',
+                           'cliente_cap','cliente_comune','cliente_prov','commessa_fatture'],
+  '007_referente_tecnico': ['referente_ruolo','referente_tec','referente_tec_email',
+                            'referente_tec_tel','referente_tec_ruolo'],
+  '008_anagrafica_clienti': ['cliente_id','clienti'],
+  '009_costi_personale':  ['profili_costi'],
+  '010_lavori_sisma':     ['sisma'],
+  '011_fatturazione_pa':  ['ente_pubblico','codice_ufficio','split_payment','cup','rif_incarico',
+                           'rif_incarico_data','rif_incarico_tipo','oggetto_servizio','ente_pa_id','enti_pa']
+};
+/* Dalle risposte di caricamento capisce quali migrazioni non sono state
+   eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
+   non e' una tabella mancante: la RLS che nega la lettura dei costi a un
+   collaboratore e' il comportamento voluto e non va segnalata come guasto. */
+function controllaSchema(coppie) {
+  const mancanti = [];
+  coppie.forEach(([r, tabella]) => {
+    if (!r || !r.error) return;
+    const m = r.error.message || '';
+    if (!/does not exist|schema cache|find the table/i.test(m)) return;
+    const file = migrazioneDi(tabella);
+    if (file && mancanti.indexOf(file) < 0) mancanti.push(file);
+  });
+  S.schemaMancante = mancanti;
+  const box = el('schema-warn');
+  if (!box) return;
+  if (!mancanti.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="wbox" style="margin-bottom:14px">'
+    + '<b>Il database non è aggiornato.</b> Alcune funzioni non salveranno finché non esegui, '
+    + 'in questo ordine, dal <i>SQL Editor</i> di Supabase:<ul style="margin:6px 0 0 18px">'
+    + mancanti.sort().map(f => '<li><code>' + esc(f) + '</code></li>').join('')
+    + '</ul></div>';
+}
+
+function migrazioneDi(nome) {
+  const n = String(nome || '').toLowerCase();
+  for (const file in MIGRAZIONI) if (MIGRAZIONI[file].indexOf(n) >= 0) return 'sql/' + file + '.sql';
+  return null;
+}
+
 function sbErr(e, ctx) {
   if (!e) return;
   console.error(ctx || 'supabase', e);
   let m = e.message || 'Errore sconosciuto';
-  if (/column .* does not exist|schema cache/i.test(m))
-    m = 'Manca una colonna nel database: esegui sql/001_gestionale_v2.sql in Supabase. (' + m + ')';
-  else if (/violates row-level security/i.test(m))
+
+  /* PostgREST nomina l'oggetto mancante in modi diversi a seconda che sia una
+     colonna o una tabella; da entrambi si risale al file da eseguire. */
+  const mancante = (m.match(/'([a-z_]+)' column/i) || m.match(/column ["']?([a-z_.]+)/i)
+                 || m.match(/relation ["']?(?:public\.)?([a-z_]+)/i) || [])[1];
+  const nudo = String(mancante || '').split('.').pop();
+  const file = migrazioneDi(nudo);
+
+  if (/column .* does not exist|schema cache/i.test(m)) {
+    m = file
+      ? 'Il database non è aggiornato: manca la colonna “' + nudo + '”. Apri Supabase → SQL Editor '
+        + 'ed esegui ' + file + ' (poi le successive, in ordine).'
+      : 'Manca una colonna nel database (' + m + '). Esegui in Supabase, in ordine, le migrazioni '
+        + 'della cartella sql/ che non hai ancora lanciato.';
+  } else if (/violates row-level security/i.test(m)) {
     m = 'Permessi insufficienti per questa operazione.';
-  else if (/relation .* does not exist/i.test(m))
-    m = 'Tabella mancante: esegui sql/001_gestionale_v2.sql in Supabase.';
+  } else if (/relation .* does not exist/i.test(m)) {
+    m = file
+      ? 'Il database non è aggiornato: manca la tabella “' + nudo + '”. Apri Supabase → SQL Editor '
+        + 'ed esegui ' + file + ' (poi le successive, in ordine).'
+      : 'Tabella mancante nel database (' + m + '). Esegui le migrazioni della cartella sql/ in ordine.';
+  }
   toast(m, 'error');
 }
 </script>
@@ -1634,6 +1705,10 @@ async function loadAll(silent) {
        restituisce un elenco vuoto, e va bene cosi'. */
     S.costi     = rco.error ? [] : (rco.data || []);
     S.enti      = ren.error ? [] : (ren.data || []);
+    /* Se una tabella non esiste ancora, e' una migrazione non eseguita: va
+       detto subito, non al primo salvataggio che fallisce. */
+    controllaSchema([[rfa, 'commessa_fatture'], [rcl, 'clienti'],
+                     [rco, 'profili_costi'],    [ren, 'enti_pa']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;

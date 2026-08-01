@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const t=(name,cond,got)=>{ if(!cond){fail++;console.log('  ✗',name,'→',JSON.stringify(got));} else console.log('  ✓',name); };
@@ -190,6 +190,25 @@ t('margine sull importo di commessa',cc.margine===9250,cc.margine);
 t('segnala chi lavora senza tariffa',cc.perPersona.u3.senzaCosto===true&&cc.perPersona.u1.senzaCosto===false,null);
 t('commessa senza ore: nessun costo',(()=>{const v=ctx.costoCommessa('mai');
   return v.ore===0&&v.lordo===0&&v.giorni===0&&v.medio===0;})(),ctx.costoCommessa('mai'));
+
+console.log('\n— DIAGNOSI DI DATABASE NON AGGIORNATO —');
+/* Il messaggio deve nominare la migrazione giusta: mandare a eseguire la 001
+   quando manca una colonna della 010 fa perdere tempo a chi lo legge. */
+t('sisma → migrazione 010',ctx.migrazioneDi('sisma')==='sql/010_lavori_sisma.sql',ctx.migrazioneDi('sisma'));
+t('ente_pubblico → migrazione 011',ctx.migrazioneDi('ente_pubblico')==='sql/011_fatturazione_pa.sql',
+  ctx.migrazioneDi('ente_pubblico'));
+t('cup → migrazione 011',ctx.migrazioneDi('cup')==='sql/011_fatturazione_pa.sql',ctx.migrazioneDi('cup'));
+t('profili_costi → migrazione 009',ctx.migrazioneDi('profili_costi')==='sql/009_costi_personale.sql',null);
+t('enti_pa → migrazione 011',ctx.migrazioneDi('enti_pa')==='sql/011_fatturazione_pa.sql',null);
+t('clienti → migrazione 008',ctx.migrazioneDi('clienti')==='sql/008_anagrafica_clienti.sql',null);
+t('referente_tec → migrazione 007',ctx.migrazioneDi('referente_tec')==='sql/007_referente_tecnico.sql',null);
+t('cliente_sdi → migrazione 005',ctx.migrazioneDi('cliente_sdi')==='sql/005_fatturazione.sql',null);
+t('colonna sconosciuta non inventa un file',ctx.migrazioneDi('pippo')===null,ctx.migrazioneDi('pippo'));
+/* Il messaggio reale di PostgREST, quello visto dall'utente */
+const msg="Could not find the 'sisma' column of 'projects' in the schema cache";
+const nome=(msg.match(/'([a-z_]+)' column/i)||[])[1];
+t('estrae il nome dal messaggio di PostgREST',nome==='sisma',nome);
+t('e ne ricava la migrazione',ctx.migrazioneDi(nome)==='sql/010_lavori_sisma.sql',null);
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

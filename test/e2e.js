@@ -866,6 +866,49 @@ function launchOpts(){
     must(f.xml_generato_at,'generazione non registrata');
   });
 
+  // --- DATABASE NON AGGIORNATO: IL MESSAGGIO DEVE INDIRIZZARE ---
+  await t('salvando con una colonna mancante indica la migrazione giusta',async()=>{
+    await p.evaluate(()=>{ window.__COLONNE_ASSENTI=['sisma']; });
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.fill('#w-name','Commessa che non si salva');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1200);
+    try{
+      /* Solo il testo dell'avviso: il corpo della pagina contiene anche i
+         <script>, dove "001_gestionale_v2" compare come dato e falserebbe la
+         verifica. */
+      const t2=await p.textContent('#tc');
+      must(/010_lavori_sisma/.test(t2),'non nomina la migrazione 010: '+t2);
+      must(!/001_gestionale_v2/.test(t2),'manda ancora a eseguire la 001: '+t2);
+      must(/sisma/.test(t2),'non dice quale colonna manca: '+t2);
+    } finally {
+      /* Il salvataggio e' fallito, quindi il modulo resta aperto. Va chiuso
+         comunque, anche se la verifica sopra non passa: altrimenti resta a
+         coprire la pagina e fa fallire tutti i test successivi per un motivo
+         che non c'entra nulla. */
+      await p.evaluate(()=>{ window.__COLONNE_ASSENTI=[]; closeM('m-proj'); });
+      await p.waitForTimeout(300);
+    }
+  });
+  await t('avviso in cima quando manca una tabella',async()=>{
+    await p.evaluate(()=>{
+      controllaSchema([[{error:{message:'relation "public.enti_pa" does not exist'}},'enti_pa'],
+                       [{error:{message:'Could not find the table clienti'}},'clienti']]);
+    });
+    await p.waitForTimeout(200);
+    const h=await p.textContent('#schema-warn');
+    must(/database non è aggiornato/i.test(h),'avviso assente');
+    must(/011_fatturazione_pa/.test(h)&&/008_anagrafica_clienti/.test(h),'non elenca le migrazioni: '+h);
+  });
+  await t('un errore di permessi non viene scambiato per tabella mancante',async()=>{
+    await p.evaluate(()=>{
+      controllaSchema([[{error:{message:'permission denied for table profili_costi'}},'profili_costi']]);
+    });
+    await p.waitForTimeout(200);
+    must(await p.evaluate(()=>el('schema-warn').style.display==='none'),'segnala un guasto che non c è');
+  });
+
   // --- COSTO DEL PERSONALE ---
   await t('scheda utente: campi di costo per l amministratore',async()=>{
     await p.click('.sn[data-page="users"]'); await p.waitForTimeout(500);
@@ -1039,24 +1082,39 @@ function launchOpts(){
     must(orf===0,'record orfani: '+orf);
   });
 
-  await p.screenshot({path:path.join(__dirname,'shot-oggi.png')});
-  /* Azzera i filtri lasciati dai test precedenti, altrimenti l'elenco
-     commesse puo' risultare vuoto e lo scatto fallisce. */
-  await p.evaluate(()=>{ S.pq=''; S.pst=''; S.par=''; go('projects'); });
-  await p.waitForTimeout(600);
-  const nProj=await p.locator('#page [data-proj]').count();
-  if(nProj){
-    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
+  /* Gli scatti finali non sono un test: se falliscono lo si annota e si va
+     avanti, altrimenti un'eccezione qui butta via il resoconto di tutti i
+     test precedenti e non si capisce piu' niente. */
+  await t('scatti finali',async()=>{
+    /* Un modulo rimasto aperto coprirebbe la pagina: lo si chiude comunque. */
+    await p.evaluate(()=>{ document.querySelectorAll('.ov.show').forEach(m=>m.classList.remove('show')); });
+    await p.screenshot({path:path.join(__dirname,'shot-oggi.png')});
+    /* Azzera i filtri lasciati dai test precedenti, altrimenti l'elenco
+       commesse puo' risultare vuoto e lo scatto fallisce. */
+    await p.evaluate(()=>{ S.pq=''; S.pst=''; S.par=''; go('projects'); });
+    await p.waitForTimeout(600);
+    const nProj=await p.locator('#page [data-proj]').count();
+    must(nProj,'nessuna commessa in elenco');
+    await p.locator('#page [data-proj]').first().click({timeout:8000}); await p.waitForTimeout(600);
     await p.evaluate(()=>{ const g=document.querySelectorAll('.grp-h'); if(g[3]) g[3].click(); });
     await p.waitForTimeout(200);
     await p.screenshot({path:path.join(__dirname,'shot-commessa.png')});
-  } else {
-    bad.push('screenshot finale: nessuna commessa in elenco');
-  }
+  });
+
+  /* Nessun modulo deve restare aperto a fine giro: se succede, un test si e'
+     dimenticato di chiudere ed e' il tipo di sporcizia che fa fallire altri
+     test per motivi che non c'entrano nulla. */
+  await t('nessun modulo rimasto aperto',async()=>{
+    const aperti=await p.evaluate(()=>Array.from(document.querySelectorAll('.ov.show')).map(m=>m.id));
+    must(!aperti.length,'moduli aperti: '+aperti.join(', '));
+  });
 
   console.log('\n✓ PASSATI ('+ok.length+')');
   if(bad.length){ console.log('\n✗ FALLITI ('+bad.length+')'); bad.forEach(x=>console.log('   '+x)); }
-  const real=errs.filter(e=>!/favicon|net::ERR_FILE/.test(e));
+  /* Il test sul database non aggiornato provoca apposta un errore di
+     salvataggio: l'app lo registra in console, ed e' il comportamento voluto. */
+  const attesi=/favicon|net::ERR_FILE|Could not find the 'sisma' column/;
+  const real=errs.filter(e=>!attesi.test(e));
   if(real.length){ console.log('\n⚠ ERRORI CONSOLE ('+real.length+')'); real.slice(0,10).forEach(e=>console.log('   '+e)); }
   await b.close();
   process.exit(bad.length||real.length?1:0);

@@ -33,6 +33,12 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
 
+> **Se salti una migrazione l'app te lo dice, e ti dice quale.** All'avvio, se
+> manca una tabella, compare un avviso in cima alla pagina con l'elenco esatto dei
+> file da eseguire. E se un salvataggio fallisce perché manca una colonna, il
+> messaggio nomina la migrazione che la introduce — non un generico "esegui la
+> 001", che costringerebbe a provarle tutte.
+
 Ogni script è **idempotente** (puoi rilanciarlo) e **solo additivo**: non modifica né
 cancella le tabelle esistenti (`projects`, `tasks`, `time_entries`, `files`,
 `profiles`, `project_fasi`, `project_sottofasi`). Aggiunge:
@@ -381,8 +387,8 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
-node logic.js        # 90 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 135 test end-to-end in Chromium su un mock di Supabase
+node logic.js        # 101 asserzioni su date, template, pianificazione, avanzamento, costi
+node e2e.js          # 140 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
