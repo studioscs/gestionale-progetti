@@ -395,7 +395,7 @@ function launchOpts(){
   });
   await t('nota operativa di fase mostrata',async()=>{
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
-    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);
+    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
     await p.evaluate(()=>{ const g=[...document.querySelectorAll('.grp-h')]
       .find(x=>/firme|Dati definitivi/i.test(x.textContent)); if(g) g.click(); });
     await p.waitForTimeout(400);
@@ -406,13 +406,17 @@ function launchOpts(){
   // --- FATTURAZIONE ---
   await t('scheda Fatturazione nella commessa',async()=>{
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
-    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);
+    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
     must(await p.locator('[data-tab="fatture"]').count()===1,'scheda assente');
     await p.click('[data-tab="fatture"]'); await p.waitForTimeout(500);
     must(/Situazione economica/.test(await p.textContent('#page')),'pannello non mostrato');
   });
-  await t('avvisa che mancano i dati fiscali dello studio',async()=>{
-    must(/blocco <?b?>?STUDIO|blocco STUDIO/.test(await p.textContent('#page')),'nessun avviso sui dati fiscali');
+  await t('mostra i dati fiscali dello studio',async()=>{
+    const txt=await p.textContent('#page');
+    must(/STUDIO TECNICO SCS/.test(txt),'denominazione assente');
+    must(/02077580435/.test(txt),'partita IVA assente');
+    must(/Nessuna ritenuta/.test(txt),'trattamento della ritenuta non indicato');
+    must(!/blocco STUDIO/.test(txt),'avvisa ancora che mancano i dati fiscali');
   });
   await t('genera scaglioni standard agganciati alle fasi',async()=>{
     await p.click('[data-act="fattstd"]'); await p.waitForTimeout(1000);
@@ -447,10 +451,13 @@ function launchOpts(){
     must(/Imponibile/.test(txt)&&/IVA/.test(txt)&&/totale/i.test(txt),txt);
     await p.keyboard.press('Escape');
   });
-  await t('XML bloccato finché mancano i dati fiscali',async()=>{
+  await t('XML bloccato finché mancano i dati del committente',async()=>{
     ultimoDialogo='';
     await p.locator('[data-fxml]').first().click(); await p.waitForTimeout(900);
-    must(/partita IVA dello studio/i.test(ultimoDialogo),'messaggio: '+ultimoDialogo);
+    must(/mancano questi dati/i.test(ultimoDialogo),'nessun elenco di dati mancanti: '+ultimoDialogo);
+    must(/committente|numero della fattura|codice destinatario/i.test(ultimoDialogo),
+      'non indica cosa manca: '+ultimoDialogo);
+    must(!/partita IVA dello studio/i.test(ultimoDialogo),'segnala ancora i dati dello studio come mancanti');
   });
   await t('XML scaricabile una volta compilati i dati',async()=>{
     const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
@@ -562,6 +569,93 @@ function launchOpts(){
     must(/Totale documento/.test(corpo),'totale assente');
   });
 
+
+  // --- ANAGRAFICA CLIENTI ---
+  await t('pagina Clienti nel menu',async()=>{
+    must(await p.locator('.sn[data-page="clienti"]').count()===1,'voce di menu assente');
+    await p.click('.sn[data-page="clienti"]'); await p.waitForTimeout(600);
+    must(/cliente|Clienti/i.test(await p.textContent('#page')),'pagina vuota');
+  });
+  await t('crea un cliente',async()=>{
+    await p.click('[data-newcli]'); await p.waitForSelector('#m-cli.show');
+    await p.fill('#cl-den','Costruzioni Alfa S.r.l.');
+    await p.fill('#cl-piva','01234567890'); await p.fill('#cl-sdi','ABC1234');
+    await p.fill('#cl-ind','Via Roma 1'); await p.fill('#cl-cap','62019');
+    await p.fill('#cl-com','Recanati'); await p.fill('#cl-prov','MC');
+    await p.fill('#cl-ref','Rag. Verdi'); await p.fill('#cl-refe','amm@alfa.it');
+    await p.fill('#cl-ref2','Geom. Gialli'); await p.fill('#cl-ref2e','tec@alfa.it');
+    await p.click('#cl-save'); await p.waitForTimeout(1000);
+    must(await p.evaluate(()=>__DB.clienti.some(c=>c.denominazione==='Costruzioni Alfa S.r.l.')),'non salvato');
+    must(await p.locator('tbody tr[data-cli]').count()>=1,'non compare in elenco');
+  });
+  await t('il wizard propone i clienti in anagrafica',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    must(await p.locator('#w-clid').count()===1,'selettore cliente assente');
+    const n=await p.locator('#w-clid option').count();
+    must(n>=2,'clienti non elencati: '+n+' opzioni');
+  });
+  await t('scegliendo un cliente i campi si compilano da soli',async()=>{
+    await p.selectOption('#w-clid',{index:1}); await p.waitForTimeout(500);
+    must((await p.inputValue('#w-cli'))==='Costruzioni Alfa S.r.l.','denominazione: '+(await p.inputValue('#w-cli')));
+    must((await p.inputValue('#w-cpiva'))==='01234567890','partita IVA non compilata');
+    must((await p.inputValue('#w-csdi'))==='ABC1234','codice SDI non compilato');
+    must((await p.inputValue('#w-ccom'))==='Recanati','comune non compilato');
+    must((await p.inputValue('#w-ref'))==='Rag. Verdi','referente amministrativo non compilato');
+    must((await p.inputValue('#w-ref2'))==='Geom. Gialli','referente operativo non compilato');
+  });
+  await t('la commessa resta collegata al cliente',async()=>{
+    await p.fill('#w-name','Lavori per Alfa');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1600);
+    const ok=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Lavori per Alfa');
+      const c=__DB.clienti.find(x=>x.denominazione==='Costruzioni Alfa S.r.l.');
+      return pr && c && pr.cliente_id===c.id && pr.cliente_piva==='01234567890';
+    });
+    must(ok,'collegamento o copia dei dati mancante');
+  });
+  await t('un cliente nuovo finisce da solo in anagrafica',async()=>{
+    const prima=await p.evaluate(()=>__DB.clienti.length);
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.fill('#w-name','Commessa cliente nuovo');
+    await p.fill('#w-cli','Immobiliare Beta S.n.c.');
+    await p.fill('#w-cpiva','09876543210'); await p.fill('#w-ccom','Macerata');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1600);
+    const dopo=await p.evaluate(()=>__DB.clienti.length);
+    must(dopo===prima+1,'clienti passati da '+prima+' a '+dopo);
+    const ok=await p.evaluate(()=>{
+      const c=__DB.clienti.find(x=>x.denominazione==='Immobiliare Beta S.n.c.');
+      const pr=__DB.projects.find(x=>x.name==='Commessa cliente nuovo');
+      return c && pr && pr.cliente_id===c.id && c.piva==='09876543210';
+    });
+    must(ok,'cliente non creato o non collegato');
+  });
+  await t('lo stesso cliente non viene duplicato',async()=>{
+    const prima=await p.evaluate(()=>__DB.clienti.length);
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.fill('#w-name','Secondo lavoro Beta');
+    await p.fill('#w-cli','Immobiliare Beta S.n.c.');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1600);
+    must(await p.evaluate(v=>__DB.clienti.length===v,prima),'cliente duplicato');
+  });
+  await t('la scheda cliente elenca le sue commesse',async()=>{
+    await p.click('.sn[data-page="clienti"]'); await p.waitForTimeout(600);
+    await p.locator('tbody tr[data-cli]').first().click(); await p.waitForSelector('#m-cli.show');
+    await p.waitForTimeout(400);
+    must(/Commesse di questo cliente/.test(await p.textContent('#cl-comm')),'elenco commesse assente');
+    await p.keyboard.press('Escape');
+  });
+  await t('ricerca nell anagrafica',async()=>{
+    await p.fill('#cl-q','Beta'); await p.waitForTimeout(500);
+    must(await p.locator('tbody tr[data-cli]').count()===1,'ricerca non filtra');
+    await p.fill('#cl-q',''); await p.waitForTimeout(400);
+  });
+
   // --- ATTIVITÀ / ORE ---
   await t('crea attività manuale',async()=>{
     await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);
@@ -623,14 +717,14 @@ function launchOpts(){
   const apri=async()=>{ await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
     await p.locator('.card:has-text("Commessa da eliminare")').first().click(); await p.waitForTimeout(500); };
   await t('archivia: esce dagli elenchi',async()=>{
-    const n0=await p.locator('[data-proj]').count();
+    const n0=await p.locator('#page [data-proj]').count();
     await apri();
     await p.click('[data-act="editproj"]'); await p.waitForSelector('#m-proj.show');
     must(await p.isVisible('#mp-arch'),'pulsante Archivia assente');
     await p.click('#mp-arch'); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.projects.some(x=>x.archiviato)),'non archiviata');
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
-    must(await p.locator('[data-proj]').count()===n0-1,'ancora in elenco');
+    must(await p.locator('#page [data-proj]').count()===n0-1,'ancora in elenco');
   });
   await t('archivia: esclusa dai menu a tendina',async()=>{
     await p.click('.sn[data-page="oggi"]'); await p.waitForTimeout(300);
@@ -643,8 +737,8 @@ function launchOpts(){
   await t('ripristino da banner e reset del filtro',async()=>{
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(300);
     await p.selectOption('#p-ar','arch'); await p.waitForTimeout(300);
-    must(await p.locator('[data-proj]').count()===1,'filtro Archiviate vuoto');
-    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(500);
+    must(await p.locator('#page [data-proj]').count()===1,'filtro Archiviate vuoto');
+    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(500);
     must(await p.locator('.wbox:has-text("archiviata")').count()>0,'banner assente');
     await p.click('[data-act="ripristina"]'); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.projects.every(x=>!x.archiviato)),'non ripristinata');
@@ -684,11 +778,19 @@ function launchOpts(){
   });
 
   await p.screenshot({path:path.join(__dirname,'shot-oggi.png')});
-  await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(300);
-  await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);
-  await p.evaluate(()=>document.querySelectorAll('.grp-h')[3].click());
-  await p.waitForTimeout(200);
-  await p.screenshot({path:path.join(__dirname,'shot-commessa.png')});
+  /* Azzera i filtri lasciati dai test precedenti, altrimenti l'elenco
+     commesse puo' risultare vuoto e lo scatto fallisce. */
+  await p.evaluate(()=>{ S.pq=''; S.pst=''; S.par=''; go('projects'); });
+  await p.waitForTimeout(600);
+  const nProj=await p.locator('#page [data-proj]').count();
+  if(nProj){
+    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
+    await p.evaluate(()=>{ const g=document.querySelectorAll('.grp-h'); if(g[3]) g[3].click(); });
+    await p.waitForTimeout(200);
+    await p.screenshot({path:path.join(__dirname,'shot-commessa.png')});
+  } else {
+    bad.push('screenshot finale: nessuna commessa in elenco');
+  }
 
   console.log('\n✓ PASSATI ('+ok.length+')');
   if(bad.length){ console.log('\n✗ FALLITI ('+bad.length+')'); bad.forEach(x=>console.log('   '+x)); }

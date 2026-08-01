@@ -25,6 +25,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 4. [`sql/005_fatturazione.sql`](sql/005_fatturazione.sql) — scaglioni di fatturazione
 5. [`sql/006_verifica_sicurezza.sql`](sql/006_verifica_sicurezza.sql) — **RLS sulle tabelle preesistenti: da eseguire**
 6. [`sql/007_referente_tecnico.sql`](sql/007_referente_tecnico.sql) — secondo referente di commessa
+7. [`sql/008_anagrafica_clienti.sql`](sql/008_anagrafica_clienti.sql) — anagrafica clienti
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -222,6 +223,20 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
 - **Password dimenticata**: dal link ricevuto per email si arriva a una schermata
   che chiede la nuova password. Se il link è scaduto lo dice e invita a
   richiederne uno nuovo.
+- **Anagrafica clienti** (voce *Clienti*): un cliente che torna non si riscrive.
+  Nel modulo di creazione commessa lo scegli dall'elenco e dati fiscali, sede e
+  referenti vengono compilati da soli; se è nuovo lo compili lì e viene aggiunto
+  all'anagrafica al salvataggio, senza passaggi in più. Ogni scheda mostra le sue
+  commesse, quante sono attive e l'importo complessivo.
+
+  La commessa conserva una **copia** dei dati del cliente, non un semplice
+  riferimento: se fra due anni il cliente cambia sede, le fatture già emesse
+  restano coerenti con quanto fu dichiarato allora. Il collegamento resta per
+  sapere di chi si tratta.
+
+  Eseguendo la migrazione 008 i clienti delle commesse già create vengono
+  **importati automaticamente**, unendo i dati più completi trovati e
+  ricollegando le commesse.
 - **Due referenti per commessa**, con ruoli distinti perché servono a cose diverse:
   l'**amministrativo** riceve la copia della fattura, l'**operativo** le
   comunicazioni tecniche e di cantiere. Di ciascuno si registrano nominativo,
@@ -325,7 +340,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 94 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 103 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -373,18 +388,21 @@ L'XML prodotto è validato contro lo **schema ufficiale dell'Agenzia delle
 Entrate** dalla suite `test/fattura.js` in tre varianti: con contributo cassa,
 con ritenuta d'acconto, e con PEC al posto del codice destinatario.
 
-> **Prima del primo invio compila il blocco `STUDIO`** in cima a `index.html`:
-> denominazione, partita IVA, sede, regime fiscale, cassa di previdenza,
-> eventuale ritenuta e coordinate di pagamento. Finché la partita IVA è vuota la
-> generazione resta bloccata, con l'elenco esatto di cosa manca.
+> Il blocco `STUDIO` in cima a `index.html` è **già compilato** con i dati dello
+> studio: STUDIO TECNICO SCS SRL STP, P.IVA 02077580435, sede in Recanati (MC),
+> iscrizione REA MC-279947. Restano da aggiungere, quando servono, l'**IBAN** per
+> le coordinate di pagamento e l'eventuale capitale sociale.
 >
-> I valori predefiniti sono impostati per una **S.r.l. tra Professionisti**:
+> Il codice univoco `N92GLON` e la PEC dello studio sono conservati nella
+> configurazione ma **non entrano nelle fatture emesse**: servono da comunicare ai
+> fornitori, perché in una fattura in uscita il codice destinatario è quello del
+> cliente.
+>
+> I valori sono impostati per una **S.r.l. tra Professionisti**:
 > regime ordinario `RF01`, contributo integrativo Inarcassa `TC04` al 4% soggetto
 > a IVA, **nessuna ritenuta d'acconto** (le società di capitali non vi sono
-> soggette). Se lo studio è di geometri usa `TC03`; se la forma giuridica è
-> diversa la ritenuta va riattivata. **Fai verificare la configurazione al tuo
-> commercialista**: il gestionale calcola quello che gli dici, non stabilisce il
-> trattamento fiscale.
+> soggette). **Fai verificare la configurazione al tuo commercialista**: il
+> gestionale calcola quello che gli dici, non stabilisce il trattamento fiscale.
 
 I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
 destinatario SDI o PEC) si compilano nella scheda della commessa.

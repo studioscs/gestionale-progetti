@@ -18,10 +18,16 @@ vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{ST
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
 // dati fiscali di prova
-Object.assign(ctx.STUDIO,{denominazione:'Studio Tecnico SCS S.r.l. tra Professionisti',
-  piva:'03512340548', codiceFiscale:'03512340548', indirizzo:'Via Giuseppe Mazzini', civico:'14',
-  cap:'06121', comune:'Perugia', provincia:'PG',
-  pagamento:{condizioni:'TP02',modalita:'MP05',giorni:30,iban:'IT60X0542811101000000123456'}});
+console.log('— DATI DELLO STUDIO CONFIGURATI —');
+t('denominazione presente', !!ctx.STUDIO.denominazione, ctx.STUDIO.denominazione);
+t('partita IVA di 11 cifre', /^\d{11}$/.test(ctx.STUDIO.piva), ctx.STUDIO.piva);
+t('CAP di 5 cifre', /^\d{5}$/.test(ctx.STUDIO.cap), ctx.STUDIO.cap);
+t('provincia di 2 lettere', /^[A-Z]{2}$/.test(ctx.STUDIO.provincia), ctx.STUDIO.provincia);
+t('nessuna ritenuta configurata (societa di capitali)', ctx.STUDIO.ritenuta===null, ctx.STUDIO.ritenuta);
+t('cassa TC04 al 4%', ctx.STUDIO.tipoCassa==='TC04'&&ctx.STUDIO.aliquotaCassa===4, [ctx.STUDIO.tipoCassa,ctx.STUDIO.aliquotaCassa]);
+t('REA con stato liquidazione', !!(ctx.STUDIO.rea&&ctx.STUDIO.rea.numero&&ctx.STUDIO.rea.statoLiquidazione), ctx.STUDIO.rea);
+console.log('   ', ctx.STUDIO.denominazione, '| P.IVA', ctx.STUDIO.piva, '|', ctx.STUDIO.comune, '('+ctx.STUDIO.provincia+')');
+const PIVA=ctx.STUDIO.piva;
 ctx.S.projects=[{id:'p1', name:'Recupero Palazzo Vitelli', client:'Immobiliare Vitelli S.r.l.',
   amount:60000, cliente_piva:'02345670541', cliente_indirizzo:'Corso Vannucci 30',
   cliente_cap:'06121', cliente_comune:'Perugia', cliente_prov:'PG', cliente_sdi:'ABCDEF1'}];
@@ -54,7 +60,9 @@ const r=ctx.xmlFattura({project_id:'p1',descrizione:'Acconto 30% alla sottoscriz
 t('genera senza errori',!r.errori,r.errori);
 if(!r.errori){
   fs.writeFileSync('/tmp/fatt.xml',r.xml);
-  t('nome file conforme',/^IT03512340548_[0-9A-Z]{5}\.xml$/.test(r.nome),r.nome);
+  t('nome file conforme',new RegExp('^IT'+PIVA+'_[0-9A-Z]{5}\\.xml$').test(r.nome),r.nome);
+  t('iscrizione REA presente nel XML',/<IscrizioneREA>/.test(r.xml)&&/<StatoLiquidazione>/.test(r.xml),null);
+  t('sede dello studio corretta',/<Comune>Recanati<\/Comune>/.test(r.xml)&&/<CAP>62019<\/CAP>/.test(r.xml),null);
   console.log('   file:',r.nome,'| totale:',r.calcolo.totale,'€');
   let out='';
   try { out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt.xml 2>&1').toString(); }

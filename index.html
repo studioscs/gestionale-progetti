@@ -371,6 +371,7 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="ssec">
       <span class="slbl">Commesse</span>
       <button class="sn" data-page="projects"><span class="snic">&#9707;</span>Progetti<span class="snb" id="b-proj">0</span></button>
+      <button class="sn" data-page="clienti"><span class="snic">&#127970;</span>Clienti<span class="snb" id="b-cli">0</span></button>
       <button class="sn" data-page="pratiche"><span class="snic">&#127963;</span>Pratiche &amp; Enti<span class="snb" id="b-prat">0</span></button>
       <button class="sn" data-page="tasks"><span class="snic">&#9745;</span>Attivit&agrave;</button>
       <button class="sn" data-page="kanban"><span class="snic">&#9636;</span>Kanban</button>
@@ -424,6 +425,55 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="btn" id="mp-back" style="display:none">&larr; Indietro</button>
       <button class="btn btn-p" id="mp-next">Avanti &rarr;</button>
       <button class="btn btn-p" id="mp-save" style="display:none">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cliente in anagrafica -->
+<div class="ov" id="m-cli">
+  <div class="modal">
+    <div class="mh"><h3 id="mcl-t">Cliente</h3><button class="mx" data-close="m-cli">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg2">
+        <div class="fg"><label class="fl">Denominazione *</label><input class="fc" id="cl-den" placeholder="Ragione sociale oppure nome e cognome"></div>
+        <div class="fg"><label class="fl">Tipo</label>
+          <select class="fc" id="cl-tipo"><option value="societa">Societ&agrave; / ente</option><option value="persona">Persona fisica</option></select>
+        </div>
+      </div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Partita IVA</label><input class="fc" id="cl-piva"></div>
+        <div class="fg"><label class="fl">Codice fiscale</label><input class="fc" id="cl-cf"></div>
+        <div class="fg"><label class="fl">Codice SDI</label><input class="fc" id="cl-sdi" placeholder="7 caratteri"></div>
+      </div>
+      <div class="fg"><label class="fl">PEC</label><input class="fc" id="cl-pec" placeholder="se non c&rsquo;&egrave; il codice SDI"></div>
+      <div class="fg"><label class="fl">Indirizzo</label><input class="fc" id="cl-ind"></div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">CAP</label><input class="fc" id="cl-cap"></div>
+        <div class="fg"><label class="fl">Comune</label><input class="fc" id="cl-com"></div>
+        <div class="fg"><label class="fl">Provincia</label><input class="fc" id="cl-prov" placeholder="MC"></div>
+      </div>
+      <div id="cl-sez1"></div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Nominativo</label><input class="fc" id="cl-ref"></div>
+        <div class="fg"><label class="fl">Ruolo</label><input class="fc" id="cl-refr"></div>
+        <div class="fg"><label class="fl">Telefono</label><input class="fc" id="cl-reft"></div>
+      </div>
+      <div class="fg"><label class="fl">Email</label><input class="fc" id="cl-refe"></div>
+      <div id="cl-sez2"></div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Nominativo</label><input class="fc" id="cl-ref2"></div>
+        <div class="fg"><label class="fl">Ruolo</label><input class="fc" id="cl-ref2r"></div>
+        <div class="fg"><label class="fl">Telefono</label><input class="fc" id="cl-ref2t"></div>
+      </div>
+      <div class="fg"><label class="fl">Email</label><input class="fc" id="cl-ref2e"></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="cl-note" rows="2"></textarea></div>
+      <div id="cl-comm"></div>
+      <input type="hidden" id="cl-id">
+    </div>
+    <div class="mf">
+      <button class="btn btn-d left" id="cl-del" style="display:none">Elimina</button>
+      <button class="btn" data-close="m-cli">Annulla</button>
+      <button class="btn btn-p" id="cl-save">Salva Cliente</button>
     </div>
   </div>
 </div>
@@ -694,15 +744,23 @@ const PERMESSI = { eliminaPratica: 'admin' };
    commercialista prima del primo invio.
    --------------------------------------------------------------------------- */
 const STUDIO = {
-  denominazione : '',            // ragione sociale completa
-  piva          : '',            // solo cifre, senza il prefisso IT
-  codiceFiscale : '',            // se diverso dalla partita IVA
-  regimeFiscale : 'RF01',        // RF01 ordinario
-  indirizzo     : '',
-  civico        : '',
-  cap           : '',            // 5 cifre
-  comune        : '',
-  provincia     : '',            // sigla di 2 lettere
+  denominazione : 'STUDIO TECNICO SCS SRL STP',
+  piva          : '02077580435',
+  codiceFiscale : '02077580435',
+  regimeFiscale : 'RF01',        // ordinario
+  indirizzo     : 'Via Piaggia Castelnuovo',
+  civico        : '10',
+  cap           : '62019',
+  comune        : 'Recanati',
+  provincia     : 'MC',
+  // Iscrizione al Registro Imprese: facoltativa nel tracciato, ma attesa da
+  // molti committenti per le societa' di capitali.
+  // statoLiquidazione: 'LN' non in liquidazione · 'LS' in liquidazione
+  rea : { ufficio:'MC', numero:'279947', statoLiquidazione:'LN', capitaleSociale:null },
+  // Dati propri come DESTINATARIO: non entrano nelle fatture che emetti,
+  // servono da comunicare ai fornitori. Restano qui per non doverli cercare.
+  codiceUnivocoProprio : 'N92GLON',
+  pecPropria           : 'studiotecnicoscssrl@pec.it',
   // Cassa di previdenza: TC04 Inarcassa (ingegneri e architetti) · TC03 Cassa Geometri
   tipoCassa       : 'TC04',
   aliquotaCassa   : 4,           // 0 per non esporre alcun contributo
@@ -718,7 +776,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.01.8';
+const VERSIONE = '2026.08.01.9';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -730,7 +788,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, fatture: [], loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, fatture: [], clienti: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
@@ -1514,7 +1572,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -1523,7 +1581,8 @@ async function loadAll(silent) {
       SB.from('notifiche').select('*').order('created_at', {ascending:false}).limit(40),
       SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000),
       SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento'),
-      SB.from('commessa_fatture').select('*').order('ordine')
+      SB.from('commessa_fatture').select('*').order('ordine'),
+      SB.from('clienti').select('*').order('denominazione')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1537,6 +1596,7 @@ async function loadAll(silent) {
     S.chat      = {};
     if (!rc.error) (rc.data || []).forEach(r => S.chat[r.pratica_id] = r.messaggi || 0);
     S.fatture   = rfa.error ? [] : (rfa.data || []);
+    S.clienti   = rcl.error ? [] : (rcl.data || []);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -2003,7 +2063,7 @@ async function doLogout() {
 /* ===========================================================================
    ROUTER
    =========================================================================== */
-const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', projects:'Progetti', pratiche:'Pratiche & Enti',
+const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
 
@@ -2027,7 +2087,8 @@ function render() {
   el('top-act').innerHTML = '';
   closePop();
   const P = {
-    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare, projects:rProjects, project:rProject,
+    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
+    clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
     time:rTime, files:rFiles, users:rUsers
   };
@@ -2047,6 +2108,7 @@ function updBadges() {
   el('b-scad').classList.toggle('alert', sc > 0);
 
   el('b-proj').textContent = S.projects.filter(p => p.status === 'attivo' && !p.archiviato).length;
+  el('b-cli').textContent = S.clienti.filter(c => c.attivo !== false).length;
 
   const nfa = S.fatture.filter(fattAperta).length;
   el('b-fatt').textContent = nfa;
@@ -2431,7 +2493,14 @@ function xmlFattura(f) {
     +     el2('RegimeFiscale', STUDIO.regimeFiscale)
     +   '</DatiAnagrafici><Sede>'
     +     sede(STUDIO.indirizzo, STUDIO.civico, STUDIO.cap, STUDIO.comune, STUDIO.provincia)
-    +   '</Sede></CedentePrestatore>'
+    +   '</Sede>'
+    +   (STUDIO.rea && STUDIO.rea.numero
+        ? '<IscrizioneREA>' + el2('Ufficio', String(STUDIO.rea.ufficio).toUpperCase())
+          + el2('NumeroREA', STUDIO.rea.numero)
+          + (STUDIO.rea.capitaleSociale ? el2('CapitaleSociale', n2(STUDIO.rea.capitaleSociale)) : '')
+          + el2('StatoLiquidazione', STUDIO.rea.statoLiquidazione || 'LN')
+          + '</IscrizioneREA>' : '')
+    +   '</CedentePrestatore>'
     +   '<CessionarioCommittente><DatiAnagrafici>'
     +     (p.cliente_piva ? '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(p.cliente_piva) + '</IdCodice></IdFiscaleIVA>' : '')
     +     (p.cliente_cf ? el2('CodiceFiscale', String(p.cliente_cf).toUpperCase()) : '')
@@ -2901,6 +2970,188 @@ function drawProjects() {
     + (canW() && ar !== 'arch' ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
 
   el('page').innerHTML = '<div class="g3">' + list.map(projCard).join('') + '</div>';
+}
+
+
+/* ===========================================================================
+   ANAGRAFICA CLIENTI
+   Un cliente che torna non va riscritto: si sceglie dall'elenco e i suoi dati
+   finiscono nella nuova commessa. La commessa ne conserva una copia, cosi' le
+   fatture gia' emesse restano coerenti se domani il cliente cambia sede.
+   =========================================================================== */
+const clienteDi = pid => { const p = byId(S.projects, pid); return p && p.cliente_id ? byId(S.clienti, p.cliente_id) : null; };
+const commesseDi = cid => S.projects.filter(p => p.cliente_id === cid);
+
+function rClienti() {
+  el('crumb').textContent = 'I clienti dello studio: si riusano da una commessa all’altra.';
+  el('top-act').innerHTML =
+      '<input class="srch" id="cl-q" placeholder="Cerca per nome, P.IVA, comune..." value="' + esc(S.clQ || '') + '">'
+    + (canW() ? '<button class="btn btn-p btn-sm" data-newcli="1">＋ Nuovo cliente</button>' : '');
+  el('cl-q').oninput = e => { S.clQ = e.target.value; drawClienti(); };
+  drawClienti();
+}
+
+function drawClienti() {
+  const q = (S.clQ || '').toLowerCase();
+  const list = S.clienti.filter(c => !q ||
+    ((c.denominazione || '') + ' ' + (c.piva || '') + ' ' + (c.cf || '') + ' ' + (c.comune || '') + ' '
+     + (c.referente || '') + ' ' + (c.referente_tec || '')).toLowerCase().includes(q));
+
+  if (!list.length) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>🏢</i>'
+      + '<p>' + (q ? 'Nessun cliente trovato.' : 'Nessun cliente in anagrafica.') + '</p>'
+      + (canW() && !q ? '<p style="font-size:12px;margin-top:6px">I clienti delle commesse già create '
+        + 'sono stati importati eseguendo la migrazione 008. I nuovi si aggiungono da qui o creando una commessa.</p>'
+        + '<button class="btn btn-p" data-newcli="1" style="margin-top:10px">＋ Aggiungi il primo cliente</button>' : '')
+      + '</div></div>';
+    return;
+  }
+
+  const righe = list.map(c => {
+    const comm = commesseDi(c.id);
+    const attive = comm.filter(p => p.status === 'attivo' && !p.archiviato).length;
+    const tot = comm.reduce((a, p) => a + Number(p.amount || 0), 0);
+    const manca = !c.piva && !c.cf;
+    return '<tr data-cli="' + c.id + '" style="cursor:pointer' + (c.attivo === false ? ';opacity:.55' : '') + '">'
+      + '<td><b>' + esc(c.denominazione) + '</b>'
+        + (c.tipo === 'persona' ? ' <span class="chip">persona fisica</span>' : '')
+        + (c.attivo === false ? ' <span class="chip">non attivo</span>' : '')
+        + (c.comune ? '<div style="font-size:11px;color:var(--mut)">' + esc([c.indirizzo, c.comune, c.provincia].filter(Boolean).join(' — ')) + '</div>' : '') + '</td>'
+      + '<td style="font-size:12px">' + esc(c.piva || c.cf || '')
+        + (manca ? '<span class="chip chip-a">dati fiscali mancanti</span>' : '') + '</td>'
+      + '<td style="font-size:12px">' + (c.sdi ? esc(c.sdi) : c.pec ? esc(c.pec)
+          : '<span style="color:var(--ora)">manca SDI/PEC</span>') + '</td>'
+      + '<td style="font-size:12px">' + (c.referente ? esc(c.referente) : '<span style="color:var(--mut2)">-</span>')
+        + (c.referente_email ? '<div style="font-size:11px"><a href="mailto:' + esc(c.referente_email) + '">' + esc(c.referente_email) + '</a></div>' : '') + '</td>'
+      + '<td style="font-size:12px">' + (c.referente_tec ? esc(c.referente_tec) : '<span style="color:var(--mut2)">-</span>')
+        + (c.referente_tec_email ? '<div style="font-size:11px"><a href="mailto:' + esc(c.referente_tec_email) + '">' + esc(c.referente_tec_email) + '</a></div>' : '') + '</td>'
+      + '<td style="text-align:center">' + comm.length + (attive ? '<div style="font-size:11px;color:var(--grn)">' + attive + ' attive</div>' : '') + '</td>'
+      + '<td style="text-align:right;font-size:12px">' + (tot ? feuro(tot) : '-') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  el('page').innerHTML = '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">'
+      + list.length + (list.length === 1 ? ' cliente' : ' clienti')
+      + (list.length !== S.clienti.length ? ' su ' + S.clienti.length : '') + '</div>'
+    + '<div class="card"><div class="tw"><table class="tsm"><thead><tr>'
+      + '<th>Cliente</th><th>P.IVA / C.F.</th><th>SDI / PEC</th>'
+      + '<th>Referente amministrativo</th><th>Referente operativo</th>'
+      + '<th style="text-align:center">Commesse</th><th style="text-align:right">Importo</th>'
+    + '</tr></thead><tbody>' + righe + '</tbody></table></div></div>';
+}
+
+function openCliente(id, presetNome) {
+  const c = id ? byId(S.clienti, id) : null;
+  el('mcl-t').textContent = c ? c.denominazione : 'Nuovo cliente';
+  el('cl-id').value    = id || '';
+  el('cl-den').value   = c ? c.denominazione : (presetNome || '');
+  el('cl-tipo').value  = c ? (c.tipo || 'societa') : 'societa';
+  el('cl-piva').value  = c ? (c.piva || '') : '';
+  el('cl-cf').value    = c ? (c.cf || '') : '';
+  el('cl-sdi').value   = c ? (c.sdi || '') : '';
+  el('cl-pec').value   = c ? (c.pec || '') : '';
+  el('cl-ind').value   = c ? (c.indirizzo || '') : '';
+  el('cl-cap').value   = c ? (c.cap || '') : '';
+  el('cl-com').value   = c ? (c.comune || '') : '';
+  el('cl-prov').value  = c ? (c.provincia || '') : '';
+  el('cl-ref').value   = c ? (c.referente || '') : '';
+  el('cl-refr').value  = c ? (c.referente_ruolo || '') : '';
+  el('cl-refe').value  = c ? (c.referente_email || '') : '';
+  el('cl-reft').value  = c ? (c.referente_tel || '') : '';
+  el('cl-ref2').value  = c ? (c.referente_tec || '') : '';
+  el('cl-ref2r').value = c ? (c.referente_tec_ruolo || '') : '';
+  el('cl-ref2e').value = c ? (c.referente_tec_email || '') : '';
+  el('cl-ref2t').value = c ? (c.referente_tec_tel || '') : '';
+  el('cl-note').value  = c ? (c.note || '') : '';
+  el('cl-sez1').innerHTML = sez('Referente amministrativo', 'riceve la copia della fattura');
+  el('cl-sez2').innerHTML = sez('Referente operativo', 'comunicazioni tecniche e di cantiere');
+  el('cl-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+
+  const comm = id ? commesseDi(id) : [];
+  el('cl-comm').innerHTML = comm.length
+    ? sez('Commesse di questo cliente')
+      + comm.map(p => '<div class="spread" style="padding:5px 0;border-bottom:1px solid var(--bord);font-size:12.5px">'
+          + '<span data-proj="' + p.id + '" style="cursor:pointer">' + esc(p.name) + '</span>'
+          + '<span>' + bdg(p.status, ST_PROJ) + '</span></div>').join('')
+    : '';
+  openM('m-cli');
+}
+
+async function saveCliente() {
+  const den = el('cl-den').value.trim();
+  if (!den) return toast('La denominazione è obbligatoria.', 'error');
+  const id = el('cl-id').value;
+  const g = x => el(x).value.trim() || null;
+  const pay = {
+    denominazione: den, tipo: el('cl-tipo').value,
+    piva: g('cl-piva'), cf: g('cl-cf'), sdi: g('cl-sdi'), pec: g('cl-pec'),
+    indirizzo: g('cl-ind'), cap: g('cl-cap'), comune: g('cl-com'), provincia: g('cl-prov'),
+    referente: g('cl-ref'), referente_ruolo: g('cl-refr'),
+    referente_email: g('cl-refe'), referente_tel: g('cl-reft'),
+    referente_tec: g('cl-ref2'), referente_tec_ruolo: g('cl-ref2r'),
+    referente_tec_email: g('cl-ref2e'), referente_tec_tel: g('cl-ref2t'),
+    note: g('cl-note')
+  };
+  setLoading('cl-save', true);
+  const { data, error } = id
+    ? await SB.from('clienti').update(pay).eq('id', id).select().maybeSingle()
+    : await SB.from('clienti').insert(Object.assign({created_by:S.me.id}, pay)).select().maybeSingle();
+  setLoading('cl-save', false);
+  if (error) {
+    if (/uq_clienti_piva|duplicate key/i.test(error.message))
+      return toast('Esiste già un cliente con questa partita IVA.', 'error');
+    return sbErr(error, 'cliente');
+  }
+  closeM('m-cli');
+  await loadAll(true); render();
+  toast('Cliente salvato', 'success');
+  return data;
+}
+
+async function delCliente(id) {
+  const c = byId(S.clienti, id); if (!c) return;
+  const n = commesseDi(id).length;
+  if (!confirm('Eliminare "' + c.denominazione + '" dall’anagrafica?'
+    + (n ? '\n\nLe ' + n + ' commesse collegate restano, ma perdono il riferimento al cliente: '
+         + 'i dati già copiati nelle commesse non vengono toccati.' : ''))) return;
+  const { error } = await SB.from('clienti').delete().eq('id', id);
+  if (error) return sbErr(error, 'cliente');
+  closeM('m-cli'); await loadAll(true); render(); toast('Cliente eliminato');
+}
+
+/* Riversa i dati del cliente nei campi del modulo di commessa */
+function applicaCliente(cid) {
+  const c = byId(S.clienti, cid);
+  if (!c) { WZ.d.cliente_id = null; return; }
+  Object.assign(WZ.d, {
+    cliente_id: c.id, client: c.denominazione,
+    cliente_piva: c.piva, cliente_cf: c.cf, cliente_sdi: c.sdi, cliente_pec: c.pec,
+    cliente_indirizzo: c.indirizzo, cliente_cap: c.cap,
+    cliente_comune: c.comune, cliente_prov: c.provincia,
+    referente: c.referente, referente_ruolo: c.referente_ruolo,
+    referente_email: c.referente_email, referente_tel: c.referente_tel,
+    referente_tec: c.referente_tec, referente_tec_ruolo: c.referente_tec_ruolo,
+    referente_tec_email: c.referente_tec_email, referente_tec_tel: c.referente_tec_tel
+  });
+}
+
+/* Alla creazione di una commessa con un cliente nuovo, lo aggiunge all'anagrafica */
+async function creaClienteDaCommessa(d) {
+  if (!d.client) return null;
+  const esiste = S.clienti.find(c => (c.denominazione || '').toLowerCase() === d.client.toLowerCase());
+  if (esiste) return esiste.id;
+  const { data, error } = await SB.from('clienti').insert({
+    denominazione: d.client, piva: d.cliente_piva, cf: d.cliente_cf,
+    sdi: d.cliente_sdi, pec: d.cliente_pec, indirizzo: d.cliente_indirizzo,
+    cap: d.cliente_cap, comune: d.cliente_comune, provincia: d.cliente_prov,
+    referente: d.referente, referente_ruolo: d.referente_ruolo,
+    referente_email: d.referente_email, referente_tel: d.referente_tel,
+    referente_tec: d.referente_tec, referente_tec_ruolo: d.referente_tec_ruolo,
+    referente_tec_email: d.referente_tec_email, referente_tec_tel: d.referente_tec_tel,
+    created_by: S.me.id
+  }).select().maybeSingle();
+  if (error) { console.warn('anagrafica cliente', error); return null; }
+  return data ? data.id : null;
 }
 
 /* ===========================================================================
@@ -3646,7 +3897,15 @@ function drawWizard() {
   if (WZ.step === 1) {
     const uopts = '<option value="">- Nessuno -</option>' + activeProfs()
       .map(p => '<option value="' + p.id + '"' + (d.owner_id === p.id ? ' selected' : '') + '>' + esc(p.full_name) + '</option>').join('');
-    h = '<div class="fg2">'
+    const opz = '<option value="">— Nuovo cliente, lo compilo qui sotto —</option>'
+      + S.clienti.filter(c => c.attivo !== false).map(c => '<option value="' + c.id + '"'
+          + (d.cliente_id === c.id ? ' selected' : '') + '>' + esc(c.denominazione)
+          + (c.comune ? ' — ' + esc(c.comune) : '') + '</option>').join('');
+    h = '<div class="fg"><label class="fl">Cliente dall’anagrafica</label>'
+      + '<select class="fc" id="w-clid">' + opz + '</select>'
+      + '<div class="hint">Scegliendo un cliente già presente, dati fiscali e referenti vengono compilati da soli. '
+      + 'Se è nuovo, lascia questa voce e compila i campi: verrà aggiunto all’anagrafica al salvataggio.</div></div>'
+      + '<div class="fg2">'
       + fld('Nome commessa *', 'w-name', d.name) + fld('Codice interno', 'w-cod', d.codice, 'Es. 2026-014')
       + '</div><div class="fg">'
       + fld('Cliente / committente', 'w-cli', d.client)
@@ -3754,6 +4013,7 @@ function wzCollect() {
     cliente_comune: g('w-ccom') || null, cliente_prov: g('w-cprov') || null,
     description: el('w-desc') ? el('w-desc').value.trim() || null : null
   });
+  if (el('w-clid')) WZ.d.cliente_id = el('w-clid').value || null;
 }
 
 async function wzSave() {
@@ -3775,6 +4035,8 @@ async function wzSave() {
       return;
     }
     pay.created_by = S.me.id;
+    /* Cliente nuovo: entra in anagrafica cosi' la prossima volta si riusa */
+    if (!pay.cliente_id && pay.client) pay.cliente_id = await creaClienteDaCommessa(pay);
     const { data, error } = await SB.from('projects').insert(pay).select().single();
     if (error) return sbErr(error, 'crea commessa');
 
@@ -4463,6 +4725,11 @@ document.addEventListener('DOMContentLoaded', () => {
     el('del-go').disabled = !p || e.target.value.trim().toLowerCase() !== p.name.trim().toLowerCase();
   };
   el('del-conf').onkeydown = e => { if (e.key === 'Enter' && !el('del-go').disabled) delProj(); };
+  el('cl-save').onclick = saveCliente;
+  el('cl-del').onclick  = () => delCliente(el('cl-id').value);
+  el('mp-body').addEventListener('change', e => {
+    if (e.target.id === 'w-clid') { wzCollect(); applicaCliente(e.target.value); drawWizard(); }
+  });
   el('mp-body').addEventListener('click', e => {
     const t = e.target.closest('[data-tpl]');
     if (t) { WZ.tpl = t.dataset.tpl; drawWizard(); return; }
@@ -4532,6 +4799,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
     if ((n = f('data-mailfatt'))) { e.stopPropagation(); return mailFattura(n.dataset.mailfatt); }
     if ((n = f('data-mailtec'))) { e.stopPropagation(); return mailTecnico(S.projId); }
+    if ((n = f('data-newcli')))  { e.stopPropagation(); return openCliente(null); }
+    if ((n = f('data-cli')))     { return openCliente(n.dataset.cli); }
     if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
     if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }

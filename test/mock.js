@@ -6,7 +6,7 @@
               {id:U2,full_name:'Anna Verdi',email:'a@scs.it',role:'collaboratore',attivo:true}],
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
-    project_fasi:[], project_sottofasi:[], commessa_fatture:[]
+    project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[]
   };
   window.__DB=DB;
   let seq=0; const uid=()=>'id'+(++seq);
