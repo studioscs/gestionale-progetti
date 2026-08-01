@@ -21,6 +21,10 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 
 1. [`sql/001_gestionale_v2.sql`](sql/001_gestionale_v2.sql) — struttura principale
 2. [`sql/002_chat_pratiche.sql`](sql/002_chat_pratiche.sql) — conversazione sulle pratiche
+3. [`sql/004_categorie_attivita.sql`](sql/004_categorie_attivita.sql) — firme del cliente
+
+(`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
+collaboratori possano eliminare le pratiche.)
 
 Ogni script è **idempotente** (puoi rilanciarlo) e **solo additivo**: non modifica né
 cancella le tabelle esistenti (`projects`, `tasks`, `time_entries`, `files`,
@@ -67,18 +71,73 @@ Ruoli: `viewer` (legge) · `collaboratore` (modifica) · `admin` (modifica + eli
 
 ## Percorsi di lavoro precaricati
 
-Cinque template, 35 fasi e 282 attività complessive, con riferimenti normativi.
+Sei template, 45 fasi e 330 attività complessive, con riferimenti normativi.
 
 | Template | Fasi | Copre |
 |---|---|---|
-| **Edilizia privata** | 13 | Incarico → preliminare → geologia → definitivo → **autorizzazioni** → titolo edilizio → strutture → impianti → esecutivo → sicurezza → affidamento → DL → agibilità |
-| **Opera pubblica** (D.Lgs 36/2023) | 9 | Programmazione → PFTE → conferenza di servizi → definitivo → esecutivo → verifica e validazione → gara → DL → collaudo/CRE |
-| **Incarico strutturale / sismico** | 7 | Dati → indagini → calcolo → elaborati → deposito o autorizzazione sismica → DL strutturale → collaudo statico |
-| **Bene vincolato** | 5 | Ricognizione vincoli → rilievo e degrado → progetto → istanze agli enti → alta sorveglianza |
+| **Ristrutturazione interna — CILA** | 6 | Verifiche → **firme del cliente** → progetto e asseverazione → presentazione CILA → lavori → fine lavori. Nessun parere di enti terzi |
+| **Edilizia privata** | 15 | Incarico → **ricognizione enti** → **firme del cliente** → preliminare → geologia → definitivo → autorizzazioni → titolo edilizio → strutture → impianti → esecutivo → sicurezza → affidamento → DL → agibilità |
+| **Opera pubblica** (D.Lgs 36/2023) | 10 | Programmazione → **documentazione per i pareri** → PFTE → conferenza di servizi → (definitivo, solo se richiesto) → esecutivo → verifica e validazione → gara → DL → collaudo/CRE |
+| **Incarico strutturale / sismico** | 8 | Dati → **firme del cliente** → indagini → calcolo → elaborati → deposito o autorizzazione sismica → DL strutturale → collaudo statico |
+| **Bene vincolato** | 6 | Ricognizione vincoli → **firme del cliente** → rilievo e degrado → progetto → istanze agli enti → alta sorveglianza |
 | **Commessa libera** | 1 | Nessuna checklist: consulenze, perizie, incarichi non standard |
 
-Su una commessa di edilizia privata con tutte le condizioni attive la generazione
-produce **13 fasi, 129 attività e 23 pratiche** già datate e collegate fra loro.
+Le pratiche generate dipendono dal template, non solo dalle condizioni: una CILA
+per opere interne produce **6 fasi, 45 attività e 2 pratiche**, mentre una commessa
+di edilizia privata completa arriva a **15 fasi, 135 attività e 10 pratiche**.
+
+---
+
+## Due scelte che fanno risparmiare tempo
+
+### Le firme del cliente stanno all'inizio, non alla fine
+
+La **procura speciale** per la presentazione telematica (art. 1392 c.c.) vale per
+**una sola pratica**: va firmata a mano dal committente e corredata della copia di
+un documento d'identità di ogni sottoscrittore, poi scansionata, firmata
+digitalmente dal tecnico e allegata. Se servono cinque pratiche servono cinque
+procure. Raccoglierle mano a mano significa far tornare il cliente cinque volte.
+
+I portali generano il modulo mentre si compila la pratica, ma **molti consentono di
+ottenerlo in anticipo simulando quella sezione**: è questo che permette di
+anticipare la firma. Per questo ogni template ha una fase *Dati definitivi e firme
+del cliente* collocata **subito dopo le verifiche preliminari**, che:
+
+1. congela anagrafiche e dati catastali;
+2. verifica sul portale se la procura è pre-generabile;
+3. genera in anticipo **una procura per ciascuna pratica prevista** — create
+   automaticamente dal gestionale, una per ogni pratica telematica;
+4. porta a un **unico appuntamento** in cui si firma tutto.
+
+⚠️ Se dopo la firma cambiano anagrafica o dati catastali, la procura va rigenerata
+e fatta rifirmare: per questo il congelamento dei dati è la prima attività della
+fase, non un dettaglio.
+
+La pagina **Firme cliente** raggruppa per commessa tutto ciò che aspetta una firma,
+ordinato per scadenza, e stampa una distinta con le caselle da spuntare. Le firme
+che maturano più avanti (nomina del DL, contratto d'appalto) sono separate: al
+primo appuntamento non ha senso chiederle.
+
+### Sul pubblico, la documentazione per i pareri viene prima
+
+I pareri si raccolgono in **conferenza di servizi decisoria** sul PFTE, in forma
+semplificata e modalità asincrona (art. 38 D.Lgs 36/2023): **60 giorni** per i
+pareri, **90** per gli enti preposti alla tutela di paesaggio, beni culturali e
+ambiente. Sono i tempi che dettano il cronoprogramma, e decorrono dal protocollo.
+
+Il template mette quindi una fase *Enti coinvolti e documentazione preliminare per
+i pareri* **prima del PFTE**: mappatura degli enti, individuazione per ciascuno
+degli elaborati che ne condizionano il parere, cronoprogramma a ritroso dalla data
+della conferenza, e avvio delle relazioni specialistiche. Lo **stralcio archeologico**
+si trasmette alla Soprintendenza anche prima che il PFTE sia completo (art. 41 c. 4
+e Allegato I.8: il Soprintendente ha 30 giorni perentori per chiedere la verifica).
+
+Il template recepisce anche i **due soli livelli di progettazione** introdotti dal
+D.Lgs 36/2023 — PFTE ed esecutivo: il definitivo è una fase opzionale, da attivare
+solo se la stazione appaltante lo richiede.
+
+Le attività portano un contrassegno che dice cosa sono: ✍️ *firma del cliente*,
+💻 *portale telematico*, *sblocca un parere*.
 
 ### Enti coperti
 
@@ -109,10 +168,16 @@ Sono dati, non codice. Nel blocco `TEMPLATES` di `index.html`:
 `dur` durata in giorni · `h` ore stimate · `rif` riferimento normativo · `ente` ·
 `cond` condizione che deve essere attiva perché la voce venga creata ·
 `ms` milestone (scade a fine fase, priorità alta) · `opt` opzionale (esclusa dal
-calcolo di avanzamento).
+calcolo di avanzamento) · `cat` categoria (`firma_cliente`, `piattaforma`,
+`prereq_parere`). Sulla fase, `desc` è la nota operativa mostrata nella checklist.
 
 Aggiungere una pratica al catalogo: una riga in `PRATICHE_CAT` con `ente`, `tipo`,
-`gg` (termine), `rif` e la `cond` che la attiva.
+`gg` (termine), `rif`, la `cond` che la attiva e `proc:1` se richiede la procura
+speciale del committente (da cui il gestionale genera la relativa firma).
+
+Un template può inoltre dichiarare `prat: [...]` — elenco chiuso delle pratiche che
+genera, come fa quello della CILA per restare snello — oppure `pratBase: [...]` per
+aggiungerne di fisse a quelle guidate dalle condizioni.
 
 ---
 
@@ -228,7 +293,7 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 68 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 79 test end-to-end in Chromium su un mock di Supabase
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -239,6 +304,32 @@ verifica che non restino record orfani, filtri e raggruppamenti delle pratiche,
 invio ed eliminazione di messaggi in chat, tutte le pagine e l'assenza di errori
 in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
+
+---
+
+## Fonti
+
+I contenuti normativi e procedurali dei template sono stati verificati su:
+
+- [Modulo di procura speciale per la presentazione telematica (art. 1392 c.c.)](https://storagecportalpublicdocs.blob.core.windows.net/l470/SUE/Pratiche%20edilizie/Modulo%20di%20procura%20speciale.pdf)
+- [Procura speciale per l'invio telematico delle pratiche SUAP/SUE — Comune di San Lazzaro di Savena](https://www.comune.sanlazzaro.bo.it/amministrazione/documenti-e-dati/modulistica/sue/edilizia-privata/procura-speciale/procura-speciale/@@download/file_principale)
+- [Procura speciale — Regione Toscana](https://www.regione.toscana.it/documents/10180/23119/procura_speciale.pdf)
+- [Procura speciale per la sottoscrizione digitale e presentazione telematica — Comune di Milano](https://www.comune.milano.it/documents/20126/1471479/PROCURA+SPECIALE+per+la+sottoscrizione+digitale+e+presentazione+telematica_01062020.pdf)
+- [Guida all'utilizzo del portale regionale SUAP — Regione Friuli Venezia Giulia](https://suap.regione.fvg.it/portale/export/sites/SUAP/allegati/archivio_file/GUIDA-PER-UTENTI.pdf)
+- [Portale Accesso Unitario SUAP/SUE — Comune di Reggio Emilia](https://www.comune.reggioemilia.it/argomenti/suap/portale-accesso-unitario)
+- [Soggetti titolati a presentare la pratica edilizia — Studio Tecnico Pagliai](https://www.studiotecnicopagliai.it/soggetti-titolati-a-presentare-la-pratica-edilizia/)
+- [CILA: obblighi di fine lavori, durata e Direttore Lavori — Studio Tecnico Pagliai](https://www.studiotecnicopagliai.it/cila-fine-lavori-durata-direttore-lavori/)
+- [Modulo unificato nazionale CILA](https://www.glossarioedilizia.it/wp-content/uploads/2018/08/CILA-nazionale-editabile-2018.pdf)
+- [D.Lgs 36/2023 — testo coordinato, Bosetti & Gatti](https://www.bosettiegatti.eu/info/norme/statali/2023_0036.htm)
+- [Allegato I.7 — Contenuti minimi di PFTE e progetto esecutivo](https://www.codiceappalti.it/DLGS_36_2023/Allegato_I_7_Contenuti_minimi_del_quadro_esigenziale,_del_documento_di_fattibilit%C3%A0_delle_alternative_progettuali,_del_documento_di_indirizzo_della_progettazione,_del_progetto_di_fattibilit%C3%A0_tecnica_ed_economica_e_del_progetto_esecutivo_/12883)
+- [Allegato I.8 — Verifica preventiva dell'interesse archeologico](https://www.codiceappalti.it/DLGS_36_2023/Allegato_I_8_Verifica_preventiva_dell'interesse_archeologico_/12884)
+- [I livelli di progettazione nel nuovo Codice Appalti — BibLus ACCA](https://biblus.acca.it/nuovo-codice-appalti-addio-al-progetto-definitivo/)
+- [Conferenza di servizi art. 38: termini per le amministrazioni — LavoriPubblici](https://www.lavoripubblici.it/news/conferenza-servizi-art-38-termini-amministrazioni-parere-mit-4068-37693)
+- [La conferenza di servizi: indirizzi e istruzioni operative — Regione Lazio](https://www.regione.lazio.it/sites/default/files/cds-indirizzi-istruzioni-operative/DGR-649-31-07-2025-Allegato-A.pdf)
+- [Circolare n. 26/2024 sulla verifica preventiva dell'interesse archeologico — DG ABAP, Ministero della Cultura](https://dgabap.cultura.gov.it/wp-content/uploads/2024/06/Circolare-VPIA_aggiornamenti-normativi-signed-4.pdf)
+
+Le procedure telematiche variano da Comune a Comune e da Regione a Regione:
+verifica sempre il portale che usi. I termini restano indicativi.
 
 ---
 

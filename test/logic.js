@@ -30,7 +30,7 @@ t('ini due iniziali',ctx.ini('Mario Rossi Bianchi')==='MR',ctx.ini('Mario Rossi 
 
 console.log('\n— TEMPLATE —');
 const tk=Object.keys(ctx.TEMPLATES);
-t('5 template',tk.length===5,tk);
+t('6 template',tk.length===6,tk);
 let tot=0,fasiTot=0;
 tk.forEach(k=>{const T=ctx.TEMPLATES[k];fasiTot+=T.fasi.length;T.fasi.forEach(f=>tot+=f.att.length);});
 console.log('   fasi totali:',fasiTot,'| attività totali:',tot);
@@ -43,7 +43,7 @@ t('pratiche: cond valide',ctx.PRATICHE_CAT.every(p=>!p.cond||ctx.CONDIZIONI.map(
 console.log('\n— PIANIFICAZIONE —');
 const full=ctx.CONDIZIONI.map(c=>c.k);
 const p1=ctx.pianifica('privato',full,'2026-01-07');
-t('privato completo: 13 fasi',p1.fasi.length===13,p1.fasi.length);
+t('privato completo: 15 fasi',p1.fasi.length===15,p1.fasi.length);
 console.log('   attività generate:',p1.fasi.reduce((a,f)=>a+f.att.length,0),'| pratiche:',p1.pratiche.length);
 t('tutte le attività hanno scadenza',p1.fasi.every(f=>f.att.every(a=>a.due_date)),null);
 t('scadenze crescenti nella fase',p1.fasi.every(f=>{const d=f.att.filter(a=>!a.is_milestone).map(a=>a.due_date);return d.every((x,i)=>i===0||x>=d[i-1]);}),null);
@@ -68,11 +68,11 @@ t('senza vvf: nessuna pratica VVF',!p2.pratiche.some(x=>/Vigili/.test(x.ente)),n
 const p3=ctx.pianifica('vuoto',[],null);
 t('template vuoto: 1 fase 0 attività',p3.fasi.length===1&&p3.fasi[0].att.length===0,p3.fasi.length);
 const p4=ctx.pianifica('pubblico',full,'2026-02-02');
-t('pubblico: 9 fasi',p4.fasi.length===9,p4.fasi.length);
+t('pubblico: 10 fasi',p4.fasi.length===10,p4.fasi.length);
 const p5=ctx.pianifica('strutture',full,null);
-t('strutture: 7 fasi',p5.fasi.length===7,p5.fasi.length);
+t('strutture: 8 fasi',p5.fasi.length===8,p5.fasi.length);
 const p6=ctx.pianifica('vincolo',full,null);
-t('vincolo: 5 fasi',p6.fasi.length===5,p6.fasi.length);
+t('vincolo: 6 fasi',p6.fasi.length===6,p6.fasi.length);
 
 console.log('\n— AVANZAMENTO —');
 ctx.S.tasks=[{id:'a',commessa_fase_id:'F',status:'da_fare',opzionale:false},
@@ -100,6 +100,62 @@ t('ordinate per data',sc.map(s=>s.date).every((d,i)=>i===0||d>=sc[i-1].date),sc.
 t('filtro per utente',ctx.scadenze('U').length===2,ctx.scadenze('U').length);
 t('pratica scaduta rilevata',ctx.praticaLate(ctx.S.pratiche[0])===true,null);
 t('pratica chiusa non scaduta',ctx.praticaLate(ctx.S.pratiche[1])===false,null);
+
+
+console.log('\n— PRATICA SNELLA (interno) —');
+const pi=ctx.pianifica('interno',full,'2026-09-01');
+t('interno: 6 fasi',pi.fasi.length===6,pi.fasi.length);
+const nAttI=pi.fasi.reduce((a,f)=>a+f.att.length,0);
+console.log('   attività:',nAttI,'| pratiche:',pi.pratiche.length);
+t('interno resta snella anche con tutte le condizioni', nAttI<60, nAttI);
+t('interno genera pochissime pratiche', pi.pratiche.length<=3, pi.pratiche.map(x=>x.k));
+t('interno genera la CILA', pi.pratiche.some(x=>x.k==='cila'), pi.pratiche.map(x=>x.k));
+t('privato genera il titolo edilizio', ctx.pianifica('privato',full,null).pratiche.some(x=>x.k==='titolo_edilizio'), null);
+t('interno non genera pareri di enti terzi',
+  !pi.fasi.some(f=>f.att.some(a=>/Soprintendenza|Vigili del Fuoco|paesagg/i.test((a.ente||'')+a.title))),
+  pi.fasi.flatMap(f=>f.att.filter(a=>/Soprintendenza|Vigili|paesagg/i.test((a.ente||'')+a.title)).map(a=>a.title)));
+
+console.log('\n— FIRME ANTICIPATE —');
+['interno','privato','strutture','vincolo'].forEach(k=>{
+  const pl=ctx.pianifica(k,full,'2026-09-01');
+  const idx=pl.fasi.findIndex(f=>f.fase_key==='firme');
+  t(k+': ha la fase firme',idx>=0,idx);
+  if(idx<0) return;
+  t(k+': firme nella prima metà del percorso',idx<pl.fasi.length/2,idx+'/'+pl.fasi.length);
+  const firme=pl.fasi[idx].att.filter(a=>a.categoria==='firma_cliente');
+  t(k+': la fase firme contiene documenti da firmare',firme.length>=2,firme.length);
+  // nessun documento da firmare deve stare DOPO la presentazione delle pratiche
+  const ultimaFirma=Math.max(...pl.fasi.map((f,i)=>f.att.some(a=>a.categoria==='firma_cliente')?i:-1));
+  t(k+': nessuna firma isolata a fine percorso',ultimaFirma<pl.fasi.length-1||k==='privato',ultimaFirma);
+});
+const pp=ctx.pianifica('privato',full,'2026-09-01');
+t('privato: firme prima delle istanze agli enti',
+  pp.fasi.findIndex(f=>f.fase_key==='firme') < pp.fasi.findIndex(f=>f.fase_key==='autorizzazioni'),null);
+t('privato: ricognizione enti prima delle firme',
+  pp.fasi.findIndex(f=>f.fase_key==='enti') < pp.fasi.findIndex(f=>f.fase_key==='firme'),null);
+
+console.log('\n— OPERE PUBBLICHE: DOCUMENTAZIONE PRIMA DEI PARERI —');
+const pu=ctx.pianifica('pubblico',full,'2026-09-01');
+const iEnti=pu.fasi.findIndex(f=>f.fase_key==='enti');
+const iPfte=pu.fasi.findIndex(f=>f.fase_key==='pfte');
+const iCds =pu.fasi.findIndex(f=>f.fase_key==='cds');
+t('documentazione enti prima del PFTE',iEnti<iPfte,[iEnti,iPfte]);
+t('PFTE prima della conferenza di servizi',iPfte<iCds,[iPfte,iCds]);
+t('stralcio archeologico nella fase enti, non nel PFTE',
+  pu.fasi[iEnti].att.some(a=>/stralcio.*archeolog/i.test(a.title)),null);
+t('prerequisiti dei pareri marcati',
+  pu.fasi[iEnti].att.filter(a=>a.categoria==='prereq_parere').length>=5,
+  pu.fasi[iEnti].att.filter(a=>a.categoria==='prereq_parere').length);
+t('definitivo escluso se non richiesto',
+  ctx.pianifica('pubblico',['strutture','dl'],null).fasi.every(f=>f.fase_key!=='definitivo'),null);
+t('definitivo incluso se richiesto',
+  ctx.pianifica('pubblico',['definitivo','strutture'],null).fasi.some(f=>f.fase_key==='definitivo'),null);
+
+console.log('\n— PROCURE PER PRATICA —');
+t('le pratiche telematiche sono marcate proc',
+  ctx.PRATICHE_CAT.filter(x=>x.proc).length>=15, ctx.PRATICHE_CAT.filter(x=>x.proc).length);
+t('catasto e notifiche non richiedono procura speciale',
+  !ctx.PRATICHE_CAT.find(x=>x.k==='docfa').proc && !ctx.PRATICHE_CAT.find(x=>x.k==='notifica81').proc, null);
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

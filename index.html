@@ -365,6 +365,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Il mio lavoro</span>
       <button class="sn on" data-page="oggi"><span class="snic">&#9788;</span>Oggi<span class="snb" id="b-oggi">0</span></button>
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
+      <button class="sn" data-page="firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
     </div>
     <div class="ssec">
       <span class="slbl">Commesse</span>
@@ -641,7 +642,7 @@ const PERMESSI = { eliminaPratica: 'admin' };
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.07.31.5';
+const VERSIONE = '2026.08.01.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -793,12 +794,12 @@ function sbErr(e, ctx) {
 const CONDIZIONI = [
   { k:'strutture',     l:'Opere strutturali',              d:'C.a., acciaio, muratura, legno: calcolo, deposito, collaudo' },
   { k:'geologia',      l:'Indagini e relazione geologica', d:'Geognostica, sismica di sito, categoria di sottosuolo' },
-  { k:'sismica_aut',   l:'Autorizzazione sismica preventiva', d:'Zona 1/2 o opera rilevante: art. 94 anziché deposito art. 93' },
+  { k:'sismica_aut', proc:1,   l:'Autorizzazione sismica preventiva', d:'Zona 1/2 o opera rilevante: art. 94 anziché deposito art. 93' },
   { k:'paesaggistico', l:'Vincolo paesaggistico',          d:'Art. 136/142 D.Lgs 42/2004: autorizzazione ordinaria o semplificata' },
   { k:'monumentale',   l:'Bene culturale vincolato',       d:'Art. 10-21 D.Lgs 42/2004: autorizzazione della Soprintendenza' },
   { k:'archeologico',  l:'Rischio archeologico',           d:'Verifica preventiva dell’interesse archeologico' },
   { k:'idrogeologico', l:'Vincolo idrogeologico',          d:'R.D. 3267/1923: autorizzazione al movimento terra' },
-  { k:'idraulico',     l:'Vincolo idraulico / PAI',        d:'Fascia di rispetto corsi d’acqua, Autorità di bacino' },
+  { k:'idraulico', proc:1,     l:'Vincolo idraulico / PAI',        d:'Fascia di rispetto corsi d’acqua, Autorità di bacino' },
   { k:'vvf',           l:'Attività soggetta a VVF',        d:'DPR 151/2011: valutazione progetto, SCIA antincendio, CPI' },
   { k:'impianti',      l:'Progettazione impianti',         d:'Elettrico, termomeccanico, idrico-sanitario (DM 37/08)' },
   { k:'energetico',    l:'Requisiti energetici',           d:'Relazione ex L.10/91, DM 26/06/2015, APE' },
@@ -806,60 +807,64 @@ const CONDIZIONI = [
   { k:'barriere',      l:'Superamento barriere',           d:'L. 13/89 e DM 236/89: dichiarazione di conformità' },
   { k:'scarichi',      l:'Autorizzazione allo scarico',    d:'Allaccio fognario o scarico su suolo/acque superficiali' },
   { k:'amianto',       l:'Demolizioni / amianto',          d:'Piano di lavoro amianto, notifica ASL, gestione rifiuti' },
-  { k:'accesso',       l:'Accesso stradale',               d:'Passo carrabile o innesto su strada comunale/provinciale/statale' },
-  { k:'via',           l:'VIA / assoggettabilità',         d:'D.Lgs 152/2006: screening o valutazione di impatto ambientale' },
+  { k:'accesso', proc:1,       l:'Accesso stradale',               d:'Passo carrabile o innesto su strada comunale/provinciale/statale' },
+  { k:'via', proc:1,           l:'VIA / assoggettabilità',         d:'D.Lgs 152/2006: screening o valutazione di impatto ambientale' },
   { k:'sicurezza',     l:'Coordinamento sicurezza',        d:'D.Lgs 81/2008 Titolo IV: CSP/CSE, PSC, fascicolo' },
   { k:'dl',            l:'Direzione lavori',               d:'DL, contabilità, SAL, certificato di regolare esecuzione' },
   { k:'catasto',       l:'Aggiornamento catastale',        d:'DOCFA / Pregeo a fine lavori' },
-  { k:'agibilita',     l:'Agibilità a fine lavori',        d:'SCIA di agibilità art. 24 DPR 380/2001' }
+  { k:'agibilita', proc:1,     l:'Agibilità a fine lavori',        d:'SCIA di agibilità art. 24 DPR 380/2001' },
+  { k:'definitivo',    l:'Livello definitivo richiesto',    d:'Solo opere pubbliche: la stazione appaltante chiede il definitivo oltre a PFTE ed esecutivo' }
 ];
 
 /* --- Catalogo pratiche/enti: termini indicativi da verificare --- */
 const PRATICHE_CAT = [
-  { k:'paes_ord',   ente:'Soprintendenza / Comune', tipo:'Autorizzazione paesaggistica ordinaria', gg:45,
+  { k:'paes_ord', proc:1,   ente:'Soprintendenza / Comune', tipo:'Autorizzazione paesaggistica ordinaria', gg:45,
     rif:'art. 146 D.Lgs 42/2004', cond:'paesaggistico',
     note:'45 gg per il parere vincolante della Soprintendenza, poi 20 gg per il rilascio comunale.' },
-  { k:'paes_sempl', ente:'Soprintendenza / Comune', tipo:'Autorizzazione paesaggistica semplificata', gg:60,
+  { k:'paes_sempl', proc:1, ente:'Soprintendenza / Comune', tipo:'Autorizzazione paesaggistica semplificata', gg:60,
     rif:'DPR 31/2017', cond:'paesaggistico',
     note:'Procedimento semplificato per gli interventi dell’Allegato B.' },
-  { k:'sopr_art21', ente:'Soprintendenza', tipo:'Autorizzazione su bene culturale (art. 21)', gg:120,
+  { k:'sopr_art21', proc:1, ente:'Soprintendenza', tipo:'Autorizzazione su bene culturale (art. 21)', gg:120,
     rif:'art. 21-22 D.Lgs 42/2004', cond:'monumentale' },
-  { k:'sopr_art12', ente:'Soprintendenza', tipo:'Verifica dell’interesse culturale (art. 12)', gg:120,
+  { k:'sopr_art12', proc:1, ente:'Soprintendenza', tipo:'Verifica dell’interesse culturale (art. 12)', gg:120,
     rif:'art. 12 D.Lgs 42/2004', cond:'monumentale' },
   { k:'archeo',     ente:'Soprintendenza Archeologia', tipo:'Verifica preventiva interesse archeologico', gg:60,
     rif:'art. 41 D.Lgs 36/2023', cond:'archeologico' },
-  { k:'vvf_prog',   ente:'Comando Vigili del Fuoco', tipo:'Valutazione del progetto antincendio', gg:60,
+  { k:'vvf_prog', proc:1,   ente:'Comando Vigili del Fuoco', tipo:'Valutazione del progetto antincendio', gg:60,
     rif:'art. 3 DPR 151/2011', cond:'vvf',
     note:'Obbligatoria per attività di categoria B e C.' },
-  { k:'vvf_scia',   ente:'Comando Vigili del Fuoco', tipo:'SCIA antincendio', gg:60,
+  { k:'vvf_scia', proc:1,   ente:'Comando Vigili del Fuoco', tipo:'SCIA antincendio', gg:60,
     rif:'art. 4 DPR 151/2011', cond:'vvf',
     note:'Efficacia immediata; il controllo avviene entro 60 gg. Rilascio CPI su richiesta.' },
-  { k:'vvf_deroga', ente:'Comando Vigili del Fuoco', tipo:'Istanza di deroga', gg:60,
+  { k:'vvf_deroga', proc:1, ente:'Comando Vigili del Fuoco', tipo:'Istanza di deroga', gg:60,
     rif:'art. 7 DPR 151/2011', cond:'vvf' },
   { k:'sismica_aut',ente:'Genio Civile / Regione', tipo:'Autorizzazione sismica preventiva', gg:60,
     rif:'art. 94 DPR 380/2001', cond:'sismica_aut' },
-  { k:'sismica_dep',ente:'Genio Civile / Regione', tipo:'Deposito sismico', gg:0,
+  { k:'sismica_dep', proc:1,ente:'Genio Civile / Regione', tipo:'Deposito sismico', gg:0,
     rif:'art. 93 DPR 380/2001', cond:'strutture',
     note:'Efficacia immediata al protocollo; verificare le procedure regionali.' },
-  { k:'denuncia_ca',ente:'Genio Civile / Sportello Unico', tipo:'Denuncia opere in c.a.', gg:0,
+  { k:'denuncia_ca', proc:1,ente:'Genio Civile / Sportello Unico', tipo:'Denuncia opere in c.a.', gg:0,
     rif:'art. 65 DPR 380/2001', cond:'strutture',
     note:'Da presentare prima dell’inizio dei lavori strutturali.' },
-  { k:'pdc',        ente:'Comune / SUE', tipo:'Permesso di Costruire', gg:90,
+  { k:'pdc', proc:1,        ente:'Comune / SUE', tipo:'Permesso di Costruire', gg:90,
     rif:'art. 20 DPR 380/2001',
     note:'60 gg istruttoria + 30 gg per il provvedimento; sospensione per integrazioni.' },
-  { k:'scia',       ente:'Comune / SUE', tipo:'SCIA edilizia', gg:30,
+  { k:'scia', proc:1,       ente:'Comune / SUE', tipo:'SCIA edilizia', gg:30,
     rif:'art. 23 DPR 380/2001', note:'Efficacia immediata; controllo entro 30 gg.' },
-  { k:'cila',       ente:'Comune / SUE', tipo:'CILA', gg:0, rif:'art. 6-bis DPR 380/2001' },
+  { k:'cila', proc:1,       ente:'Comune / SUE', tipo:'CILA', gg:0, rif:'art. 6-bis DPR 380/2001' },
+  { k:'titolo_edilizio', proc:1, ente:'Comune / SUE', tipo:'Titolo edilizio (CILA / SCIA / PdC)', gg:30,
+    rif:'DPR 380/2001',
+    note:'Segnaposto: sostituisci il tipo con il titolo effettivamente scelto. Va creata subito perche la relativa procura speciale deve essere firmata prima.' },
   { k:'agibilita',  ente:'Comune / SUE', tipo:'SCIA di agibilità', gg:30,
     rif:'art. 24 DPR 380/2001', cond:'agibilita' },
-  { k:'idrogeo',    ente:'Comune / Regione / Comunità montana', tipo:'Autorizzazione vincolo idrogeologico', gg:60,
+  { k:'idrogeo', proc:1,    ente:'Comune / Regione / Comunità montana', tipo:'Autorizzazione vincolo idrogeologico', gg:60,
     rif:'R.D. 3267/1923', cond:'idrogeologico' },
   { k:'idraulico',  ente:'Autorità di Bacino / Genio Civile', tipo:'Parere / nulla osta idraulico', gg:60,
     rif:'D.Lgs 152/2006 - PAI', cond:'idraulico' },
   { k:'via',        ente:'Regione / Ministero', tipo:'Verifica di assoggettabilità a VIA', gg:90,
     rif:'art. 19 D.Lgs 152/2006', cond:'via' },
   { k:'asl',        ente:'ASL / Dipartimento di Prevenzione', tipo:'Parere igienico-sanitario', gg:30, rif:'' },
-  { k:'scarico',    ente:'Comune / Gestore idrico / Provincia', tipo:'Autorizzazione allo scarico', gg:90,
+  { k:'scarico', proc:1,    ente:'Comune / Gestore idrico / Provincia', tipo:'Autorizzazione allo scarico', gg:90,
     rif:'D.Lgs 152/2006', cond:'scarichi' },
   { k:'acustica',   ente:'Comune / ARPA', tipo:'Valutazione previsionale di clima/impatto acustico', gg:30,
     rif:'DPCM 5/12/1997', cond:'acustica' },
@@ -873,8 +878,8 @@ const PRATICHE_CAT = [
     rif:'DM 701/1994', cond:'catasto' },
   { k:'pregeo',     ente:'Agenzia delle Entrate - Catasto', tipo:'Tipo mappale / frazionamento (Pregeo)', gg:0,
     rif:'', cond:'catasto' },
-  { k:'enel',       ente:'Distributore elettrico', tipo:'Richiesta di allaccio / adeguamento POD', gg:60, rif:'' },
-  { k:'gas_acqua',  ente:'Gestori reti', tipo:'Allacci gas / idrico / fognario', gg:60, rif:'' },
+  { k:'enel', proc:1,       ente:'Distributore elettrico', tipo:'Richiesta di allaccio / adeguamento POD', gg:60, rif:'' },
+  { k:'gas_acqua', proc:1,  ente:'Gestori reti', tipo:'Allacci gas / idrico / fognario', gg:60, rif:'' },
   { k:'cds',        ente:'Comune / Ente procedente', tipo:'Conferenza di servizi', gg:90,
     rif:'art. 14 L. 241/1990' },
   { k:'commis_pae', ente:'Comune - Commissione Paesaggio', tipo:'Parere della Commissione Locale per il Paesaggio', gg:30,
@@ -884,16 +889,90 @@ const PRATICHE_CAT = [
 
 /* ===========================================================================
    TEMPLATE DI COMMESSA
-   fase: { k, nome, ic (icona), dur (giorni di durata stimata), att:[...] }
-   attività: { t titolo, h ore stimate, rif riferimento, ente, cond condizione
-               richiesta, ms milestone, opt opzionale (generata ma spuntabile) }
+   fase: { k, nome, ic (icona), dur (giorni), desc (nota operativa), cond }
+   attività: { t titolo, h ore, rif riferimento, ente, cond condizione,
+               ms milestone, opt opzionale, cat categoria }
+   cat: 'firma_cliente' = serve la firma autografa del committente
+        'piattaforma'   = operazione sul portale telematico
+        'prereq_parere' = documentazione che sblocca la richiesta di un parere
    =========================================================================== */
 const TEMPLATES = {
 
+/* ------------------- RISTRUTTURAZIONE INTERNA (PRATICA SNELLA) ------------------- */
+interno: {
+  label: 'Ristrutturazione interna di appartamento — CILA',
+  desc:  'Pratica snella: opere interne che non toccano strutture, prospetti, volumi né destinazione d’uso. Nessun parere di enti terzi. Dal sopralluogo al fine lavori.',
+  prat:  ['cila', 'docfa', 'notifica81'],
+  fasi: [
+  { k:'avvio', nome:'1. Incarico e verifiche preliminari', ic:'📋', dur:10,
+    desc:'Serve a confermare che l’intervento resti davvero in CILA. Se emergono opere strutturali, modifiche ai prospetti o cambi di destinazione, il percorso corretto è un altro template.', att:[
+    { t:'Sopralluogo e rilievo dello stato di fatto', h:6 },
+    { t:'Documentazione fotografica dello stato di fatto', h:1 },
+    { t:'Restituzione grafica del rilievo', h:8 },
+    { t:'Visura e planimetria catastale', h:1 },
+    { t:'Verifica della conformità catastale rispetto allo stato reale', h:2, ms:1 },
+    { t:'Reperimento del titolo edilizio pregresso e verifica di conformità urbanistica', h:4, rif:'art. 9-bis DPR 380/2001', ms:1 },
+    { t:'Conferma che l’intervento rientra in CILA: nessuna opera strutturale, nessuna modifica ai prospetti, volumi o destinazione d’uso', h:2, rif:'art. 6-bis DPR 380/2001', ms:1 },
+    { t:'Verifica del regolamento condominiale e degli obblighi verso l’amministratore', h:2 },
+    { t:'Preventivo e lettera d’incarico', h:2, cat:'firma_cliente' },
+    { t:'Informativa privacy sottoscritta', h:1, cat:'firma_cliente' }
+  ]},
+  { k:'firme', nome:'2. Dati definitivi e firme del cliente', ic:'✍️', dur:7,
+    desc:'Tutte le firme del committente in un solo appuntamento. La procura speciale vale per una sola pratica: se ne servono più d’una, si generano e si fanno firmare tutte insieme adesso. Cambiare anagrafica o dati catastali dopo la firma obbliga a rigenerare e far rifirmare.', att:[
+    { t:'Congelamento dei dati anagrafici di tutti gli aventi titolo e dei dati catastali', h:2, ms:1, cat:'piattaforma' },
+    { t:'Verifica sul portale del Comune se la procura è generabile in anticipo (funzione di simulazione)', h:1, cat:'piattaforma' },
+    { t:'Pre-generazione sul portale delle procure speciali di tutte le pratiche previste', h:2, rif:'art. 1392 c.c.', ms:1, cat:'piattaforma' },
+    { t:'Preparazione del fascicolo firme: procure, assensi, dichiarazioni, privacy, incarico', h:2, cat:'firma_cliente' },
+    { t:'Raccolta della copia del documento d’identità di ogni sottoscrittore', h:1, cat:'firma_cliente' },
+    { t:'UNICO appuntamento in studio: firma di tutti i documenti raccolti', h:2, ms:1, cat:'firma_cliente' },
+    { t:'Assenso dei comproprietari e dei titolari di altri diritti reali', h:2, cat:'firma_cliente' },
+    { t:'Scansione, firma digitale del tecnico e conservazione degli originali in studio', h:2, cat:'piattaforma' }
+  ]},
+  { k:'progetto', nome:'3. Progetto e asseverazione', ic:'📐', dur:12, att:[
+    { t:'Elaborati grafici dello stato di fatto, di progetto e comparativo giallo/rosso', h:14 },
+    { t:'Verifica dei requisiti igienico-sanitari e dei rapporti aeroilluminanti', h:3 },
+    { t:'Relazione tecnica asseverata', h:5, rif:'art. 6-bis DPR 380/2001', ms:1 },
+    { t:'Progetto degli impianti e dichiarazione di rispondenza', h:8, rif:'DM 37/2008', cond:'impianti' },
+    { t:'Verifica dei requisiti acustici passivi', h:4, cond:'acustica', opt:1 },
+    { t:'Computo metrico e stima dei lavori', h:5, opt:1 },
+    { t:'Condivisione degli elaborati con la committenza', h:2 }
+  ]},
+  { k:'titolo', nome:'4. Presentazione della CILA', ic:'📜', dur:5,
+    desc:'Se le procure sono già firmate, questa fase è solo compilazione e invio: nessuna attesa del cliente.', att:[
+    { t:'Acquisizione dei dati dell’impresa esecutrice e verifica del DURC', h:2 },
+    { t:'Dichiarazione di corretto smaltimento dei rifiuti da costruzione', h:1 },
+    { t:'Assolvimento dell’imposta di bollo e pagamento dei diritti di segreteria', h:1, cat:'piattaforma' },
+    { t:'Compilazione del modulo CILA sul portale telematico', h:3, cat:'piattaforma' },
+    { t:'Verifica che i dati della pratica coincidano con quelli della procura già firmata', h:1, ms:1, cat:'piattaforma' },
+    { t:'Firma digitale degli elaborati in formato P7M e caricamento degli allegati', h:2, cat:'piattaforma' },
+    { t:'Invio telematico e acquisizione del protocollo', h:1, ente:'Comune / SUE', ms:1, cat:'piattaforma' },
+    { t:'Consegna al cliente della ricevuta di protocollo', h:1 },
+    { t:'Notifica preliminare all’ASL', h:1, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza', opt:1 }
+  ]},
+  { k:'lavori', nome:'5. Esecuzione dei lavori', ic:'👷', dur:90, att:[
+    { t:'Comunicazione di inizio lavori all’impresa e alla committenza', h:1 },
+    { t:'Sopralluoghi periodici di verifica', h:12, opt:1 },
+    { t:'Gestione delle varianti in corso d’opera', h:4, opt:1 },
+    { t:'Verifica della corretta gestione dei rifiuti da parte dell’impresa', h:2 }
+  ]},
+  { k:'chiusura', nome:'6. Fine lavori e adempimenti', ic:'✅', dur:30, att:[
+    { t:'Comunicazione di fine lavori al Comune', h:2, ente:'Comune / SUE', ms:1, cat:'piattaforma' },
+    { t:'Raccolta delle dichiarazioni di conformità degli impianti', h:2, rif:'DM 37/2008', cond:'impianti' },
+    { t:'Raccolta dei formulari di smaltimento rifiuti', h:1 },
+    { t:'Aggiornamento catastale DOCFA se la distribuzione interna è cambiata', h:4, ente:'Agenzia delle Entrate', cond:'catasto', ms:1 },
+    { t:'Comunicazione ENEA entro 90 giorni dalla fine lavori', h:2, cond:'energetico' },
+    { t:'Nuovo attestato di prestazione energetica', h:3, cond:'energetico', opt:1 },
+    { t:'Consegna del fascicolo finale alla committenza', h:2, ms:1 },
+    { t:'Fatturazione a saldo e archiviazione della commessa', h:2 }
+  ]}
+  ]
+},
+
 /* ----------------------------- EDILIZIA PRIVATA ----------------------------- */
 privato: {
-  label: 'Edilizia privata — nuova costruzione o ristrutturazione',
-  desc:  'Percorso completo dall’incarico al fine lavori: preliminare, definitivo, autorizzazioni, esecutivo, sicurezza, DL e agibilità.',
+  label: 'Edilizia privata — nuova costruzione o ristrutturazione rilevante',
+  desc:  'Percorso completo con pareri di enti: preliminare, definitivo, autorizzazioni, titolo edilizio, strutture, impianti, esecutivo, sicurezza, DL e agibilità.',
+  pratBase: ['titolo_edilizio'],
   fasi: [
   { k:'avvio', nome:'1. Incarico e avvio commessa', ic:'📋', dur:14, att:[
     { t:'Primo incontro con la committenza e definizione delle esigenze', h:3 },
@@ -905,26 +984,48 @@ privato: {
     { t:'Verifica della conformità catastale', h:3 },
     { t:'Verifica dei vincoli sull’area (PRG/PUG, paesaggistico, idrogeologico, sismico)', h:4, ms:1 },
     { t:'Certificato di destinazione urbanistica', h:1 },
-    { t:'Preventivo e lettera d’incarico sottoscritta', h:2, ms:1 },
+    { t:'Preventivo e lettera d’incarico sottoscritta', h:2, ms:1, cat:'firma_cliente' },
+    { t:'Informativa privacy sottoscritta', h:1, cat:'firma_cliente' },
     { t:'Apertura commessa: codice, cartella e team', h:1 }
   ]},
-  { k:'preliminare', nome:'2. Progetto preliminare / fattibilità', ic:'✏️', dur:21, att:[
+  { k:'enti', nome:'2. Ricognizione degli enti coinvolti', ic:'🗺️', dur:7,
+    desc:'Stabilire subito QUALI pareri serviranno: da qui dipendono sia le procure da far firmare, sia le relazioni specialistiche da avviare per prime. Rimandare questa ricognizione è ciò che allunga i tempi.', att:[
+    { t:'Elenco degli enti da coinvolgere e degli atti di assenso necessari', h:4, ms:1, cat:'prereq_parere' },
+    { t:'Verifica dei portali telematici di ciascun ente e delle credenziali necessarie', h:3, cat:'piattaforma' },
+    { t:'Individuazione delle relazioni specialistiche che condizionano i pareri', h:3, cat:'prereq_parere' },
+    { t:'Cronoprogramma delle istanze: prima quelle con i termini più lunghi', h:3, ms:1, cat:'prereq_parere' },
+    { t:'Contatto preliminare informale con gli uffici per anticipare le criticità', h:4, opt:1 }
+  ]},
+  { k:'firme', nome:'3. Dati definitivi e firme del cliente', ic:'✍️', dur:10,
+    desc:'Tutte le firme del committente in un solo appuntamento. La procura speciale vale per UNA sola pratica: se ne servono più d’una si generano e si fanno firmare tutte adesso. Cambiare anagrafica o dati catastali dopo la firma obbliga a rigenerare e far rifirmare.', att:[
+    { t:'Congelamento dei dati anagrafici di tutti gli aventi titolo e dei dati catastali', h:2, ms:1, cat:'piattaforma' },
+    { t:'Verifica su ciascun portale se la procura è generabile in anticipo (simulazione)', h:2, cat:'piattaforma' },
+    { t:'Pre-generazione delle procure speciali di tutte le pratiche previste', h:3, rif:'art. 1392 c.c.', ms:1, cat:'piattaforma' },
+    { t:'Preparazione del fascicolo firme: procure, assensi, dichiarazioni, incarico, privacy', h:3, cat:'firma_cliente' },
+    { t:'Raccolta della copia del documento d’identità di ogni sottoscrittore', h:1, cat:'firma_cliente' },
+    { t:'UNICO appuntamento in studio: firma di tutti i documenti raccolti', h:3, ms:1, cat:'firma_cliente' },
+    { t:'Assenso dei comproprietari e dei titolari di altri diritti reali', h:2, cat:'firma_cliente' },
+    { t:'Dichiarazioni sostitutive di atto notorio richieste dagli enti', h:2, cat:'firma_cliente' },
+    { t:'Scansione, firma digitale del tecnico e conservazione degli originali in studio', h:2, cat:'piattaforma' }
+  ]},
+  { k:'preliminare', nome:'4. Progetto preliminare / fattibilità', ic:'✏️', dur:21, att:[
     { t:'Analisi normativa: NTA, regolamento edilizio, distanze, altezze, indici', h:8 },
     { t:'Verifica di superfici, volumi e standard urbanistici', h:6 },
     { t:'Schemi distributivi e ipotesi progettuali alternative', h:20 },
     { t:'Prima valutazione sommaria della spesa', h:4 },
     { t:'Presentazione alla committenza', h:3 },
-    { t:'Approvazione formale del preliminare', h:1, ms:1 }
+    { t:'Approvazione formale del preliminare', h:1, ms:1, cat:'firma_cliente' }
   ]},
-  { k:'geologia', nome:'3. Indagini e relazione geologica', ic:'🪨', dur:30, cond:'geologia', att:[
+  { k:'geologia', nome:'5. Indagini e relazione geologica', ic:'🪨', dur:30, cond:'geologia',
+    desc:'Da avviare presto: la relazione geologica è spesso prerequisito sia del calcolo strutturale sia di pareri idrogeologici e sismici.', att:[
     { t:'Incarico al geologo e programma delle indagini', h:2, cond:'geologia' },
     { t:'Esecuzione indagini geognostiche in sito', h:4, cond:'geologia' },
     { t:'Prove di laboratorio sui campioni', h:2, cond:'geologia' },
-    { t:'Indagine sismica e definizione categoria di sottosuolo', h:3, cond:'geologia', rif:'NTC 2018 §3.2.2' },
-    { t:'Relazione geologica', h:4, cond:'geologia', ms:1 },
+    { t:'Indagine sismica e definizione della categoria di sottosuolo', h:3, cond:'geologia', rif:'NTC 2018 §3.2.2' },
+    { t:'Relazione geologica', h:4, cond:'geologia', ms:1, cat:'prereq_parere' },
     { t:'Relazione geotecnica e modellazione del terreno', h:8, cond:'geologia', rif:'NTC 2018 §6' }
   ]},
-  { k:'definitivo', nome:'4. Progetto definitivo', ic:'📐', dur:35, att:[
+  { k:'definitivo', nome:'6. Progetto definitivo', ic:'📐', dur:35, att:[
     { t:'Elaborati architettonici: piante, prospetti, sezioni (1:100)', h:40 },
     { t:'Elaborati comparativi giallo/rosso stato attuale e di progetto', h:12 },
     { t:'Relazione tecnica illustrativa', h:8 },
@@ -934,39 +1035,43 @@ privato: {
     { t:'Schema planivolumetrico e sistemazioni esterne', h:8 },
     { t:'Prime indicazioni sugli impianti', h:6, cond:'impianti' },
     { t:'Computo metrico estimativo di massima', h:10 },
-    { t:'Condivisione e approvazione della committenza', h:2, ms:1 }
+    { t:'Condivisione e approvazione della committenza', h:2, ms:1, cat:'firma_cliente' }
   ]},
-  { k:'autorizzazioni', nome:'5. Autorizzazioni e pareri preventivi', ic:'🏛️', dur:120, att:[
-    { t:'Predisposizione della relazione paesaggistica', h:14, rif:'DPCM 12/12/2005', cond:'paesaggistico' },
-    { t:'Rendering e simulazione dell’inserimento paesaggistico', h:10, cond:'paesaggistico' },
-    { t:'Istanza di autorizzazione paesaggistica', h:4, ente:'Soprintendenza', rif:'art. 146 D.Lgs 42/2004', cond:'paesaggistico', ms:1 },
+  { k:'autorizzazioni', nome:'7. Istanze agli enti e pareri', ic:'🏛️', dur:120,
+    desc:'Le istanze partono appena la relativa documentazione specialistica è pronta, non tutte insieme alla fine: i termini di legge decorrono dal protocollo e corrono in parallelo alla progettazione.', att:[
+    { t:'Relazione paesaggistica', h:14, rif:'DPCM 12/12/2005', cond:'paesaggistico', cat:'prereq_parere' },
+    { t:'Rendering e simulazione dell’inserimento paesaggistico', h:10, cond:'paesaggistico', cat:'prereq_parere' },
+    { t:'Istanza di autorizzazione paesaggistica', h:4, ente:'Soprintendenza', rif:'art. 146 D.Lgs 42/2004', cond:'paesaggistico', ms:1, cat:'piattaforma' },
     { t:'Parere della Commissione Locale per il Paesaggio', h:2, ente:'Comune', cond:'paesaggistico' },
-    { t:'Istanza di autorizzazione su bene culturale', h:8, ente:'Soprintendenza', rif:'art. 21 D.Lgs 42/2004', cond:'monumentale', ms:1 },
-    { t:'Relazione storico-artistica e schede di degrado', h:12, cond:'monumentale' },
+    { t:'Relazione storico-artistica e schede di degrado', h:12, cond:'monumentale', cat:'prereq_parere' },
+    { t:'Istanza di autorizzazione su bene culturale', h:8, ente:'Soprintendenza', rif:'art. 21 D.Lgs 42/2004', cond:'monumentale', ms:1, cat:'piattaforma' },
     { t:'Verifica preventiva dell’interesse archeologico', h:6, ente:'Soprintendenza Archeologia', cond:'archeologico' },
-    { t:'Progetto antincendio e istanza di valutazione', h:20, ente:'Vigili del Fuoco', rif:'art. 3 DPR 151/2011', cond:'vvf', ms:1 },
-    { t:'Istanza di autorizzazione al vincolo idrogeologico', h:6, rif:'R.D. 3267/1923', cond:'idrogeologico' },
+    { t:'Progetto antincendio', h:20, cond:'vvf', cat:'prereq_parere' },
+    { t:'Istanza di valutazione del progetto antincendio', h:4, ente:'Vigili del Fuoco', rif:'art. 3 DPR 151/2011', cond:'vvf', ms:1, cat:'piattaforma' },
+    { t:'Istanza di autorizzazione al vincolo idrogeologico', h:6, rif:'R.D. 3267/1923', cond:'idrogeologico', cat:'piattaforma' },
     { t:'Parere idraulico / compatibilità con il PAI', h:8, ente:'Autorità di Bacino', cond:'idraulico' },
-    { t:'Valutazione previsionale di clima e impatto acustico', h:8, rif:'DPCM 5/12/1997', cond:'acustica' },
-    { t:'Istanza di autorizzazione allo scarico', h:5, cond:'scarichi' },
-    { t:'Nulla osta per accesso stradale / passo carrabile', h:4, cond:'accesso' },
+    { t:'Valutazione previsionale di clima e impatto acustico', h:8, rif:'DPCM 5/12/1997', cond:'acustica', cat:'prereq_parere' },
+    { t:'Istanza di autorizzazione allo scarico', h:5, cond:'scarichi', cat:'piattaforma' },
+    { t:'Nulla osta per accesso stradale o passo carrabile', h:4, cond:'accesso', cat:'piattaforma' },
     { t:'Verifica di assoggettabilità a VIA', h:16, rif:'art. 19 D.Lgs 152/2006', cond:'via' },
     { t:'Parere igienico-sanitario ASL', h:3, ente:'ASL' },
-    { t:'Gestione delle richieste di integrazione degli enti', h:8 },
+    { t:'Presidio delle scadenze e solleciti agli uffici', h:6 },
+    { t:'Gestione delle richieste di integrazione', h:8 },
     { t:'Acquisizione di tutti i pareri favorevoli', h:2, ms:1 }
   ]},
-  { k:'titolo', nome:'6. Titolo edilizio', ic:'📜', dur:60, att:[
+  { k:'titolo', nome:'8. Titolo edilizio', ic:'📜', dur:60, att:[
     { t:'Scelta del titolo edilizio (CILA / SCIA / PdC)', h:2, rif:'DPR 380/2001', ms:1 },
-    { t:'Compilazione della modulistica unificata', h:6 },
+    { t:'Compilazione della modulistica unificata', h:6, cat:'piattaforma' },
     { t:'Asseverazioni del progettista e allegati obbligatori', h:5 },
-    { t:'Calcolo e versamento oneri e diritti di segreteria', h:3 },
-    { t:'Predisposizione degli elaborati per il deposito', h:8 },
-    { t:'Presentazione telematica allo Sportello Unico', h:3, ente:'Comune / SUE', ms:1 },
+    { t:'Verifica che i dati della pratica coincidano con quelli della procura già firmata', h:1, ms:1, cat:'piattaforma' },
+    { t:'Calcolo e versamento di oneri, bollo e diritti di segreteria', h:3, cat:'piattaforma' },
+    { t:'Firma digitale degli elaborati e caricamento degli allegati', h:4, cat:'piattaforma' },
+    { t:'Presentazione telematica allo Sportello Unico', h:3, ente:'Comune / SUE', ms:1, cat:'piattaforma' },
     { t:'Gestione delle richieste di integrazione', h:8 },
     { t:'Efficacia del titolo / ritiro del provvedimento', h:1, ms:1 },
-    { t:'Comunicazione di inizio lavori e nomina imprese', h:3 }
+    { t:'Comunicazione di inizio lavori e nomina delle imprese', h:3, cat:'piattaforma' }
   ]},
-  { k:'strutture', nome:'7. Progetto strutturale', ic:'🏗️', dur:35, cond:'strutture', att:[
+  { k:'strutture', nome:'9. Progetto strutturale', ic:'🏗️', dur:35, cond:'strutture', att:[
     { t:'Definizione dello schema strutturale e delle azioni', h:10, cond:'strutture', rif:'NTC 2018' },
     { t:'Modellazione e analisi strutturale', h:32, cond:'strutture' },
     { t:'Verifiche degli elementi strutturali e delle fondazioni', h:24, cond:'strutture' },
@@ -975,12 +1080,12 @@ privato: {
     { t:'Elaborati grafici di carpenteria e armature', h:36, cond:'strutture' },
     { t:'Piano di manutenzione della parte strutturale', h:6, cond:'strutture' },
     { t:'Fascicolo dei calcoli e tabulati', h:4, cond:'strutture' },
-    { t:'Autorizzazione sismica preventiva', h:6, ente:'Genio Civile', rif:'art. 94 DPR 380/2001', cond:'sismica_aut', ms:1 },
-    { t:'Deposito sismico', h:4, ente:'Genio Civile', rif:'art. 93 DPR 380/2001', cond:'strutture', ms:1 },
-    { t:'Denuncia delle opere in c.a.', h:3, rif:'art. 65 DPR 380/2001', cond:'strutture' },
+    { t:'Autorizzazione sismica preventiva', h:6, ente:'Genio Civile', rif:'art. 94 DPR 380/2001', cond:'sismica_aut', ms:1, cat:'piattaforma' },
+    { t:'Deposito sismico', h:4, ente:'Genio Civile', rif:'art. 93 DPR 380/2001', cond:'strutture', ms:1, cat:'piattaforma' },
+    { t:'Denuncia delle opere in c.a.', h:3, rif:'art. 65 DPR 380/2001', cond:'strutture', cat:'piattaforma' },
     { t:'Nomina del collaudatore statico', h:2, rif:'art. 67 DPR 380/2001', cond:'strutture' }
   ]},
-  { k:'impianti', nome:'8. Progetto impianti', ic:'⚡', dur:28, cond:'impianti', att:[
+  { k:'impianti', nome:'10. Progetto impianti', ic:'⚡', dur:28, cond:'impianti', att:[
     { t:'Progetto impianto elettrico e schemi quadri', h:20, rif:'DM 37/2008 - CEI 64-8', cond:'impianti' },
     { t:'Progetto impianto termomeccanico e produzione ACS', h:20, cond:'impianti' },
     { t:'Progetto impianto idrico-sanitario e scarichi', h:12, cond:'impianti' },
@@ -992,7 +1097,7 @@ privato: {
     { t:'Verifica dei requisiti acustici passivi', h:8, rif:'DPCM 5/12/1997', cond:'acustica' },
     { t:'Coordinamento delle interferenze impianti-strutture', h:10, cond:'impianti' }
   ]},
-  { k:'esecutivo', nome:'9. Progetto esecutivo', ic:'📏', dur:35, att:[
+  { k:'esecutivo', nome:'11. Progetto esecutivo', ic:'📏', dur:35, att:[
     { t:'Elaborati esecutivi architettonici in scala 1:50', h:40 },
     { t:'Dettagli costruttivi 1:20 e 1:5', h:32 },
     { t:'Abaco dei serramenti e delle finiture', h:12 },
@@ -1005,25 +1110,25 @@ privato: {
     { t:'Piano di manutenzione dell’opera', h:10 },
     { t:'Verifica finale di coerenza tra tutti gli elaborati', h:8, ms:1 }
   ]},
-  { k:'sicurezza', nome:'10. Sicurezza in fase di progettazione', ic:'🦺', dur:14, cond:'sicurezza', att:[
-    { t:'Nomina del Coordinatore per la Sicurezza in Progettazione', h:1, rif:'art. 91 D.Lgs 81/2008', cond:'sicurezza' },
+  { k:'sicurezza', nome:'12. Sicurezza in fase di progettazione', ic:'🦺', dur:14, cond:'sicurezza', att:[
+    { t:'Nomina del Coordinatore per la Sicurezza in Progettazione', h:1, rif:'art. 91 D.Lgs 81/2008', cond:'sicurezza', cat:'firma_cliente' },
     { t:'Piano di Sicurezza e Coordinamento (PSC)', h:28, rif:'All. XV D.Lgs 81/2008', cond:'sicurezza', ms:1 },
     { t:'Layout di cantiere e analisi delle interferenze', h:10, cond:'sicurezza' },
     { t:'Stima analitica dei costi della sicurezza', h:8, cond:'sicurezza' },
     { t:'Fascicolo dell’opera', h:12, rif:'All. XVI D.Lgs 81/2008', cond:'sicurezza' },
     { t:'Piano di lavoro per la rimozione dell’amianto', h:10, rif:'art. 256 D.Lgs 81/2008', cond:'amianto' }
   ]},
-  { k:'affidamento', nome:'11. Affidamento dei lavori', ic:'🤝', dur:30, att:[
+  { k:'affidamento', nome:'13. Affidamento dei lavori', ic:'🤝', dur:30, att:[
     { t:'Predisposizione della lettera di invito e degli elaborati di gara', h:6 },
     { t:'Richiesta di offerta alle imprese', h:4 },
     { t:'Quadro comparativo delle offerte', h:8 },
     { t:'Verifica dell’idoneità tecnico-professionale delle imprese', h:4, rif:'All. XVII D.Lgs 81/2008' },
     { t:'Verifica DURC e regolarità contributiva', h:2 },
-    { t:'Assistenza alla stipula del contratto d’appalto', h:6, ms:1 }
+    { t:'Assistenza alla stipula del contratto d’appalto', h:6, ms:1, cat:'firma_cliente' }
   ]},
-  { k:'dl', nome:'12. Direzione lavori ed esecuzione', ic:'👷', dur:180, cond:'dl', att:[
-    { t:'Nomina del Direttore dei Lavori e del CSE', h:1, cond:'dl' },
-    { t:'Notifica preliminare all’ASL e all’Ispettorato del Lavoro', h:2, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza' },
+  { k:'dl', nome:'14. Direzione lavori ed esecuzione', ic:'👷', dur:180, cond:'dl', att:[
+    { t:'Nomina del Direttore dei Lavori e del CSE', h:1, cond:'dl', cat:'firma_cliente' },
+    { t:'Notifica preliminare all’ASL e all’Ispettorato del Lavoro', h:2, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza', cat:'piattaforma' },
     { t:'Verbale di consegna dei lavori', h:3, cond:'dl', ms:1 },
     { t:'Verifica dei piani operativi di sicurezza (POS)', h:6, cond:'sicurezza' },
     { t:'Tenuta del giornale dei lavori', h:24, cond:'dl' },
@@ -1036,16 +1141,16 @@ privato: {
     { t:'Contabilità finale e relazione sul conto finale', h:12, cond:'dl' },
     { t:'Verbale di ultimazione dei lavori', h:2, cond:'dl', ms:1 }
   ]},
-  { k:'chiusura', nome:'13. Chiusura, conformità e agibilità', ic:'✅', dur:60, att:[
+  { k:'chiusura', nome:'15. Chiusura, conformità e agibilità', ic:'✅', dur:60, att:[
     { t:'Raccolta delle dichiarazioni di conformità degli impianti', h:4, rif:'DM 37/2008', cond:'impianti' },
     { t:'Relazione a struttura ultimata', h:6, rif:'art. 65 DPR 380/2001', cond:'strutture' },
-    { t:'Collaudo statico e deposito del certificato', h:8, rif:'art. 67 DPR 380/2001', cond:'strutture', ms:1 },
+    { t:'Collaudo statico e deposito del certificato', h:8, rif:'art. 67 DPR 380/2001', cond:'strutture', ms:1, cat:'piattaforma' },
     { t:'Attestato di Prestazione Energetica finale', h:5, cond:'energetico' },
     { t:'Collaudo acustico in opera', h:6, cond:'acustica', opt:1 },
-    { t:'SCIA antincendio e richiesta CPI', h:10, ente:'Vigili del Fuoco', rif:'art. 4 DPR 151/2011', cond:'vvf', ms:1 },
-    { t:'Aggiornamento catastale DOCFA / Pregeo', h:8, cond:'catasto', ms:1 },
+    { t:'SCIA antincendio e richiesta CPI', h:10, ente:'Vigili del Fuoco', rif:'art. 4 DPR 151/2011', cond:'vvf', ms:1, cat:'piattaforma' },
+    { t:'Aggiornamento catastale DOCFA / Pregeo', h:8, cond:'catasto', ms:1, cat:'piattaforma' },
     { t:'Dichiarazione di conformità delle opere al progetto autorizzato', h:3 },
-    { t:'SCIA di agibilità', h:8, ente:'Comune / SUE', rif:'art. 24 DPR 380/2001', cond:'agibilita', ms:1 },
+    { t:'SCIA di agibilità', h:8, ente:'Comune / SUE', rif:'art. 24 DPR 380/2001', cond:'agibilita', ms:1, cat:'piattaforma' },
     { t:'Consegna del fascicolo finale alla committenza', h:4, ms:1 },
     { t:'Emissione della fattura a saldo', h:1 },
     { t:'Archiviazione digitale della commessa', h:3 }
@@ -1056,7 +1161,7 @@ privato: {
 /* ------------------------------ OPERA PUBBLICA ------------------------------ */
 pubblico: {
   label: 'Opera pubblica — D.Lgs 36/2023',
-  desc:  'PFTE, definitivo ed esecutivo, verifica e validazione, conferenza di servizi, gara, DL e collaudo.',
+  desc:  'Due soli livelli di progettazione (PFTE ed esecutivo). I pareri si raccolgono in conferenza di servizi sul PFTE: la documentazione che li alimenta va prodotta prima, non dopo.',
   fasi: [
   { k:'avvio', nome:'1. Avvio e programmazione', ic:'📋', dur:20, att:[
     { t:'Acquisizione del documento di indirizzo alla progettazione (DIP)', h:4 },
@@ -1066,41 +1171,56 @@ pubblico: {
     { t:'Ricognizione documentale e vincoli sull’area', h:8 },
     { t:'Verifica della disponibilità delle aree e degli immobili', h:6 }
   ]},
-  { k:'pfte', nome:'2. Progetto di fattibilità tecnica ed economica', ic:'📐', dur:60, att:[
+  { k:'enti', nome:'2. Enti coinvolti e documentazione preliminare per i pareri', ic:'🗺️', dur:25,
+    desc:'Fase decisiva per i tempi. I pareri arrivano in conferenza di servizi sul PFTE, con termini di 60 giorni (90 per paesaggio, cultura e ambiente): la documentazione che li alimenta va avviata subito, in parallelo al PFTE. Lo stralcio archeologico si può trasmettere alla Soprintendenza anche prima che il PFTE sia completo.', att:[
+    { t:'Mappatura degli enti competenti e degli atti di assenso necessari', h:6, ms:1, cat:'prereq_parere' },
+    { t:'Individuazione, per ciascun ente, degli elaborati che condizionano il parere', h:6, ms:1, cat:'prereq_parere' },
+    { t:'Cronoprogramma a ritroso dalla data della conferenza di servizi', h:6, ms:1, cat:'prereq_parere' },
+    { t:'Rilievi topografici e stato di consistenza', h:20, cat:'prereq_parere' },
+    { t:'Indagini geognostiche e relazione geologica preliminare', h:16, cond:'geologia', cat:'prereq_parere' },
+    { t:'Stralcio del PFTE sufficiente ai fini archeologici, da trasmettere subito alla Soprintendenza', h:10, ente:'Soprintendenza Archeologia', rif:'art. 41 c.4 e All. I.8 D.Lgs 36/2023', cond:'archeologico', ms:1, cat:'prereq_parere' },
+    { t:'Relazione paesaggistica preliminare', h:14, cond:'paesaggistico', cat:'prereq_parere' },
+    { t:'Studio di prefattibilità ambientale', h:16, cat:'prereq_parere' },
+    { t:'Documentazione per la verifica di assoggettabilità a VIA', h:20, cond:'via', cat:'prereq_parere' },
+    { t:'Documentazione idraulica e compatibilità con il PAI', h:12, cond:'idraulico', cat:'prereq_parere' },
+    { t:'Relazione preliminare antincendio', h:12, cond:'vvf', cat:'prereq_parere' },
+    { t:'Incontri preliminari con gli enti per anticipare le prescrizioni', h:10 }
+  ]},
+  { k:'pfte', nome:'3. Progetto di fattibilità tecnica ed economica', ic:'📐', dur:60,
+    desc:'Contenuti minimi all’Allegato I.7. Il PFTE è il livello su cui si esprimono gli enti: quanto più è completo, tanto meno integrazioni arriveranno in conferenza.', att:[
     { t:'Relazione generale e quadro esigenziale', h:16 },
-    { t:'Rilievi, indagini preliminari e studi specialistici', h:24 },
-    { t:'Relazione geologica e idrologica', h:12, cond:'geologia' },
-    { t:'Studio di prefattibilità ambientale', h:16 },
-    { t:'Verifica preventiva dell’interesse archeologico', h:10, cond:'archeologico' },
+    { t:'Documento di fattibilità delle alternative progettuali', h:20 },
+    { t:'Relazione geologica, idrologica e geotecnica', h:16, cond:'geologia' },
+    { t:'Relazione di verifica preventiva dell’interesse archeologico', h:10, cond:'archeologico', rif:'All. I.8 D.Lgs 36/2023' },
+    { t:'Studio di impatto ambientale', h:30, cond:'via' },
     { t:'Elaborati grafici di inquadramento e soluzione progettuale', h:40 },
+    { t:'Modelli informativi e relazioni specialistiche', h:24, opt:1 },
     { t:'Prime indicazioni per la stesura del PSC', h:8, cond:'sicurezza' },
     { t:'Computo estimativo e quadro economico', h:16 },
     { t:'Cronoprogramma e piano economico-finanziario', h:8 },
-    { t:'Approvazione del PFTE da parte della stazione appaltante', h:2, ms:1 }
+    { t:'Verifica di completezza rispetto all’Allegato I.7', h:6, ms:1 },
+    { t:'Trasmissione del PFTE alla stazione appaltante', h:2, ms:1 }
   ]},
-  { k:'autorizzazioni', nome:'3. Autorizzazioni e conferenza di servizi', ic:'🏛️', dur:120, att:[
-    { t:'Individuazione degli enti coinvolti e degli atti di assenso', h:6, ms:1 },
-    { t:'Indizione della conferenza di servizi', h:4, rif:'art. 14 L. 241/1990', ms:1 },
-    { t:'Relazione paesaggistica e istanza di autorizzazione', h:16, cond:'paesaggistico' },
-    { t:'Istanza alla Soprintendenza per beni tutelati', h:10, cond:'monumentale' },
-    { t:'Valutazione di impatto ambientale o screening', h:24, cond:'via' },
-    { t:'Istanza di autorizzazione al vincolo idrogeologico', h:6, cond:'idrogeologico' },
-    { t:'Parere idraulico e compatibilità con il PAI', h:8, cond:'idraulico' },
-    { t:'Valutazione del progetto antincendio', h:20, ente:'Vigili del Fuoco', cond:'vvf' },
-    { t:'Recepimento delle prescrizioni nella progettazione', h:16, ms:1 },
-    { t:'Determinazione conclusiva della conferenza di servizi', h:2, ms:1 }
+  { k:'cds', nome:'4. Conferenza di servizi sul PFTE', ic:'🏛️', dur:90,
+    desc:'Conferenza decisoria in forma semplificata e modalità asincrona. Termini: 60 giorni per i pareri, 90 per gli enti preposti alla tutela di paesaggio, beni culturali e ambiente. La determinazione conclusiva approva il progetto e vale come variante urbanistica.', att:[
+    { t:'Supporto al RUP per l’indizione della conferenza di servizi', h:6, rif:'art. 38 D.Lgs 36/2023', ms:1 },
+    { t:'Predisposizione del fascicolo per ciascun ente convocato', h:12, cat:'prereq_parere' },
+    { t:'Presidio dei termini e solleciti agli enti silenti', h:10 },
+    { t:'Riscontro alle richieste di chiarimento', h:16 },
+    { t:'Recepimento delle prescrizioni negli elaborati', h:24, ms:1 },
+    { t:'Determinazione conclusiva della conferenza di servizi', h:2, ms:1 },
+    { t:'Verifica degli effetti di variante urbanistica', h:6, opt:1 }
   ]},
-  { k:'definitivo', nome:'4. Progetto definitivo', ic:'✏️', dur:60, att:[
-    { t:'Relazione generale e relazioni specialistiche', h:32 },
-    { t:'Elaborati grafici architettonici', h:60 },
-    { t:'Progetto strutturale definitivo', h:50, cond:'strutture' },
-    { t:'Progetto impiantistico definitivo', h:40, cond:'impianti' },
-    { t:'Disciplinare descrittivo e prestazionale', h:14 },
-    { t:'Piano particellare di esproprio', h:16, opt:1 },
-    { t:'Computo metrico estimativo e quadro economico', h:24 },
-    { t:'Aggiornamento delle prime indicazioni sulla sicurezza', h:8, cond:'sicurezza' }
+  { k:'definitivo', nome:'5. Progetto definitivo (solo se richiesto)', ic:'✏️', dur:60, cond:'definitivo',
+    desc:'Il D.Lgs 36/2023 ha ridotto i livelli a due: PFTE ed esecutivo. Attiva questa fase solo se la stazione appaltante lo richiede espressamente o per procedimenti avviati sotto la disciplina previgente.', att:[
+    { t:'Relazione generale e relazioni specialistiche', h:32, cond:'definitivo' },
+    { t:'Elaborati grafici architettonici', h:60, cond:'definitivo' },
+    { t:'Progetto strutturale definitivo', h:50, cond:'definitivo' },
+    { t:'Progetto impiantistico definitivo', h:40, cond:'definitivo' },
+    { t:'Disciplinare descrittivo e prestazionale', h:14, cond:'definitivo' },
+    { t:'Computo metrico estimativo e quadro economico', h:24, cond:'definitivo' }
   ]},
-  { k:'esecutivo', nome:'5. Progetto esecutivo', ic:'📏', dur:60, att:[
+  { k:'esecutivo', nome:'6. Progetto esecutivo', ic:'📏', dur:60, att:[
     { t:'Relazione generale e relazioni di calcolo', h:32 },
     { t:'Elaborati esecutivi architettonici e dettagli', h:70 },
     { t:'Elaborati esecutivi strutturali e piani di manutenzione', h:60, cond:'strutture' },
@@ -1111,9 +1231,11 @@ pubblico: {
     { t:'Computo metrico, elenco prezzi e analisi prezzi', h:30 },
     { t:'Schema di contratto e capitolato speciale d’appalto', h:24 },
     { t:'Cronoprogramma esecutivo', h:8 },
-    { t:'Quadro di incidenza della manodopera', h:6 }
+    { t:'Quadro di incidenza della manodopera', h:6 },
+    { t:'Piano particellare di esproprio', h:16, opt:1 },
+    { t:'Verifica di coerenza con le prescrizioni della conferenza di servizi', h:8, ms:1 }
   ]},
-  { k:'verifica', nome:'6. Verifica e validazione', ic:'🔍', dur:45, att:[
+  { k:'verifica', nome:'7. Verifica e validazione', ic:'🔍', dur:45, att:[
     { t:'Consegna del progetto al soggetto verificatore', h:4, rif:'art. 42 D.Lgs 36/2023', ms:1 },
     { t:'Gestione dei rilievi del verificatore', h:24 },
     { t:'Adeguamento degli elaborati alle osservazioni', h:32 },
@@ -1121,36 +1243,37 @@ pubblico: {
     { t:'Validazione del progetto da parte del RUP', h:2, ms:1 },
     { t:'Approvazione del progetto esecutivo', h:2, ms:1 }
   ]},
-  { k:'gara', nome:'7. Gara e affidamento', ic:'🤝', dur:90, att:[
+  { k:'gara', nome:'8. Gara e affidamento', ic:'🤝', dur:90, att:[
     { t:'Supporto alla predisposizione del bando e del disciplinare', h:16 },
-    { t:'Predisposizione degli elaborati per la piattaforma telematica', h:10 },
+    { t:'Predisposizione degli elaborati per la piattaforma telematica', h:10, cat:'piattaforma' },
     { t:'Risposta ai chiarimenti dei concorrenti', h:12 },
     { t:'Supporto alla commissione giudicatrice', h:16, opt:1 },
     { t:'Verifica dell’anomalia dell’offerta', h:10, opt:1 },
     { t:'Aggiudicazione e stipula del contratto', h:6, ms:1 }
   ]},
-  { k:'dl', nome:'8. Direzione lavori ed esecuzione', ic:'👷', dur:365, cond:'dl', att:[
+  { k:'dl', nome:'9. Direzione lavori ed esecuzione', ic:'👷', dur:365, cond:'dl', att:[
     { t:'Nomina dell’ufficio di direzione lavori e del CSE', h:2, cond:'dl' },
     { t:'Verbale di consegna dei lavori', h:4, cond:'dl', ms:1 },
-    { t:'Notifica preliminare', h:2, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza' },
+    { t:'Notifica preliminare', h:2, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza', cat:'piattaforma' },
     { t:'Verifica dei POS e riunioni di coordinamento', h:40, cond:'sicurezza' },
     { t:'Giornale dei lavori e libretto delle misure', h:60, cond:'dl' },
     { t:'Registro di contabilità e sommario', h:40, cond:'dl' },
     { t:'Emissione dei SAL e dei certificati di pagamento', h:30, cond:'dl' },
     { t:'Gestione di varianti e perizie suppletive', h:24, cond:'dl', opt:1 },
     { t:'Gestione di riserve e contestazioni', h:16, opt:1 },
+    { t:'Verifica di ottemperanza alle prescrizioni degli enti', h:8 },
     { t:'Verbale di ultimazione dei lavori', h:3, cond:'dl', ms:1 },
     { t:'Conto finale e relazione del RUP', h:16, cond:'dl' }
   ]},
-  { k:'collaudo', nome:'9. Collaudo e chiusura', ic:'✅', dur:90, att:[
+  { k:'collaudo', nome:'10. Collaudo e chiusura', ic:'✅', dur:90, att:[
     { t:'Nomina del collaudatore', h:2 },
     { t:'Visite di collaudo in corso d’opera', h:16, opt:1 },
     { t:'Collaudo statico', h:12, cond:'strutture', ms:1 },
     { t:'Collaudo tecnico-amministrativo o CRE', h:16, ms:1 },
     { t:'Verifica delle dichiarazioni di conformità impianti', h:6, cond:'impianti' },
     { t:'Certificazione energetica finale', h:6, cond:'energetico' },
-    { t:'SCIA antincendio e CPI', h:12, ente:'Vigili del Fuoco', cond:'vvf' },
-    { t:'Aggiornamento catastale', h:8, cond:'catasto' },
+    { t:'SCIA antincendio e CPI', h:12, ente:'Vigili del Fuoco', cond:'vvf', cat:'piattaforma' },
+    { t:'Aggiornamento catastale', h:8, cond:'catasto', cat:'piattaforma' },
     { t:'Consegna degli elaborati as-built', h:16 },
     { t:'Svincolo delle garanzie e saldo finale', h:4, ms:1 },
     { t:'Archiviazione della commessa', h:4 }
@@ -1168,16 +1291,24 @@ strutture: {
     { t:'Rilievo strutturale dello stato di fatto', h:12, opt:1 },
     { t:'Ricerca documentale sui progetti strutturali pregressi', h:4, opt:1 },
     { t:'Definizione della classe d’uso e della vita nominale', h:2, rif:'NTC 2018 §2.4' },
-    { t:'Lettera d’incarico sottoscritta', h:2, ms:1 }
+    { t:'Lettera d’incarico sottoscritta', h:2, ms:1, cat:'firma_cliente' }
   ]},
-  { k:'indagini', nome:'2. Indagini e caratterizzazione', ic:'🪨', dur:30, att:[
+  { k:'firme', nome:'2. Dati definitivi e firme del cliente', ic:'✍️', dur:7,
+    desc:'Il deposito sismico e la denuncia delle opere in c.a. si presentano telematicamente: le relative procure vanno raccolte adesso, non a calcolo finito.', att:[
+    { t:'Congelamento dei dati anagrafici e catastali', h:2, ms:1, cat:'piattaforma' },
+    { t:'Pre-generazione delle procure per deposito sismico e denuncia opere in c.a.', h:2, rif:'art. 1392 c.c.', ms:1, cat:'piattaforma' },
+    { t:'Raccolta della copia del documento d’identità di ogni sottoscrittore', h:1, cat:'firma_cliente' },
+    { t:'UNICO appuntamento per la firma di procure e dichiarazioni', h:2, ms:1, cat:'firma_cliente' },
+    { t:'Scansione, firma digitale del tecnico e conservazione degli originali', h:1, cat:'piattaforma' }
+  ]},
+  { k:'indagini', nome:'3. Indagini e caratterizzazione', ic:'🪨', dur:30, att:[
     { t:'Programma delle indagini geognostiche', h:3, cond:'geologia' },
     { t:'Relazione geologica', h:4, cond:'geologia', ms:1 },
     { t:'Relazione geotecnica e parametri di progetto', h:10, cond:'geologia' },
     { t:'Indagini sui materiali esistenti e livello di conoscenza', h:12, rif:'NTC 2018 §8.5', opt:1 },
     { t:'Rilievo del quadro fessurativo e dei dissesti', h:8, opt:1 }
   ]},
-  { k:'calcolo', nome:'3. Analisi e calcolo strutturale', ic:'🏗️', dur:35, att:[
+  { k:'calcolo', nome:'4. Analisi e calcolo strutturale', ic:'🏗️', dur:35, att:[
     { t:'Definizione dello schema statico e delle azioni di progetto', h:10, rif:'NTC 2018 §3' },
     { t:'Modellazione agli elementi finiti', h:28 },
     { t:'Analisi sismica e verifiche di regolarità', h:20, rif:'NTC 2018 §7' },
@@ -1186,7 +1317,7 @@ strutture: {
     { t:'Verifiche degli elementi non strutturali', h:6, opt:1 },
     { t:'Controllo e validazione dei risultati del calcolo', h:8, ms:1 }
   ]},
-  { k:'elaborati', nome:'4. Elaborati strutturali', ic:'📏', dur:25, att:[
+  { k:'elaborati', nome:'5. Elaborati strutturali', ic:'📏', dur:25, att:[
     { t:'Relazione di calcolo strutturale', h:16 },
     { t:'Relazione sui materiali', h:6 },
     { t:'Relazione geotecnica e sulle fondazioni', h:8 },
@@ -1195,15 +1326,16 @@ strutture: {
     { t:'Piano di manutenzione della parte strutturale', h:8 },
     { t:'Fascicolo dei calcoli e tabulati di verifica', h:6 }
   ]},
-  { k:'deposito', nome:'5. Deposito e autorizzazione sismica', ic:'🏛️', dur:60, att:[
-    { t:'Predisposizione della modulistica regionale', h:4 },
-    { t:'Autorizzazione sismica preventiva', h:6, ente:'Genio Civile', rif:'art. 94 DPR 380/2001', cond:'sismica_aut', ms:1 },
-    { t:'Deposito sismico', h:4, ente:'Genio Civile', rif:'art. 93 DPR 380/2001', ms:1 },
-    { t:'Denuncia delle opere in c.a.', h:3, rif:'art. 65 DPR 380/2001', ms:1 },
+  { k:'deposito', nome:'6. Deposito e autorizzazione sismica', ic:'🏛️', dur:60, att:[
+    { t:'Predisposizione della modulistica regionale', h:4, cat:'piattaforma' },
+    { t:'Verifica che i dati coincidano con quelli della procura già firmata', h:1, ms:1, cat:'piattaforma' },
+    { t:'Autorizzazione sismica preventiva', h:6, ente:'Genio Civile', rif:'art. 94 DPR 380/2001', cond:'sismica_aut', ms:1, cat:'piattaforma' },
+    { t:'Deposito sismico', h:4, ente:'Genio Civile', rif:'art. 93 DPR 380/2001', ms:1, cat:'piattaforma' },
+    { t:'Denuncia delle opere in c.a.', h:3, rif:'art. 65 DPR 380/2001', ms:1, cat:'piattaforma' },
     { t:'Gestione delle richieste di integrazione', h:8 },
     { t:'Nomina del collaudatore statico', h:2, rif:'art. 67 DPR 380/2001' }
   ]},
-  { k:'esecuzione', nome:'6. Direzione lavori strutturale', ic:'👷', dur:150, cond:'dl', att:[
+  { k:'esecuzione', nome:'7. Direzione lavori strutturale', ic:'👷', dur:150, cond:'dl', att:[
     { t:'Verbale di inizio delle opere strutturali', h:2, cond:'dl' },
     { t:'Controllo delle forniture e accettazione dei materiali', h:16, cond:'dl' },
     { t:'Prelievo dei campioni e prove di laboratorio', h:12, cond:'dl' },
@@ -1212,11 +1344,11 @@ strutture: {
     { t:'Gestione delle varianti strutturali', h:12, cond:'dl', opt:1 },
     { t:'Relazione a struttura ultimata', h:8, rif:'art. 65 DPR 380/2001', ms:1 }
   ]},
-  { k:'collaudo', nome:'7. Collaudo statico', ic:'✅', dur:45, att:[
+  { k:'collaudo', nome:'8. Collaudo statico', ic:'✅', dur:45, att:[
     { t:'Trasmissione della documentazione al collaudatore', h:4 },
     { t:'Assistenza alle prove di collaudo', h:8 },
     { t:'Certificato di collaudo statico', h:4, ms:1 },
-    { t:'Deposito del certificato di collaudo', h:3, ente:'Genio Civile', ms:1 },
+    { t:'Deposito del certificato di collaudo', h:3, ente:'Genio Civile', ms:1, cat:'piattaforma' },
     { t:'Consegna del fascicolo strutturale', h:4 }
   ]}
   ]
@@ -1226,43 +1358,54 @@ strutture: {
 vincolo: {
   label: 'Pratica autorizzativa su bene vincolato',
   desc:  'Incarico focalizzato su Soprintendenza, paesaggio e pareri di enti terzi, senza progettazione esecutiva completa.',
+  pratBase: ['titolo_edilizio'],
   fasi: [
   { k:'avvio', nome:'1. Avvio e ricognizione dei vincoli', ic:'📋', dur:14, att:[
     { t:'Sopralluogo e documentazione fotografica di dettaglio', h:8 },
     { t:'Ricognizione dei vincoli e reperimento dei decreti', h:6, ms:1 },
     { t:'Verifica dell’ambito di tutela e della competenza dell’ente', h:4 },
     { t:'Ricerca storica e d’archivio sull’immobile', h:12, cond:'monumentale' },
-    { t:'Lettera d’incarico sottoscritta', h:2, ms:1 }
+    { t:'Lettera d’incarico sottoscritta', h:2, ms:1, cat:'firma_cliente' }
   ]},
-  { k:'analisi', nome:'2. Analisi e rilievo', ic:'🔍', dur:25, att:[
+  { k:'firme', nome:'2. Dati definitivi e firme del cliente', ic:'✍️', dur:7,
+    desc:'Le istanze agli enti si presentano telematicamente per conto del committente: procure e assensi vanno raccolti prima di iniziare, non fra un’istanza e l’altra.', att:[
+    { t:'Congelamento dei dati anagrafici e catastali', h:2, ms:1, cat:'piattaforma' },
+    { t:'Pre-generazione delle procure di tutte le istanze previste', h:2, rif:'art. 1392 c.c.', ms:1, cat:'piattaforma' },
+    { t:'Raccolta della copia del documento d’identità di ogni sottoscrittore', h:1, cat:'firma_cliente' },
+    { t:'UNICO appuntamento per la firma di procure, assensi e dichiarazioni', h:2, ms:1, cat:'firma_cliente' },
+    { t:'Assenso dei comproprietari e dei titolari di altri diritti reali', h:2, cat:'firma_cliente' },
+    { t:'Scansione, firma digitale del tecnico e conservazione degli originali', h:1, cat:'piattaforma' }
+  ]},
+  { k:'analisi', nome:'3. Analisi e rilievo', ic:'🔍', dur:25, att:[
     { t:'Rilievo geometrico e materico', h:20 },
     { t:'Rilievo del degrado e mappatura dei materiali', h:16, cond:'monumentale' },
     { t:'Analisi stratigrafica e saggi conoscitivi', h:12, cond:'monumentale', opt:1 },
     { t:'Restituzione grafica dello stato di fatto', h:24 },
     { t:'Verifica preventiva dell’interesse archeologico', h:8, cond:'archeologico' }
   ]},
-  { k:'progetto', nome:'3. Progetto di intervento', ic:'📐', dur:30, att:[
+  { k:'progetto', nome:'4. Progetto di intervento', ic:'📐', dur:30, att:[
     { t:'Elaborati di progetto e comparativi', h:32 },
     { t:'Relazione tecnica e illustrativa dell’intervento', h:12 },
-    { t:'Relazione paesaggistica', h:16, rif:'DPCM 12/12/2005', cond:'paesaggistico', ms:1 },
-    { t:'Relazione storico-artistica', h:14, cond:'monumentale' },
+    { t:'Relazione paesaggistica', h:16, rif:'DPCM 12/12/2005', cond:'paesaggistico', ms:1, cat:'prereq_parere' },
+    { t:'Relazione storico-artistica', h:14, cond:'monumentale', cat:'prereq_parere' },
     { t:'Progetto di restauro e schede di intervento', h:24, cond:'monumentale' },
     { t:'Fotoinserimenti e simulazioni', h:12, cond:'paesaggistico' },
     { t:'Computo metrico dell’intervento', h:10 }
   ]},
-  { k:'istanze', nome:'4. Istanze agli enti', ic:'🏛️', dur:120, att:[
-    { t:'Istanza di autorizzazione paesaggistica', h:6, ente:'Soprintendenza', rif:'art. 146 D.Lgs 42/2004', cond:'paesaggistico', ms:1 },
+  { k:'istanze', nome:'5. Istanze agli enti', ic:'🏛️', dur:120, att:[
+    { t:'Istanza di autorizzazione paesaggistica', h:6, ente:'Soprintendenza', rif:'art. 146 D.Lgs 42/2004', cond:'paesaggistico', ms:1, cat:'piattaforma' },
     { t:'Parere della Commissione Locale per il Paesaggio', h:3, ente:'Comune', cond:'paesaggistico' },
-    { t:'Istanza di autorizzazione su bene culturale', h:8, ente:'Soprintendenza', rif:'art. 21 D.Lgs 42/2004', cond:'monumentale', ms:1 },
+    { t:'Istanza di autorizzazione su bene culturale', h:8, ente:'Soprintendenza', rif:'art. 21 D.Lgs 42/2004', cond:'monumentale', ms:1, cat:'piattaforma' },
     { t:'Istanza di verifica dell’interesse culturale', h:6, rif:'art. 12 D.Lgs 42/2004', cond:'monumentale', opt:1 },
-    { t:'Istanza di autorizzazione al vincolo idrogeologico', h:5, cond:'idrogeologico' },
+    { t:'Istanza di autorizzazione al vincolo idrogeologico', h:5, cond:'idrogeologico', cat:'piattaforma' },
     { t:'Parere idraulico', h:6, cond:'idraulico' },
-    { t:'Titolo edilizio comunale', h:10, ente:'Comune / SUE', ms:1 },
+    { t:'Titolo edilizio comunale', h:10, ente:'Comune / SUE', ms:1, cat:'piattaforma' },
+    { t:'Presidio delle scadenze e solleciti agli uffici', h:6 },
     { t:'Gestione delle richieste di integrazione', h:12 },
     { t:'Acquisizione dei provvedimenti finali', h:2, ms:1 }
   ]},
-  { k:'esecuzione', nome:'5. Esecuzione e chiusura', ic:'✅', dur:120, att:[
-    { t:'Comunicazione di inizio lavori agli enti autorizzanti', h:3 },
+  { k:'esecuzione', nome:'6. Esecuzione e chiusura', ic:'✅', dur:120, att:[
+    { t:'Comunicazione di inizio lavori agli enti autorizzanti', h:3, cat:'piattaforma' },
     { t:'Assistenza all’alta sorveglianza della Soprintendenza', h:16, cond:'monumentale' },
     { t:'Verifica di ottemperanza alle prescrizioni', h:8, ms:1 },
     { t:'Documentazione fotografica di fine intervento', h:6 },
@@ -1281,8 +1424,6 @@ vuoto: {
   ]
 }
 };
-
-/* Etichette rapide per priorità e tipi di evento pratica */
 const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','sopralluogo','parere','rilascio','nota'];
 </script>
 <script>
@@ -1290,7 +1431,7 @@ const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','soprall
    DATI
    =========================================================================== */
 const TASK_COLS = 'id,title,project_id,commessa_fase_id,assignee_id,responsabile_id,status,priority,'
-                + 'due_date,estimated_hours,notes,sort_order,is_milestone,opzionale,ente,rif_normativo,'
+                + 'due_date,estimated_hours,notes,sort_order,is_milestone,opzionale,ente,rif_normativo,categoria,'
                 + 'completed_at,completed_by,created_by,created_at';
 
 async function loadAll(silent) {
@@ -1380,13 +1521,14 @@ function pianifica(tplKey, conds, dataInizio) {
     const inizio = new Date(cursor.getTime());
     const fine   = addD(inizio, f.dur || 21);
     out.push({
-      fase_key: f.k, nome: f.nome, icona: f.ic, ordine: ord++,
+      fase_key: f.k, nome: f.nome, icona: f.ic, ordine: ord++, desc: f.desc || null,
       data_inizio: iso(inizio), data_fine_prevista: iso(fine),
       att: att.map((a, i) => ({
         title: a.t,
         estimated_hours: a.h || null,
         rif_normativo: a.rif || null,
         ente: a.ente || null,
+        categoria: a.cat || null,
         is_milestone: !!a.ms,
         opzionale: !!a.opt,
         sort_order: i,
@@ -1397,7 +1539,16 @@ function pianifica(tplKey, conds, dataInizio) {
     cursor = addD(fine, -Math.round((f.dur || 21) * 0.25));  // fasi leggermente sovrapposte
   });
 
-  const prat = PRATICHE_CAT.filter(p => p.cond && conds.indexOf(p.cond) >= 0);
+  /* Quali pratiche creare.
+     tpl.prat     = elenco chiuso: il template genera solo queste (pratica snella)
+     tpl.pratBase = aggiunte fisse oltre a quelle guidate dalle condizioni
+     Senza questa distinzione una CILA per opere interne si portava dietro tutte
+     le pratiche delle condizioni attive, e il titolo edilizio - che non ha una
+     condizione propria - non veniva creato mai. */
+  const attiva = p => !p.cond || conds.indexOf(p.cond) >= 0;
+  const prat = PRATICHE_CAT.filter(p => tpl.prat
+    ? (tpl.prat.indexOf(p.k) >= 0 && attiva(p))
+    : ((p.cond && conds.indexOf(p.cond) >= 0) || (tpl.pratBase || []).indexOf(p.k) >= 0));
   return { fasi: out, pratiche: prat, tpl };
 }
 
@@ -1406,7 +1557,8 @@ async function generaStruttura(projectId, tplKey, conds, dataInizio) {
 
   const fasiRows = plan.fasi.map(f => ({
     project_id: projectId, fase_key: f.fase_key, nome: f.nome, icona: f.icona,
-    ordine: f.ordine, data_inizio: f.data_inizio, data_fine_prevista: f.data_fine_prevista,
+    descrizione: f.desc, ordine: f.ordine,
+    data_inizio: f.data_inizio, data_fine_prevista: f.data_fine_prevista,
     stato: 'non_avviata'
   }));
   if (!fasiRows.length) return { fasi:0, att:0, prat:0 };
@@ -1431,6 +1583,24 @@ async function generaStruttura(projectId, tplKey, conds, dataInizio) {
       template_key: tplKey, created_by: S.me.id
     }, a)));
   });
+
+  /* Una procura speciale per OGNI pratica telematica, tutte nella fase delle
+     firme: e' il motivo per cui quella fase sta all'inizio e non alla fine.
+     La procura vale per una sola pratica (art. 1392 c.c.), quindi vanno
+     generate e fatte firmare tutte nella stessa seduta. */
+  const faseFirme = mapFase['firme'];
+  if (faseFirme) {
+    const pianoFirme = plan.fasi.find(f => f.fase_key === 'firme');
+    const scad = pianoFirme ? pianoFirme.data_fine_prevista : null;
+    plan.pratiche.filter(x => x.proc).forEach((x, i) => attRows.push({
+      project_id: projectId, commessa_fase_id: faseFirme, status: 'da_fare',
+      title: 'Procura speciale — ' + x.ente + ': ' + x.tipo,
+      rif_normativo: 'art. 1392 c.c.', ente: x.ente,
+      categoria: 'firma_cliente', priority: 'alta',
+      estimated_hours: 0.5, sort_order: 100 + i, due_date: scad,
+      template_key: tplKey, created_by: S.me.id
+    }));
+  }
 
   let nAtt = 0;
   if (attRows.length) {
@@ -1755,7 +1925,7 @@ async function doLogout() {
 /* ===========================================================================
    ROUTER
    =========================================================================== */
-const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', projects:'Progetti', pratiche:'Pratiche & Enti',
+const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
 
@@ -1779,7 +1949,7 @@ function render() {
   el('top-act').innerHTML = '';
   closePop();
   const P = {
-    oggi:rOggi, scadenzario:rScadenzario, projects:rProjects, project:rProject,
+    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
     time:rTime, files:rFiles, users:rUsers
   };
@@ -1799,6 +1969,11 @@ function updBadges() {
   el('b-scad').classList.toggle('alert', sc > 0);
 
   el('b-proj').textContent = S.projects.filter(p => p.status === 'attivo' && !p.archiviato).length;
+
+  const nf = S.tasks.filter(t => t.categoria === 'firma_cliente' && isOpen(t)).length;
+  el('b-firme').textContent = nf;
+  el('b-firme').classList.toggle('alert', S.tasks.some(t =>
+    t.categoria === 'firma_cliente' && isOpen(t) && isLate(t.due_date)));
 
   const pr = S.pratiche.filter(praticaOpen).length;
   el('b-prat').textContent = pr;
@@ -1889,6 +2064,8 @@ function itemRow(t, showProj) {
   const late = !done && isLate(t.due_date);
   const sub  = [];
   if (showProj) sub.push('<span>' + esc(pn(t.project_id)) + '</span>');
+  if (t.categoria === 'piattaforma')   sub.push('<span>💻 portale telematico</span>');
+  if (t.categoria === 'prereq_parere') sub.push('<span style="color:var(--vio)">sblocca un parere</span>');
   if (t.ente)          sub.push('<span>🏛️ ' + esc(t.ente) + '</span>');
   if (t.rif_normativo) sub.push('<span>' + esc(t.rif_normativo) + '</span>');
   if (t.estimated_hours) sub.push('<span>' + t.estimated_hours + ' h</span>');
@@ -1898,7 +2075,8 @@ function itemRow(t, showProj) {
     + '<span class="ck ' + (done ? 'on' : wip ? 'wip' : '') + '" data-ck="' + t.id + '" title="Spunta / riapri">'
       + (done ? '✓' : wip ? '•' : '✓') + '</span>'
     + '<div class="it-m">'
-      + '<div class="it-t">' + (t.is_milestone ? '<b>' : '') + esc(t.title) + (t.is_milestone ? '</b> <span class="chip chip-a">milestone</span>' : '')
+      + '<div class="it-t">' + (t.categoria === 'firma_cliente' ? '<span title="Serve la firma del cliente">✍️ </span>' : '')
+      + (t.is_milestone ? '<b>' : '') + esc(t.title) + (t.is_milestone ? '</b> <span class="chip chip-a">milestone</span>' : '')
       + (t.opzionale ? ' <span class="chip">opzionale</span>' : '') + '</div>'
       + (sub.length ? '<div class="it-s">' + sub.join('<span style="color:var(--mut2)">·</span>') + '</div>' : '')
     + '</div>'
@@ -1939,6 +2117,7 @@ function checklist(pid) {
         + (canW() ? '<button class="btn btn-xs" data-fase="' + f.id + '">⚙</button>' : '')
       + '</div>'
       + '<div class="grp-b">'
+        + (f.descrizione ? '<div class="ibox" style="margin:10px 14px 4px;border-radius:6px">' + esc(f.descrizione) + '</div>' : '')
         + (list.length ? list.map(t => itemRow(t, false)).join('')
                        : '<div class="it"><span style="color:var(--mut);font-size:12px">Nessuna attività in questa fase.</span></div>')
         + (prat.length ? '<div style="padding:8px 14px;background:#fbfcfe;border-top:1px solid #eef1f5">'
@@ -2080,6 +2259,121 @@ function rScadenzario() {
         + '<td class="ac">' + (s.kind === 'task' ? bdg(s.obj.status) : bdg(s.obj.stato, ST_PRAT)) + '</td>'
       + '</tr>').join('')
     + '</tbody></table></div></div>').join('');
+}
+
+/* ===========================================================================
+   PAGINA: FIRME DEL CLIENTE
+   Raggruppa tutto cio' che il committente deve firmare, per commessa, cosi'
+   da convocarlo una volta sola. La procura speciale vale per una sola pratica:
+   se ne servono cinque, si firmano tutte e cinque nello stesso appuntamento.
+   =========================================================================== */
+function firmeAperte() {
+  return S.tasks.filter(t => t.categoria === 'firma_cliente' && isOpen(t));
+}
+
+function rFirme() {
+  el('crumb').textContent = 'Documenti che aspettano la firma del committente.';
+  const solo = S.fmProj || '';
+  el('top-act').innerHTML =
+      '<select class="sel" id="fm-p"><option value="">Tutte le commesse</option>'
+    + S.projects.filter(p => !p.archiviato).map(p => '<option value="' + p.id + '"'
+        + (solo === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
+    + '<label class="row" style="font-size:12px;color:var(--mut);gap:5px">'
+    + '<input type="checkbox" id="fm-all"' + (S.fmAll ? ' checked' : '') + '> mostra anche le firme già raccolte</label>';
+  el('fm-p').onchange  = e => { S.fmProj = e.target.value; render(); };
+  el('fm-all').onchange = e => { S.fmAll = e.target.checked; render(); };
+
+  let list = S.tasks.filter(t => t.categoria === 'firma_cliente');
+  if (!S.fmAll) list = list.filter(isOpen);
+  if (solo) list = list.filter(t => t.project_id === solo);
+
+  if (!list.length) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>✍️</i>'
+      + '<p>Nessun documento in attesa di firma.</p>'
+      + '<p style="font-size:12px;margin-top:6px">Le procure vengono create automaticamente '
+      + 'generando una commessa: una per ogni pratica telematica prevista.</p></div></div>';
+    return;
+  }
+
+  /* Ordine per scadenza: in cima quelle da raccogliere subito. Alcune firme
+     (nomina del DL, contratto d'appalto) maturano solo a lavori avviati e non
+     vanno chieste al primo appuntamento. */
+  const ord = (a, b) => {
+    const A = pd(a.due_date), B = pd(b.due_date);
+    if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
+  };
+  const per = {};
+  list.slice().sort(ord).forEach(t => (per[t.project_id] = per[t.project_id] || []).push(t));
+
+  el('page').innerHTML =
+      '<div class="ibox mb16">La <b>procura speciale</b> per la presentazione telematica vale per una '
+    + 'sola pratica (art. 1392 c.c.) e va firmata a mano, con copia del documento d’identità di ogni '
+    + 'sottoscrittore. Raccogliendole tutte in un unico appuntamento il cliente non deve tornare.<br>'
+    + '<b>Attenzione:</b> se dopo la firma cambiano anagrafica o dati catastali, le procure vanno '
+    + 'rigenerate sul portale e fatte rifirmare.</div>'
+    + Object.keys(per).map(pid => {
+        const p = byId(S.projects, pid) || {};
+        const aperte = per[pid].filter(isOpen).length;
+        const late = per[pid].some(t => isOpen(t) && isLate(t.due_date));
+        return '<div class="card mb16">'
+          + '<div class="card-h"><span class="card-t" data-proj="' + pid + '" style="cursor:pointer">'
+            + esc(pn(pid)) + (p.referente ? ' <span style="font-weight:400;color:var(--mut)">— ' + esc(p.referente) + '</span>' : '')
+            + ' <span class="chip' + (late ? ' chip-a' : '') + '">' + aperte + ' da firmare</span></span>'
+          + '<button class="btn btn-sm" data-stampa="' + pid + '">🖨 Stampa distinta</button></div>'
+          + per[pid].map(t => itemRow(t, false)).join('')
+          + '</div>';
+      }).join('');
+}
+
+/* Distinta cartacea da portare all'appuntamento */
+function stampaFirme(pid) {
+  const p = byId(S.projects, pid) || {};
+  const list = S.tasks.filter(t => t.categoria === 'firma_cliente' && t.project_id === pid && isOpen(t))
+    .sort((a, b) => {
+      const A = pd(a.due_date), B = pd(b.due_date);
+      if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
+    });
+  if (!list.length) return toast('Nessun documento da firmare per questa commessa.', 'error');
+
+  /* Separa cio' che serve entro un mese da cio' che maturera' piu' avanti:
+     al primo appuntamento non ha senso far firmare la nomina del DL. */
+  const limite = addD(today(), 30);
+  const ora  = list.filter(t => !t.due_date || pd(t.due_date) <= limite);
+  const poi  = list.filter(t => t.due_date && pd(t.due_date) > limite);
+  const riga = t => '<tr><td class="ck"></td><td>' + esc(t.title)
+    + (t.rif_normativo ? '<div class="rif">' + esc(t.rif_normativo) + '</div>' : '')
+    + '</td><td class="dt">' + (t.due_date ? fdate(t.due_date) : '') + '</td><td class="fi"></td></tr>';
+  const righe = ora.map(riga).join('')
+    + (poi.length ? '<tr><td colspan="4" class="sep">Più avanti nel percorso — non necessarie oggi</td></tr>'
+        + poi.map(riga).join('') : '');
+
+  const w = window.open('', '_blank');
+  if (!w) return toast('Il browser ha bloccato la finestra di stampa.', 'error');
+  w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">'
+    + '<title>Distinta firme — ' + esc(p.name || '') + '</title><style>'
+    + 'body{font-family:Helvetica,Arial,sans-serif;font-size:12pt;margin:28px;color:#111}'
+    + 'h1{font-size:15pt;margin:0 0 2px}h2{font-size:11pt;font-weight:400;color:#555;margin:0 0 18px}'
+    + 'table{width:100%;border-collapse:collapse;margin-top:10px}'
+    + 'td{border-bottom:1px solid #ccc;padding:9px 6px;vertical-align:top}'
+    + '.ck{width:26px}.ck:before{content:"";display:block;width:15px;height:15px;border:1.5px solid #333}'
+    + '.fi{width:32%;border-bottom:1px solid #ccc}.dt{width:74px;font-size:9.5pt;color:#666;white-space:nowrap}'
+    + '.sep{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.05em;padding-top:16px;border:none}'
+    + '.rif{font-size:9pt;color:#666;margin-top:2px}'
+    + '.hd{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.06em;border:none;padding-bottom:2px}'
+    + '.nota{margin-top:22px;font-size:9.5pt;color:#444;line-height:1.5;border-top:1px solid #ccc;padding-top:10px}'
+    + '</style></head><body>'
+    + '<h1>Distinta dei documenti da firmare</h1>'
+    + '<h2>' + esc(p.name || '') + (p.client ? ' — ' + esc(p.client) : '')
+    + (p.comune ? ' · ' + esc(p.comune) : '') + '</h2>'
+    + '<table><tr><td class="hd"></td><td class="hd">Documento</td><td class="hd">Entro il</td><td class="hd">Firma</td></tr>'
+    + righe + '</table>'
+    + '<div class="nota"><b>Da ricordare all’appuntamento:</b> copia di un documento d’identità in corso '
+    + 'di validità di <i>ogni</i> sottoscrittore; firma di tutti i comproprietari e dei titolari di altri '
+    + 'diritti reali. Ogni procura speciale vale per una sola pratica.<br><br>'
+    + 'Studio Tecnico SCS S.r.l. tra Professionisti · stampato il ' + fdate(todayISO()) + '</div>'
+    + '</body></html>');
+  w.document.close();
+  setTimeout(() => w.print(), 250);
 }
 
 /* ===========================================================================
@@ -3611,6 +3905,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj')))  { return goProject(n.dataset.proj); }
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
+    if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
     if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }

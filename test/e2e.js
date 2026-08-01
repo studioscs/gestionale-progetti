@@ -86,10 +86,11 @@ function launchOpts(){
     must(done===0,'task completati: '+done);
   });
   await t('avanzamento fase si aggiorna da solo',async()=>{
-    const cks=p.locator('.grp.open .ck');
-    const n=await cks.count();
-    for(let i=0;i<n;i++){ await cks.nth(0).click(); await p.waitForTimeout(60);
-      if(!(await p.locator('.grp.open .ck:not(.on)').count())) break; }
+    for(let i=0;i<40;i++){
+      const rimaste=p.locator('.grp.open .ck:not(.on)');
+      if(!(await rimaste.count())) break;
+      await rimaste.first().click(); await p.waitForTimeout(70);
+    }
     await p.waitForTimeout(400);
     const st=await p.evaluate(()=>__DB.commessa_fasi.map(f=>f.stato));
     must(st.includes('completata')||st.includes('in_corso'),'stati: '+st.slice(0,3));
@@ -317,6 +318,86 @@ function launchOpts(){
     must(await p.locator('tbody [data-nonnec]').count()===0,'viewer puo modificare le pratiche');
     await p.evaluate(()=>{ S.prof.role='admin'; render(); });
     await p.waitForTimeout(300);
+  });
+
+
+  // --- FIRME DEL CLIENTE ---
+  await t('procure generate: una per pratica telematica',async()=>{
+    const n=await p.evaluate(()=>__DB.tasks.filter(t=>t.categoria==='firma_cliente'&&/^Procura speciale/.test(t.title)).length);
+    const np=await p.evaluate(()=>__DB.commessa_pratiche.length);
+    must(n>0,'nessuna procura generata');
+    must(n<=np,'più procure che pratiche: '+n+' su '+np);
+  });
+  await t('le procure stanno nella fase delle firme, non in fondo',async()=>{
+    const ok=await p.evaluate(()=>{
+      const proc=__DB.tasks.filter(t=>/^Procura speciale/.test(t.title));
+      if(!proc.length) return false;
+      /* confronto per commessa: in banca dati ci sono piu' progetti */
+      return proc.every(t=>{
+        const f=__DB.commessa_fasi.find(x=>x.id===t.commessa_fase_id);
+        return f && f.fase_key==='firme' && f.project_id===t.project_id;
+      });
+    });
+    must(ok,'procure non collocate nella fase firme');
+  });
+  await t('la fase firme precede quella delle autorizzazioni',async()=>{
+    const ok=await p.evaluate(()=>{
+      const pid=(__DB.tasks.find(t=>/^Procura speciale/.test(t.title))||{}).project_id;
+      const f=__DB.commessa_fasi.filter(x=>x.project_id===pid);
+      const a=f.find(x=>x.fase_key==='firme'), b=f.find(x=>x.fase_key==='autorizzazioni');
+      return a && b && a.ordine < b.ordine;
+    });
+    must(ok,'ordine delle fasi sbagliato');
+  });
+  await t('pagina Firme cliente elenca i documenti',async()=>{
+    await p.click('.sn[data-page="firme"]'); await p.waitForTimeout(600);
+    must(await p.locator('#page .card').count()>0,'pagina vuota');
+    const n=await p.locator('#page .it').count();
+    must(n>0,'nessun documento elencato');
+    must(/procura/i.test(await p.textContent('#page')),'nessuna procura in elenco');
+  });
+  await t('badge firma visibile nelle righe',async()=>{
+    must(/✍️/.test(await p.textContent('#page')),'manca il segno di firma');
+  });
+  await t('filtro per commessa nella pagina firme',async()=>{
+    await p.selectOption('#fm-p',{index:1}); await p.waitForTimeout(400);
+    const pid=await p.inputValue('#fm-p');
+    const atteso=await p.evaluate(v=>S.tasks.filter(t=>t.categoria==='firma_cliente'&&t.status!=='completato'&&t.project_id===v).length,pid);
+    must(await p.locator('#page .it').count()===atteso,'filtro incoerente');
+    await p.selectOption('#fm-p',''); await p.waitForTimeout(300);
+  });
+  await t('spuntare una firma la toglie dall elenco',async()=>{
+    const prima=await p.locator('#page .it').count();
+    await p.locator('#page .ck').first().click(); await p.waitForTimeout(700);
+    must(await p.locator('#page .it').count()===prima-1,'elenco non aggiornato');
+  });
+  await t('mostra anche le firme raccolte',async()=>{
+    await p.check('#fm-all'); await p.waitForTimeout(500);
+    must(await p.locator('#page .it.done').count()>0,'le firme raccolte non compaiono');
+    await p.uncheck('#fm-all'); await p.waitForTimeout(400);
+  });
+  await t('badge laterale conta le firme mancanti',async()=>{
+    const b=parseInt(await p.textContent('#b-firme'),10);
+    const atteso=await p.evaluate(()=>S.tasks.filter(t=>t.categoria==='firma_cliente'&&t.status!=='completato').length);
+    must(b===atteso,'badge '+b+' contro '+atteso);
+  });
+  await t('stampa distinta apre la finestra',async()=>{
+    const [nw]=await Promise.all([ p.context().waitForEvent('page',{timeout:6000}),
+      p.locator('[data-stampa]').first().click() ]);
+    await nw.waitForLoadState('domcontentloaded');
+    const txt=await nw.content();
+    must(/Distinta dei documenti da firmare/.test(txt),'intestazione assente');
+    must(/documento d/.test(txt),'promemoria documento identità assente');
+    must(/Entro il/.test(txt),'colonna della scadenza assente');
+    await nw.close();
+  });
+  await t('nota operativa di fase mostrata',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.locator('[data-proj]').first().click(); await p.waitForTimeout(600);
+    await p.evaluate(()=>{ const g=[...document.querySelectorAll('.grp-h')]
+      .find(x=>/firme|Dati definitivi/i.test(x.textContent)); if(g) g.click(); });
+    await p.waitForTimeout(400);
+    must(/procura speciale vale/i.test(await p.textContent('#page')),'nota della fase firme assente');
   });
 
   // --- ATTIVITÀ / ORE ---
