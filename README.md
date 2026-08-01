@@ -30,6 +30,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 9. [`sql/010_lavori_sisma.sql`](sql/010_lavori_sisma.sql) — contrassegno lavori sisma e IBAN dedicato
 10. [`sql/011_fatturazione_pa.sql`](sql/011_fatturazione_pa.sql) — fatturazione alla PA, registro uffici, CIG/CUP separati
 11. [`sql/012_dl_sal_varianti.sql`](sql/012_dl_sal_varianti.sql) — SAL, varianti e maturazione del compenso di DL
+12. [`sql/013_ordine_pratiche.sql`](sql/013_ordine_pratiche.sql) — ordine di esecuzione delle pratiche
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -396,8 +397,8 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
-node logic.js        # 132 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 156 test end-to-end in Chromium su un mock di Supabase
+node logic.js        # 171 asserzioni su date, template, pianificazione, avanzamento, costi
+node e2e.js          # 162 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
@@ -565,6 +566,74 @@ I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
 destinatario SDI o PEC) si compilano nella scheda della commessa.
 
 ---
+
+## Edilizia privata: il percorso completo
+
+Il percorso privato copre l'intervento di rilievo dallo stato legittimo
+all'agibilità: **16 fasi e circa 130 attività**, con tutte le discipline che il
+committente si aspetta di trovare — architettonico, strutture, impianti,
+energetica, acustica, barriere architettoniche, sicurezza.
+
+L'ordine delle fasi è esso stesso un'informazione, e i test lo verificano:
+
+1. **Incarico e fattibilità** — CDU, vincoli, fattibilità, disciplinare
+2. **Stato legittimo e rilievo** — accesso agli atti, art. 9-bis, tolleranze art. 34-bis, eventuale sanatoria art. 36-bis
+3. **Indagini e diagnosi** — geologia, materiali, impianti esistenti
+4. **Preliminare e verifiche urbanistiche** — parametri, RAI, oneri, gialli e rossi
+5. **Dati definitivi e firme** — qui si firmano *tutte* le procure, in una sola seduta
+6. **Pareri e autorizzazioni** — paesaggistica, Soprintendenza, VVF, idrogeologico, acustica…
+7. **Progetto architettonico** — l'elenco degli elaborati a corredo del titolo
+8. **Strutture e pratica sismica** — artt. 93/94, denuncia c.a.
+9. **Impianti** — elettrico, termomeccanico, idrico, gas, FV, VMC
+10. **Energetica e rinnovabili** — relazione ex L.10, requisiti minimi, obbligo FER 60%
+11. **Requisiti acustici passivi**
+12. **Sicurezza in progettazione** — PSC e fascicolo
+13. **Presentazione del titolo**
+14. **Avvio del cantiere** — notifica preliminare, denuncia c.a., amianto, terre e rocce
+15. **Direzione lavori**
+16. **Fine lavori, collaudi e agibilità** — collaudo statico, APE, DOCFA, poi agibilità
+
+**Le firme stanno al punto 5, non alla fine.** Le procure per le piattaforme si
+generano prima delle istanze agli enti, che sono a loro volta pratiche
+telematiche: ogni procura vale per un solo procedimento (art. 1392 c.c.), quindi
+si firmano tutte insieme in una convocazione sola.
+
+### Il Salva Casa è dentro il percorso
+
+La L. 105/2024 ha riscritto proprio i passaggi iniziali, e il percorso li segue:
+lo **stato legittimo** nella nuova formulazione dell'art. 9-bis c. 1-bis, le
+**tolleranze costruttive** dell'art. 34-bis scaglionate per soglie di superficie,
+la **sanatoria dell'art. 36-bis** con doppia conformità attenuata per le
+difformità parziali, e le deroghe ad altezze e superfici per l'**agibilità**
+dell'esistente.
+
+### Le pratiche escono già in ordine di esecuzione
+
+Il catalogo conta ora **43 pratiche**, ciascuna con un numero d'ordine, e
+l'elenco le mostra in sequenza invece che per nome dell'ente. Non è estetica:
+sbagliare l'ordine è la causa più comune di cantieri fermi.
+
+- accesso agli atti e CDU **prima** di progettare
+- eventuale sanatoria **prima** del nuovo titolo
+- pareri vincolanti (paesaggistica, Soprintendenza, VVF, idrogeologico) **prima**
+  del titolo edilizio — un titolo depositato senza nasce inefficace
+- deposito sismico **dopo** il titolo ma **prima** dell'inizio lavori
+- collaudo statico, DOCFA e APE **prima** dell'agibilità, che li richiama
+
+La migrazione 013 riallinea anche le pratiche già create nelle commesse aperte
+prima, altrimenti resterebbero in ordine casuale per sempre.
+
+### Ogni elaborato dice cosa deve contenere
+
+Come per il PFTE pubblico, le attività che corrispondono a un elaborato portano
+il riferimento normativo e un campo **"cosa deve contenere"**, consultabile dalla
+riga di checklist. Vale per la relazione di calcolo (compreso il giudizio
+motivato di accettabilità dei risultati, quello che manca più spesso), per la
+relazione ex L.10, per il PSC, per la tavola dei gialli e rossi, per la SCIA di
+agibilità e per un'altra ventina di voci.
+
+Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
+norma perché il riscontro sia immediato.
 
 ## Direzione lavori: SAL, varianti e compenso che matura col cantiere
 

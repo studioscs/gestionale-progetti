@@ -346,7 +346,9 @@ function launchOpts(){
     const ok=await p.evaluate(()=>{
       const pid=(__DB.tasks.find(t=>/^Procura speciale/.test(t.title))||{}).project_id;
       const f=__DB.commessa_fasi.filter(x=>x.project_id===pid);
-      const a=f.find(x=>x.fase_key==='firme'), b=f.find(x=>x.fase_key==='autorizzazioni');
+      /* La fase delle firme deve precedere quella in cui si presentano le
+         istanze agli enti: sono pratiche telematiche e servono le procure. */
+      const a=f.find(x=>x.fase_key==='firme'), b=f.find(x=>x.fase_key==='pareri');
       return a && b && a.ordine < b.ordine;
     });
     must(ok,'ordine delle fasi sbagliato');
@@ -399,7 +401,8 @@ function launchOpts(){
     await p.evaluate(()=>{ const g=[...document.querySelectorAll('.grp-h')]
       .find(x=>/firme|Dati definitivi/i.test(x.textContent)); if(g) g.click(); });
     await p.waitForTimeout(400);
-    must(/procura speciale vale/i.test(await p.textContent('#page')),'nota della fase firme assente');
+    const h=await p.textContent('#page');
+    must(/procur/i.test(h)&&/1392/.test(h),'nota della fase firme assente');
   });
 
 
@@ -864,6 +867,79 @@ function launchOpts(){
     must(f&&f.numero_fattura,'numero non riportato sullo scaglione');
     must(f.stato==='emessa','stato non aggiornato: '+f.stato);
     must(f.xml_generato_at,'generazione non registrata');
+  });
+
+  // --- EDILIZIA PRIVATA: PERCORSO COMPLETO E PRATICHE IN ORDINE ---
+  await t('il privato genera un percorso articolato',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Villa Rossi — ampliamento',status:'attivo',
+        start_date:'2026-02-02',client:'Fam. Rossi'}).select().single();
+      const tutte=CONDIZIONI.map(c=>c.k);
+      await generaStruttura(data.id,'privato',tutte,'2026-02-02');
+      await loadAll(true); S.projId=data.id; S.tab='avanzamento'; go('project');
+    });
+    await p.waitForTimeout(1200);
+    const st=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      return {f:__DB.commessa_fasi.filter(f=>f.project_id===pr.id).length,
+              t:__DB.tasks.filter(t=>t.project_id===pr.id).length,
+              p:__DB.commessa_pratiche.filter(x=>x.project_id===pr.id).length};
+    });
+    must(st.f>=15,'fasi: '+st.f);
+    must(st.t>=120,'attività: '+st.t);
+    must(st.p>=30,'pratiche: '+st.p);
+  });
+  await t('le pratiche escono in ordine di esecuzione',async()=>{
+    const ord=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      return __DB.commessa_pratiche.filter(x=>x.project_id===pr.id)
+        .map(x=>({k:x.pratica_key,o:x.ordine}));
+    });
+    must(ord.every(x=>typeof x.o==='number'),'pratiche senza ordine');
+    const pos=k=>ord.find(x=>x.k===k);
+    must(pos('accesso_atti')&&pos('agibilita'),'mancano pratiche chiave');
+    must(pos('accesso_atti').o<pos('titolo_edilizio').o,'accesso atti dopo il titolo');
+    must(pos('paes_ord').o<pos('titolo_edilizio').o,'paesaggistica dopo il titolo');
+    must(pos('docfa').o<pos('agibilita').o,'catasto dopo l agibilità');
+  });
+  await t('l elenco pratiche le mostra nella sequenza giusta',async()=>{
+    await p.evaluate(()=>{ S.tab='pratiche'; render(); });
+    await p.waitForTimeout(600);
+    const primi=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      return praticheOf(pr.id).slice(0,3).map(x=>x.pratica_key);
+    });
+    must(primi[0]==='accesso_atti','la prima non è l accesso agli atti: '+primi.join(','));
+  });
+  await t('le procure sono generate e stanno all inizio',async()=>{
+    const d=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      const fasi=__DB.commessa_fasi.filter(f=>f.project_id===pr.id).sort((a,b)=>a.ordine-b.ordine);
+      const iFirme=fasi.findIndex(f=>f.fase_key==='firme');
+      const idFirme=fasi[iFirme]&&fasi[iFirme].id;
+      const proc=__DB.tasks.filter(t=>t.project_id===pr.id&&/^Procura speciale/.test(t.title));
+      return {iFirme,tot:fasi.length,proc:proc.length,
+              tutteInFirme:proc.every(t=>t.commessa_fase_id===idFirme)};
+    });
+    must(d.proc>=5,'procure generate: '+d.proc);
+    must(d.tutteInFirme,'procure non raccolte nella fase delle firme');
+    must(d.iFirme>=0&&d.iFirme<d.tot/2,'la fase firme non sta nella prima metà: '+d.iFirme+'/'+d.tot);
+  });
+  await t('gli elaborati chiave spiegano cosa devono contenere',async()=>{
+    const n=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      return __DB.tasks.filter(t=>t.project_id===pr.id&&t.contenuto&&t.contenuto.length>80).length;
+    });
+    must(n>=20,'attività con contenuto: '+n);
+  });
+  await t('il percorso copre tutte le discipline',async()=>{
+    const nomi=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
+      return __DB.commessa_fasi.filter(f=>f.project_id===pr.id).map(f=>f.nome).join(' | ');
+    });
+    [/stato legittimo/i,/architettonico/i,/strutturale/i,/impianti/i,/energetica/i,
+     /acustic/i,/[Ss]icurezza/,/agibilità/i].forEach(re=>
+      must(re.test(nomi),'manca la fase '+re+' in: '+nomi));
   });
 
   // --- SOLA DIREZIONE LAVORI: SAL, VARIANTI, QUOTA DI ONORARIO ---

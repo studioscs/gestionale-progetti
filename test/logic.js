@@ -43,7 +43,7 @@ t('pratiche: cond valide',ctx.PRATICHE_CAT.every(p=>!p.cond||ctx.CONDIZIONI.map(
 console.log('\n— PIANIFICAZIONE —');
 const full=ctx.CONDIZIONI.map(c=>c.k);
 const p1=ctx.pianifica('privato',full,'2026-01-07');
-t('privato completo: 15 fasi',p1.fasi.length===15,p1.fasi.length);
+t('privato completo: 16 fasi',p1.fasi.length===16,p1.fasi.length);
 console.log('   attività generate:',p1.fasi.reduce((a,f)=>a+f.att.length,0),'| pratiche:',p1.pratiche.length);
 t('tutte le attività hanno scadenza',p1.fasi.every(f=>f.att.every(a=>a.due_date)),null);
 t('scadenze crescenti nella fase',p1.fasi.every(f=>{const d=f.att.filter(a=>!a.is_milestone).map(a=>a.due_date);return d.every((x,i)=>i===0||x>=d[i-1]);}),null);
@@ -55,13 +55,13 @@ t('senza vincoli: meno fasi',p2.fasi.length<p1.fasi.length,[p2.fasi.length,p1.fa
 t('senza paesaggistico: nessuna ISTANZA paesaggistica',
   !p2.fasi.some(f=>f.att.some(a=>/^(Istanza|Relazione|Rendering).*paesagg/i.test(a.title))),
   p2.fasi.flatMap(f=>f.att.filter(a=>/^(Istanza|Relazione|Rendering).*paesagg/i.test(a.title)).map(a=>a.title)));
-t('con paesaggistico: istanza presente',
-  p1.fasi.some(f=>f.att.some(a=>/^Istanza di autorizzazione paesaggistica/.test(a.title))),null);
+t('con paesaggistico: documentazione presente',
+  p1.fasi.some(f=>f.att.some(a=>/^Relazione paesaggistica/.test(a.title))),null);
 t('verifica vincoli sempre presente (base)',
   p2.fasi.some(f=>f.att.some(a=>/^Verifica dei vincoli/.test(a.title))),null);
 t('senza sismica_aut: no art.94, si art.93',
-  !p2.fasi.some(f=>f.att.some(a=>/94 DPR/.test(a.rif_normativo||''))) &&
-   p2.fasi.some(f=>f.att.some(a=>/93 DPR/.test(a.rif_normativo||''))),null);
+  !p2.fasi.some(f=>f.att.some(a=>/\b94 DPR/.test(a.rif_normativo||''))) &&
+   p2.fasi.some(f=>f.att.some(a=>/\b93\b/.test(a.rif_normativo||''))),null);
 t('milestone scadono a fine fase',
   p1.fasi.every(f=>f.att.filter(a=>a.is_milestone).every(a=>a.due_date===f.data_fine_prevista)),null);
 t('senza vvf: nessuna pratica VVF',!p2.pratiche.some(x=>/Vigili/.test(x.ente)),null);
@@ -129,10 +129,14 @@ console.log('\n— FIRME ANTICIPATE —');
   t(k+': nessuna firma isolata a fine percorso',ultimaFirma<pl.fasi.length-1||k==='privato',ultimaFirma);
 });
 const pp=ctx.pianifica('privato',full,'2026-09-01');
-t('privato: firme prima delle istanze agli enti',
-  pp.fasi.findIndex(f=>f.fase_key==='firme') < pp.fasi.findIndex(f=>f.fase_key==='autorizzazioni'),null);
-t('privato: ricognizione enti prima delle firme',
-  pp.fasi.findIndex(f=>f.fase_key==='enti') < pp.fasi.findIndex(f=>f.fase_key==='firme'),null);
+t('privato: firme prima dei pareri agli enti',
+  pp.fasi.findIndex(f=>f.fase_key==='firme') < pp.fasi.findIndex(f=>f.fase_key==='pareri'),
+  pp.fasi.map(f=>f.fase_key));
+t('privato: firme dopo che il progetto e impostato',
+  pp.fasi.findIndex(f=>f.fase_key==='preliminare') < pp.fasi.findIndex(f=>f.fase_key==='firme'),null);
+t('privato: una procura per ogni pratica telematica',(()=>{
+  const nProc=pp.pratiche.filter(x=>x.proc).length;
+  return nProc>=5;})(), pp.pratiche.filter(x=>x.proc).length);
 
 console.log('\n— OPERE PUBBLICHE: DOCUMENTAZIONE PRIMA DEI PARERI —');
 const pu=ctx.pianifica('pubblico',full,'2026-09-01');
@@ -263,6 +267,78 @@ const msg="Could not find the 'sisma' column of 'projects' in the schema cache";
 const nome=(msg.match(/'([a-z_]+)' column/i)||[])[1];
 t('estrae il nome dal messaggio di PostgREST',nome==='sisma',nome);
 t('e ne ricava la migrazione',ctx.migrazioneDi(nome)==='sql/010_lavori_sisma.sql',null);
+
+console.log('\n— EDILIZIA PRIVATA: PERCORSO COMPLETO —');
+const pv=ctx.TEMPLATES.privato;
+t('percorso articolato',pv.fasi.length>=14,pv.fasi.length);
+const nAtt=pv.fasi.reduce((a,f)=>a+f.att.length,0);
+t('almeno 110 attivita',nAtt>=110,nAtt);
+console.log('   privato →',pv.fasi.length,'fasi ·',nAtt,'attivita');
+
+/* La sequenza delle fasi e' essa stessa un'informazione: lo stato legittimo
+   prima del progetto, i pareri prima del titolo, il titolo prima del cantiere. */
+const kf=pv.fasi.map(f=>f.k);
+const pos=k=>kf.indexOf(k);
+t('stato legittimo prima del progetto',pos('legittimo')<pos('preliminare'),kf);
+t('indagini prima del progetto architettonico',pos('indagini')<pos('architettonico'),kf);
+t('pareri prima della presentazione del titolo',pos('pareri')<pos('presentazione'),kf);
+t('architettonico prima di strutture e impianti',
+  pos('architettonico')<pos('strutture')&&pos('architettonico')<pos('impianti'),kf);
+t('titolo prima dell avvio del cantiere',pos('presentazione')<pos('avvio'),kf);
+t('cantiere prima della chiusura',pos('avvio')<pos('dl')&&pos('dl')<pos('chiusura'),kf);
+
+/* Le discipline che il committente si aspetta di trovare tutte */
+[['legittimo','stato legittimo'],['architettonico','architettonico'],['strutture','strutturale'],
+ ['impianti','impianti'],['energetica','energetica'],['acustica','acustica'],
+ ['sicurezza','sicurezza'],['chiusura','agibilità']].forEach(([k,l])=>
+  t('c e la fase '+l, kf.includes(k), kf));
+
+const attPv=[];pv.fasi.forEach(f=>f.att.forEach(a=>attPv.push(a)));
+const titoli=attPv.map(a=>a.t).join(' | ');
+[['Salva Casa','stato legittimo','art. 9-bis'],
+ ['tolleranze','tolleranze costruttive','34-bis'],
+ ['barriere','barriere architettoniche','L. 13/1989'],
+ ['rinnovabili','fonti rinnovabili','199/2021'],
+ ['acustica passiva','requisiti acustici passivi','DPCM 5/12/1997'],
+ ['collaudo statico','collaudo statico','art. 67'],
+ ['catasto','DOCFA',''],
+ ['gialli e rossi','gialli e rossi','']].forEach(([et,frase])=>
+  t('previsto: '+et, new RegExp(frase.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(titoli), null));
+
+t('i riferimenti normativi ci sono',attPv.filter(a=>a.rif).length>=20,
+  attPv.filter(a=>a.rif).length);
+t('gli elaborati chiave dicono cosa contenere',attPv.filter(a=>a.cont).length>=25,
+  attPv.filter(a=>a.cont).length);
+
+console.log('\n— PRATICHE IN ORDINE DI ESECUZIONE —');
+t('ogni pratica ha un ordine',ctx.PRATICHE_CAT.every(p=>typeof p.ord==='number'),
+  ctx.PRATICHE_CAT.filter(p=>typeof p.ord!=='number').map(p=>p.k));
+const o=k=>ctx.PRATICHE_CAT.find(x=>x.k===k).ord;
+t('accesso agli atti e il primo passo',o('accesso_atti')<o('cdu')&&o('cdu')<o('titolo_edilizio'),null);
+t('la sanatoria precede il nuovo titolo',o('sanatoria')<o('titolo_edilizio'),null);
+t('i pareri vincolanti precedono il titolo',
+  o('paes_ord')<o('titolo_edilizio')&&o('sopr_art21')<o('titolo_edilizio')
+  &&o('vvf_prog')<o('titolo_edilizio')&&o('idrogeo')<o('titolo_edilizio'),null);
+t('il sismico segue il titolo e precede il cantiere',
+  o('sismica_dep')>o('titolo_edilizio')&&o('sismica_dep')<o('notifica81'),null);
+t('la notifica preliminare sta prima degli allacci',o('notifica81')<o('enel'),null);
+t('catasto e APE precedono l agibilita',
+  o('docfa')<o('agibilita')&&o('ape')<o('agibilita'),null);
+t('il collaudo statico precede l agibilita',o('collaudo_statico')<o('agibilita'),null);
+t('agibilita in fondo',ctx.PRATICHE_CAT.filter(p=>p.k!=='altro').every(p=>p.ord<=o('agibilita')),
+  ctx.PRATICHE_CAT.filter(p=>p.k!=='altro'&&p.ord>o('agibilita')).map(p=>p.k));
+
+const gen=ctx.pianifica('privato',ctx.CONDIZIONI.map(c=>c.k),'2026-01-07');
+t('genera le pratiche gia ordinate',
+  gen.pratiche.every((x,i,arr)=>i===0||arr[i-1].ord<=x.ord),
+  gen.pratiche.map(x=>x.ord));
+t('genera un numero realistico di pratiche',gen.pratiche.length>=30,gen.pratiche.length);
+console.log('   pratiche generate:',gen.pratiche.length,'| prima:',gen.pratiche[0].k,
+            '| ultima:',gen.pratiche[gen.pratiche.length-1].k);
+t('senza condizioni restano solo le pratiche di base',
+  ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k).sort().join(',')
+    ==='accesso_atti,cdu,titolo_edilizio',
+  ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);
