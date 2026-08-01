@@ -1,0 +1,55 @@
+# =============================================================================
+# Pubblicazione su GitHub Pages
+# =============================================================================
+# Serve perche' la pubblicazione automatica "da ramo" non scattava in modo
+# affidabile dopo i push fatti da un'applicazione: il sito restava fermo a una
+# versione precedente finche' qualcuno non caricava un file dall'interfaccia web.
+# Con questo flusso ogni push su main pubblica, chiunque l'abbia fatto.
+#
+# RICHIEDE UNA IMPOSTAZIONE, UNA VOLTA SOLA:
+#   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+# Finche' la sorgente resta "Deploy from a branch" questo flusso fallisce
+# all'ultimo passo con un messaggio esplicito.
+# =============================================================================
+
+name: Pubblica su GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # permette di ripubblicare a mano dalla scheda Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Una pubblicazione per volta; se ne arrivano due, l'ultima attende la prima
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Il sito e' tutto qui: index.html alla radice. Le cartelle sql/ e test/
+      # non servono ai collaboratori e restano fuori dalla pubblicazione.
+      - name: Prepara i file da pubblicare
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp README.md  _site/ 2>/dev/null || true
+          echo "Pubblicato: $(grep -o "const VERSIONE = '[^']*'" _site/index.html)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

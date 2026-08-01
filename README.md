@@ -413,8 +413,16 @@ verifica sempre il portale che usi. I termini restano indicativi.
 
 ## Pubblicazione
 
-Il repository è pubblico e l'app è servita da **GitHub Pages** dal ramo `main`:
-ogni push è già il rilascio, non c'è nulla da caricare a mano. Dopo un
+Il repository è pubblico e l'app è servita da **GitHub Pages** dal ramo `main`
+tramite il flusso [`.github/workflows/pages.yml`](.github/workflows/pages.yml):
+ogni push pubblica, non c'è nulla da caricare a mano.
+
+> **Impostazione necessaria, una volta sola:** *Settings → Pages → Build and
+> deployment → Source:* **GitHub Actions**. Con la pubblicazione "da ramo" i push
+> fatti da un'applicazione non facevano ripartire il rilascio in modo affidabile,
+> e il sito restava fermo a una versione precedente finché qualcuno non caricava
+> un file dall'interfaccia web. Dalla scheda *Actions* puoi anche ripubblicare a
+> mano con *Run workflow*. Dopo un
 aggiornamento i collaboratori devono fare **Ctrl+Shift+R** (o Cmd+Shift+R): un
 file singolo non può invalidare la propria cache, e Pages la tiene per qualche
 minuto. Il numero di versione in fondo alla barra laterale dice a colpo d'occhio
