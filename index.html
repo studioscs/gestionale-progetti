@@ -887,7 +887,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.03.3';
+const VERSIONE = '2026.08.03.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -900,7 +900,20 @@ const S = {
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
-  prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
+  prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati',
+
+  /* Filtri e ricerche delle pagine. Dichiararli qui non e' pignoleria: se una
+     chiave nasce al primo assegnamento, un refuso non da' errore ma crea una
+     chiave nuova, e il filtro semplicemente smette di funzionare senza che
+     nulla lo segnali. */
+  pq:'',  pst:'', par:'',        // commesse: ricerca, stato, archiviate
+  tq:'',  tst:'', two:false,     // attivita': ricerca, stato, solo mie
+  clQ:'',                        // clienti: ricerca
+  kp:'',  kw:'',                 // kanban: commessa, persona
+  gp:'',                         // gantt: commessa
+  scadFiltro:'',                 // scadenzario: persona
+  fmProj:'', fmAll:false,        // firme: commessa, mostra gia' raccolte
+  schemaMancante:[]              // migrazioni non eseguite, rilevate all'avvio
 };
 
 /* --------------------------------- UTIL ---------------------------------- */
@@ -2593,7 +2606,7 @@ function updBadges() {
   el('b-fatt').textContent = nfa;
   el('b-fatt').classList.toggle('alert', S.fatture.some(f => f.stato === 'pronta'));
 
-  const nf = S.tasks.filter(t => t.categoria === 'firma_cliente' && isOpen(t)).length;
+  const nf = firmeAperte().length;
   el('b-firme').textContent = nf;
   el('b-firme').classList.toggle('alert', S.tasks.some(t =>
     t.categoria === 'firma_cliente' && isOpen(t) && isLate(t.due_date)));
@@ -2670,11 +2683,6 @@ function pickDue(anchor, taskId) {
     }
     patchTask(taskId, { due_date: v || null }, true);
   });
-}
-function pickStato(anchor, taskId) {
-  if (!canW()) return;
-  const items = Object.keys(ST_TASK).map(k => ({ v:k, l:bdg(k) }));
-  popover(anchor, popItems(items), v => patchTask(taskId, { status: v }, true));
 }
 </script>
 <script>

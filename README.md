@@ -397,8 +397,10 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
+node audit.js        # audit statico: funzioni, id, stato, migrazioni, cataloghi
 node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
 node e2e.js          # 164 test end-to-end in Chromium su un mock di Supabase
+node walk.js         # giro completo dell'interfaccia a caccia di errori a runtime
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
@@ -412,6 +414,33 @@ invio ed eliminazione di messaggi in chat, anagrafica clienti, costo orario dei
 collaboratori con chiusura del periodo precedente, tutte le pagine e l'assenza di
 errori in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
+
+### `audit.js` — quello che i test non vedono
+
+I test coprono i comportamenti che qualcuno ha pensato di verificare. `audit.js`
+cerca i guasti nel codice che nessun test attraversa: funzioni chiamate e mai
+definite, `el('...')` su id inesistenti, gestori agganciati a pulsanti che non
+ci sono, chiavi di stato lette e mai scritte, tabelle interrogate dall'app ma
+assenti dalle migrazioni, condizioni usate nei template ma non dichiarate,
+chiavi duplicate nei cataloghi, codice morto.
+
+Per farlo, dal sorgente vengono prima tolti commenti, stringhe e letterali
+regex. Senza quel passaggio ogni parola italiana seguita da una parentesi in un
+commento verrebbe scambiata per una chiamata di funzione — e un audit che grida
+al lupo cento volte non lo legge più nessuno.
+
+### `walk.js` — il giro dell'interfaccia
+
+Apre ogni pagina, ogni scheda e ogni modale, con i tre ruoli, sia a database
+vuoto sia con una commessa per ciascun template, e poi **clicca ogni pulsante di
+ogni pagina** passando dalla delega degli eventi come farebbe una persona.
+Raccoglie qualunque errore di esecuzione. Non verifica comportamenti: serve a
+stanare quello che si rompe solo arrivando in un punto preciso — una pagina che
+va in errore quando non c'è niente da mostrare, una scheda che dà per scontati
+dati assenti, un pulsante collegato a nulla.
+
+140 passi. I comandi distruttivi sono esclusi apposta: cancellerebbero i dati a
+metà giro e il rumore che ne segue nasconderebbe i guasti veri.
 
 ---
 
