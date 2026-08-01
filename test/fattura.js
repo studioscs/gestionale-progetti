@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,calcolaFattura,impFattura,byId,pd,iso,addD,esc});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,byId,pd,iso,addD,esc});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -98,6 +98,57 @@ if(!r3.errori){
   t('VALIDO con destinatario 0000000 e PEC',haXsd?/validates/.test(out):true,out.slice(0,400));
   t('codice destinatario a zeri',/0000000/.test(r3.xml)&&/PECDestinatario/.test(r3.xml),null);
 } else t('genera con PEC',false,r3.errori);
+
+console.log('\n— DUE CONTI CORRENTI: ORDINARIO E SISMA —');
+const IBO=ctx.STUDIO.pagamento.iban, IBS=ctx.STUDIO.pagamento.ibanSisma;
+t('IBAN ordinario configurato e valido',ctx.ibanValido(IBO),IBO);
+t('IBAN sisma configurato e valido',ctx.ibanValido(IBS),IBS);
+t('i due conti sono diversi',IBO!==IBS,[IBO,IBS]);
+t('commessa ordinaria → conto ordinario',ctx.ibanDi({sisma:false})===IBO,ctx.ibanDi({sisma:false}));
+t('commessa sisma → conto dedicato',ctx.ibanDi({sisma:true})===IBS,ctx.ibanDi({sisma:true}));
+t('senza contrassegno vale l ordinario',ctx.ibanDi({})===IBO&&ctx.ibanDi(null)===IBO,null);
+t('una cifra sbagliata viene intercettata',
+  !ctx.ibanValido(IBO.slice(0,-1)+(IBO.slice(-1)==='6'?'7':'6')),null);
+t('scarta lunghezza e formato errati',
+  !ctx.ibanValido('IT31D03069691321000000654')&&!ctx.ibanValido('DE89370400440532013000')
+  &&!ctx.ibanValido(''),null);
+t('tollera gli spazi di come si scrive a mano',
+  ctx.ibanValido('IT31 D030 6969 1321 0000 0006 546'),null);
+t('leggibile a blocchi di quattro',ctx.ibanLeggibile(IBO)==='IT31 D030 6969 1321 0000 0006 546',
+  ctx.ibanLeggibile(IBO));
+
+/* Lo stesso scaglione su due commesse: cambia solo il conto di accredito */
+ctx.S.projects[0].cliente_sdi='ABCDEF1'; ctx.S.projects[0].cliente_pec='';
+ctx.S.projects[0].sisma=false;
+const fOrd=ctx.xmlFattura({project_id:'p1',descrizione:'Saldo',imponibile:3000,
+  numero_fattura:'2026/017',data_fattura:'2026-08-03'});
+ctx.S.projects[0].sisma=true;
+const fSis=ctx.xmlFattura({project_id:'p1',descrizione:'Saldo',imponibile:3000,
+  numero_fattura:'2026/018',data_fattura:'2026-08-03'});
+t('XML ordinario porta il conto ordinario',
+  !fOrd.errori&&fOrd.xml.includes('<IBAN>'+IBO+'</IBAN>'),fOrd.errori||'IBAN assente');
+t('XML sisma porta il conto dedicato',
+  !fSis.errori&&fSis.xml.includes('<IBAN>'+IBS+'</IBAN>'),fSis.errori||'IBAN assente');
+t('nessuna contaminazione fra i due',
+  !fOrd.xml.includes(IBS)&&!fSis.xml.includes(IBO),null);
+
+if(!fSis.errori){
+  fs.writeFileSync('/tmp/fatt-sisma.xml',fSis.xml);
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-sisma.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('XML con IBAN valido secondo l XSD ufficiale',haXsd?/validates/.test(out):true,out.slice(0,400));
+}
+
+/* Un IBAN sbagliato deve fermare la generazione, non finire allo SdI */
+const ibSalvo=ctx.STUDIO.pagamento.ibanSisma;
+ctx.STUDIO.pagamento.ibanSisma='IT00X0000000000000000000000';
+const rotto=ctx.xmlFattura({project_id:'p1',descrizione:'Saldo',imponibile:3000,
+  numero_fattura:'2026/019',data_fattura:'2026-08-03'});
+t('blocca la fattura se l IBAN non e valido',
+  !!rotto.errori&&/IBAN/.test(rotto.errori.join()),rotto.errori);
+t('il messaggio dice quale dei due conti',
+  !!rotto.errori&&/sisma/.test(rotto.errori.join()),rotto.errori);
+ctx.STUDIO.pagamento.ibanSisma=ibSalvo; ctx.S.projects[0].sisma=false;
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

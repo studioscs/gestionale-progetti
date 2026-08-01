@@ -27,6 +27,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 6. [`sql/007_referente_tecnico.sql`](sql/007_referente_tecnico.sql) — secondo referente di commessa
 7. [`sql/008_anagrafica_clienti.sql`](sql/008_anagrafica_clienti.sql) — anagrafica clienti
 8. [`sql/009_costi_personale.sql`](sql/009_costi_personale.sql) — costo orario e costo del lavoro per commessa
+9. [`sql/010_lavori_sisma.sql`](sql/010_lavori_sisma.sql) — contrassegno lavori sisma e IBAN dedicato
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -270,6 +271,12 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
     restano valorizzate alla tariffa di allora. Se correggi un costo lasciando la
     stessa decorrenza, è una correzione del periodo in corso e non ne apre uno nuovo.
 
+- **Conto di accredito** — nel modulo di creazione commessa c'è la casella *Lavoro
+  di ricostruzione post-sisma*: spuntandola, tutte le fatture di quella commessa
+  riportano l'IBAN del conto dedicato invece di quello ordinario. La scelta si fa
+  una volta all'apertura del lavoro, così nessuno deve ricordarsene al momento di
+  emettere. L'IBAN in uso è scritto nella scheda *Anagrafica* e in quella
+  *Fatturazione*.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -365,9 +372,9 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 90 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 114 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 120 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
-node fattura.js      # XML FatturaPA validato contro l'XSD ufficiale
+node fattura.js      # XML FatturaPA validato contro l'XSD ufficiale, IBAN e due conti
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -413,13 +420,37 @@ funzione *"Importa e salva fatture"* di
 HTML, che è pubblico per costruzione.
 
 L'XML prodotto è validato contro lo **schema ufficiale dell'Agenzia delle
-Entrate** dalla suite `test/fattura.js` in tre varianti: con contributo cassa,
-con ritenuta d'acconto, e con PEC al posto del codice destinatario.
+Entrate** dalla suite `test/fattura.js` in quattro varianti: con contributo cassa,
+con ritenuta d'acconto, con PEC al posto del codice destinatario, e con l'IBAN
+nei dati di pagamento.
+
+### Due conti correnti: ordinario e sisma
+
+Lo studio incassa su due conti: uno **dedicato alla ricostruzione post-sisma** e
+uno per tutto il resto. Le somme non devono mescolarsi, perché la rendicontazione
+del contributo guarda i movimenti di quel conto.
+
+Se l'IBAN lo sceglie una persona al momento di emettere la fattura, prima o poi
+finisce sul conto sbagliato e correggerlo costa una nota di credito. Per questo la
+scelta si fa **una volta sola, all'apertura della commessa**: nel modulo di
+creazione c'è la casella *Lavoro di ricostruzione post-sisma*, e sotto compare
+subito l'IBAN che verrà usato. Da lì in poi ogni fattura di quella commessa esce
+con il conto giusto, senza che nessuno debba ricordarselo.
+
+L'IBAN scelto è ripetuto in chiaro in due punti dove serve vederlo: nella scheda
+**Anagrafica** della commessa e nel riquadro *Dati per la fattura elettronica*
+della scheda **Fatturazione**, accanto a un'etichetta che dice se si tratta del
+conto sisma o di quello ordinario.
+
+Prima di generare l'XML l'IBAN viene **verificato formalmente** (lunghezza, paese,
+resto 1 sul modulo 97). Non dice che il conto esiste, ma intercetta una cifra
+sbagliata prima che finisca su una fattura già trasmessa allo SdI, quando l'unico
+rimedio è la nota di credito.
 
 > Il blocco `STUDIO` in cima a `index.html` è **già compilato** con i dati dello
 > studio: STUDIO TECNICO SCS SRL STP, P.IVA 02077580435, sede in Recanati (MC),
-> iscrizione REA MC-279947. Restano da aggiungere, quando servono, l'**IBAN** per
-> le coordinate di pagamento e l'eventuale capitale sociale.
+> iscrizione REA MC-279947, e i due IBAN (ordinario e sisma). Resta da aggiungere,
+> se lo si vuole esporre in fattura, il capitale sociale.
 >
 > Il codice univoco `N92GLON` e la PEC dello studio sono conservati nella
 > configurazione ma **non entrano nelle fatture emesse**: servono da comunicare ai

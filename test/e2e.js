@@ -698,6 +698,51 @@ function launchOpts(){
   });
 
 
+  // --- CONTO DI ACCREDITO: ORDINARIO O SISMA ---
+  await t('il wizard ha il contrassegno lavori sisma',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    must(await p.isVisible('#w-sisma'),'casella assente');
+    must(/IBAN ordinario/.test(await p.textContent('#w-sisma-h')),'non annuncia il conto ordinario');
+  });
+  await t('spuntandolo annuncia subito il conto dedicato',async()=>{
+    await p.check('#w-sisma'); await p.waitForTimeout(250);
+    const h=await p.textContent('#w-sisma-h');
+    must(/conto dedicato al sisma/.test(h),'non annuncia il conto sisma: '+h);
+    must(/IT69/.test(h),'non mostra l IBAN sisma');
+  });
+  await t('il contrassegno si salva sulla commessa',async()=>{
+    await p.fill('#w-name','Ricostruzione post-sisma Via Roma');
+    await p.fill('#w-cli','Condominio Via Roma');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1600);
+    must(await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Ricostruzione post-sisma Via Roma');
+      return x&&x.sisma===true;}),'sisma non salvato');
+  });
+  await t('la scheda Anagrafica mostra il conto di accredito',async()=>{
+    await p.locator('.card:has-text("Ricostruzione post-sisma Via Roma")').first().click().catch(()=>{});
+    await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Ricostruzione post-sisma Via Roma');
+      S.projId=x.id; S.tab='anagrafica'; go('project'); });
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Conto di accredito/.test(h),'blocco assente');
+    must(/IT69/.test(h),'non mostra l IBAN sisma');
+  });
+  await t('la scheda Fatturazione dice su quale conto si incassa',async()=>{
+    await p.click('[data-tab="fatture"]'); await p.waitForTimeout(400);
+    const h=await p.textContent('#page');
+    must(/Accredito su/.test(h),'blocco assente');
+    must(/conto sisma/.test(h),'non indica il conto sisma');
+  });
+  await t('una commessa ordinaria resta sul conto ordinario',async()=>{
+    await p.evaluate(()=>{const x=__DB.projects.find(y=>!y.sisma&&!y.archiviato);
+      S.projId=x.id; S.tab='fatture'; go('project'); });
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/conto ordinario/.test(h),'non indica il conto ordinario');
+    must(/IT31/.test(h)&&!/IT69/.test(h),'IBAN errato o contaminato');
+  });
+
   // --- COSTO DEL PERSONALE ---
   await t('scheda utente: campi di costo per l amministratore',async()=>{
     await p.click('.sn[data-page="users"]'); await p.waitForTimeout(500);

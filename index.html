@@ -770,14 +770,20 @@ const STUDIO = {
   // Ritenuta d'acconto: per una S.r.l. di norma NON si applica. Per attivarla:
   // ritenuta: { aliquota: 20, causale: 'A', tipo: 'RT02' }
   ritenuta      : null,
-  pagamento     : { condizioni:'TP02', modalita:'MP05', giorni:30, iban:'' },
+  // Due conti correnti. I lavori di ricostruzione post-sisma vanno incassati sul
+  // conto dedicato: la contabilita' speciale del contributo richiede che le somme
+  // non si mescolino con quelle dell'attivita' ordinaria. La fattura sceglie da
+  // sola l'IBAN in base al contrassegno "lavori sisma" della commessa.
+  pagamento     : { condizioni:'TP02', modalita:'MP05', giorni:30,
+                    iban      : 'IT31D0306969132100000006546',   // lavori ordinari
+                    ibanSisma : 'IT69Z0306969132100000047119' },  // ricostruzione post-sisma
   progressivo   : 1              // contatore locale del nome file
 };
 
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.02.10';
+const VERSIONE = '2026.08.02.11';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2445,6 +2451,34 @@ function calcolaFattura(imponibile) {
 }
 
 /* --------------------------------------------------------------------------
+   CONTO CORRENTE DI ACCREDITO
+   Lo studio ne ha due: uno dedicato alla ricostruzione post-sisma, uno per il
+   resto. Le somme non vanno mescolate, perche' la rendicontazione del contributo
+   guarda i movimenti di quel conto. La scelta si fa una volta all'apertura della
+   commessa (contrassegno "lavori sisma") e vale per tutte le sue fatture.
+   -------------------------------------------------------------------------- */
+function ibanDi(p) {
+  const pg = STUDIO.pagamento || {};
+  const scelto = (p && p.sisma) ? pg.ibanSisma : pg.iban;
+  return (scelto || '').replace(/\s/g, '').toUpperCase();
+}
+
+/* Verifica formale dell'IBAN: lunghezza, paese e resto 1 sul modulo 97.
+   Non dice che il conto esiste, ma intercetta una cifra sbagliata prima che
+   finisca su una fattura gia' trasmessa allo SdI. */
+function ibanValido(v) {
+  const i = (v || '').replace(/\s/g, '').toUpperCase();
+  if (!/^IT\d{2}[A-Z]\d{22}$/.test(i)) return false;
+  const r = (i.slice(4) + i.slice(0, 4)).replace(/[A-Z]/g, c => c.charCodeAt(0) - 55);
+  let m = 0;
+  for (const d of r) m = (m * 10 + Number(d)) % 97;
+  return m === 1;
+}
+
+/* Raggruppa l'IBAN a blocchi di quattro: cosi' si rilegge, sulla fattura no */
+const ibanLeggibile = v => (v || '').replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim();
+
+/* --------------------------------------------------------------------------
    GENERAZIONE XML FatturaPA 1.2 (FPR12)
    Restituisce { nome, xml } oppure { errori: [...] } se manca qualcosa.
    -------------------------------------------------------------------------- */
@@ -2464,6 +2498,12 @@ function xmlFattura(f) {
   if (!f.data_fattura)       e.push('Manca la data della fattura.');
   const imp = impFattura(f);
   if (!(imp > 0))            e.push('L’imponibile dello scaglione è zero.');
+  /* L'IBAN non è obbligatorio per lo SdI, ma se c'è dev'essere giusto: una
+     cifra sbagliata su una fattura già trasmessa si corregge solo con una nota. */
+  const ib = ibanDi(p);
+  if (ib && !ibanValido(ib))
+    e.push('L’IBAN ' + (p.sisma ? 'del conto sisma' : 'del conto ordinario')
+      + ' non supera il controllo di validità: ' + ibanLeggibile(ib));
   if (e.length) return { errori: e };
 
   const c = calcolaFattura(imp);
@@ -2517,6 +2557,7 @@ function xmlFattura(f) {
 
   const causale = (p.name ? 'Commessa: ' + p.name + '. ' : '') + f.descrizione;
   const scad = iso(addD(pd(f.data_fattura), STUDIO.pagamento.giorni || 30));
+  const iban = ibanDi(p);
 
   const body =
       '<FatturaElettronicaBody>'
@@ -2549,7 +2590,7 @@ function xmlFattura(f) {
     +   '<DatiPagamento>' + el2('CondizioniPagamento', STUDIO.pagamento.condizioni)
     +     '<DettaglioPagamento>' + el2('ModalitaPagamento', STUDIO.pagamento.modalita)
     +       el2('DataScadenzaPagamento', scad) + el2('ImportoPagamento', n2(c.netto))
-    +       (STUDIO.pagamento.iban ? el2('IBAN', STUDIO.pagamento.iban.replace(/\s/g, '')) : '')
+    +       (iban ? el2('IBAN', iban) : '')
     +     '</DettaglioPagamento></DatiPagamento>'
     + '</FatturaElettronicaBody>';
 
@@ -2625,6 +2666,15 @@ function fatturePanel(pid) {
         + (p.cliente_cf ? 'C.F. ' + esc(p.cliente_cf) + ' · ' : '')
         + (p.cliente_sdi ? 'SDI ' + esc(p.cliente_sdi) : p.cliente_pec ? 'PEC ' + esc(p.cliente_pec)
             : '<span style="color:var(--ora)">manca il codice SDI o la PEC</span>')
+      + '</div>'
+      + '<div style="margin-top:12px;font-size:12.5px;line-height:1.7;padding-top:10px;border-top:1px solid var(--bord)">'
+        + '<b>Accredito su:</b> ' + (p.sisma ? '<span class="chip chip-a">conto sisma</span>'
+                                             : '<span class="chip">conto ordinario</span>')
+        + '<br><code style="font-size:12px">' + esc(ibanLeggibile(ibanDi(p)) || '—') + '</code>'
+        + (ibanDi(p) && !ibanValido(ibanDi(p))
+            ? '<div style="color:var(--red)">Questo IBAN non supera il controllo di validità.</div>' : '')
+        + '<div style="font-size:11px;color:var(--mut)">Il conto dipende dal contrassegno '
+        + '<i>lavoro di ricostruzione post-sisma</i> della commessa.</div>'
       + '</div>'
       + (canW() ? '<button class="btn btn-sm" data-act="editproj" style="margin-top:12px">Completa i dati del committente</button>' : '')
     + '</div></div>'
@@ -3266,6 +3316,9 @@ function anagraficaPanel(p) {
       + '<div class="fg2">' + f('CIG / CUP', p.cig) + f('Importo', feuro(p.amount)) + '</div>'
       + '<div class="fg2">' + f('Data inizio', fdate(p.start_date)) + f('Fine prevista', fdate(p.end_date)) + '</div>'
       + f('Template applicato', TEMPLATES[p.template_key] ? TEMPLATES[p.template_key].label : p.template_key)
+      + '<div class="fg"><label class="fl">Conto di accredito</label><div style="font-size:13px">'
+        + (p.sisma ? '<span class="chip chip-a">Lavori sisma</span> ' : '')
+        + '<code style="font-size:12px">' + esc(ibanLeggibile(ibanDi(p)) || '-') + '</code></div></div>'
       + f('Descrizione', p.description) + '</div>'
     + '<div class="card"><div class="card-h"><span class="card-t">Immobile</span></div>'
       + '<div class="fg2">' + f('Comune', p.comune) + f('Provincia', p.provincia) + '</div>'
@@ -4105,6 +4158,10 @@ function drawWizard() {
       + '</div><div class="fg2">'
       + fld('Indirizzo', 'w-ind', d.indirizzo) + fld('Dati catastali', 'w-cat', d.dati_catastali, 'Fg. 12 part. 345 sub 2')
       + '</div>'
+      + '<div class="fg"><label class="row" style="cursor:pointer;font-size:13px">'
+        + '<input type="checkbox" id="w-sisma"' + (d.sisma ? ' checked' : '') + '>'
+        + '&nbsp;<b>Lavoro di ricostruzione post-sisma</b></label>'
+        + '<div class="hint" id="w-sisma-h">' + ibanHint(d.sisma) + '</div></div>'
       + sez('Dati fiscali del committente', 'servono solo per generare l’XML della fattura')
       + '<div class="fg3">'
       + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
@@ -4165,6 +4222,16 @@ function sez(titolo, nota) {
     + (nota ? ' <span style="font-weight:400;text-transform:none;letter-spacing:0">— ' + esc(nota) + '</span>' : '')
     + '</div>';
 }
+/* Spiega, mentre si compila, su quale conto finirà l'incasso */
+function ibanHint(sisma) {
+  const ib = ibanDi({ sisma: !!sisma });
+  return (sisma
+      ? 'Le fatture di questa commessa riporteranno l’<b>IBAN del conto dedicato al sisma</b>: '
+      : 'Le fatture di questa commessa riporteranno l’<b>IBAN ordinario</b>: ')
+    + (ib ? '<code>' + esc(ibanLeggibile(ib)) + '</code>' : '<i>non impostato</i>')
+    + (sisma ? '. Le somme del contributo non vanno mescolate con quelle dell’attività ordinaria.' : '.');
+}
+
 function fld(label, id, val, ph, type) {
   return '<div class="fg"><label class="fl">' + label + '</label><input class="fc" type="' + (type || 'text') + '" id="' + id
     + '" value="' + esc(val === null || val === undefined ? '' : val) + '" placeholder="' + esc(ph || '') + '"></div>';
@@ -4188,7 +4255,8 @@ function wzCollect() {
     cliente_comune: g('w-ccom') || null, cliente_prov: g('w-cprov') || null,
     description: el('w-desc') ? el('w-desc').value.trim() || null : null
   });
-  if (el('w-clid')) WZ.d.cliente_id = el('w-clid').value || null;
+  if (el('w-clid'))  WZ.d.cliente_id = el('w-clid').value || null;
+  if (el('w-sisma')) WZ.d.sisma = el('w-sisma').checked;
 }
 
 async function wzSave() {
@@ -4906,6 +4974,10 @@ document.addEventListener('DOMContentLoaded', () => {
   el('cl-del').onclick  = () => delCliente(el('cl-id').value);
   el('mp-body').addEventListener('change', e => {
     if (e.target.id === 'w-clid') { wzCollect(); applicaCliente(e.target.value); drawWizard(); }
+    /* Aggiorna al volo l'IBAN annunciato, senza ridisegnare il modulo e
+       perdere quello che si sta scrivendo */
+    if (e.target.id === 'w-sisma' && el('w-sisma-h'))
+      el('w-sisma-h').innerHTML = ibanHint(e.target.checked);
   });
   el('mp-body').addEventListener('click', e => {
     const t = e.target.closest('[data-tpl]');
