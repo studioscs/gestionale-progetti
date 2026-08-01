@@ -26,7 +26,7 @@ function launchOpts() {
 }
 
 const PAGINE = ['oggi','projects','pratiche','tasks','kanban','timeline','scadenzario',
-                'firme','fatturare','clienti','time','chat','users'];
+                'firme','fatturare','clienti','time','chat','redditivita','users'];
 const SCHEDE = ['avanzamento','pratiche','fatture','contabilita','anagrafica','ore'];
 const MODALI = ['m-proj','m-task','m-prat','m-time','m-user','m-fatt','m-cli','m-sal','m-var','m-del','m-rev'];
 

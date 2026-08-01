@@ -32,6 +32,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 11. [`sql/012_dl_sal_varianti.sql`](sql/012_dl_sal_varianti.sql) — SAL, varianti e maturazione del compenso di DL
 12. [`sql/013_ordine_pratiche.sql`](sql/013_ordine_pratiche.sql) — ordine di esecuzione delle pratiche
 13. [`sql/014_chat_attivita.sql`](sql/014_chat_attivita.sql) — conversazione dentro ogni attività
+14. [`sql/015_blocco_autopromozione.sql`](sql/015_blocco_autopromozione.sql) — **falla di sicurezza: da eseguire**
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -62,6 +63,23 @@ La 002 aggiunge inoltre: `notifiche.pratica_id` (per aprire la pratica giusta da
 campanella), l'indice cronologico sulla conversazione, la vista `v_pratiche_chat`
 con il conteggio messaggi, e le policy che lasciano correggere o cancellare **solo
 i propri** messaggi.
+
+### 2-bis. La 015 chiude una falla, non aggiunge una funzione
+
+La politica di aggiornamento di `profiles` permette a ciascuno di modificare la
+propria riga — serve, perché ognuno deve poter correggere il proprio nome. Ma
+l'RLS decide **quali righe** si possono toccare, non **quali colonne**: un
+collaboratore poteva quindi chiamare l'API con la chiave anon — che è pubblica,
+sta dentro `index.html` — e scriversi `role = 'admin'` sulla propria riga.
+
+Verificato su PostgreSQL 16 prima della correzione: l'aggiornamento passava e il
+ruolo diventava `admin`. Da lì si vedono i costi orari di tutti, si eliminano
+commesse e si cambiano i ruoli altrui.
+
+La 015 aggiunge un trigger che, quando chi scrive non è amministratore, rimette
+ruolo e stato ai valori di prima. Non nega l'aggiornamento — il nome deve poter
+cambiare — nega la modifica di quelle due colonne, **nel database e non
+nell'interfaccia**, perché l'interfaccia si aggira.
 
 ### 2. Sicurezza: perché la 006 non è facoltativa
 
@@ -321,6 +339,12 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   commessa. Cliccando un messaggio si apre la sua attività, già sulla scheda
   della conversazione: si riprende il discorso dov'era rimasto invece di doverlo
   ritrovare.
+- **Il proprio costo orario si imposta come quello degli altri.** Nella pagina
+  *Utenti* anche la propria riga ha il pulsante Modifica. Sulla propria scheda
+  ruolo e stato sono bloccati: declassarsi o disattivarsi da soli chiuderebbe
+  fuori senza più modo di rimediare dall'app.
+- **Redditività** (solo admin): per ogni commessa, quanto ha reso e come si
+  divide. Vedi sotto.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -417,7 +441,7 @@ cd test
 npm install          # solo playwright
 node audit.js        # audit statico: funzioni, id, stato, migrazioni, cataloghi
 node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 178 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 191 test end-to-end in Chromium su un mock di Supabase
 node walk.js         # giro completo dell'interfaccia a caccia di errori a runtime
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
@@ -681,6 +705,38 @@ agibilità e per un'altra ventina di voci.
 
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
+
+## Redditività: chi fattura allo studio e cosa resta
+
+In uno studio associato la stessa persona può essere due cose insieme: chi
+lavora e chi emette parcella allo studio. **Le ore di un socio non sono un costo
+del personale come le altre: sono una fattura che arriverà.**
+
+La sezione *Redditività* — riservata agli amministratori — fa questo conto per
+ogni commessa:
+
+| | |
+|---|---|
+| **Guadagno totale** | l'importo della commessa |
+| − **Quota dei soci** | quanto ciascun socio dovrà fatturare per le ore fatte |
+| − **Costo interno** | le ore di chi socio non è: stipendi e oneri |
+| = **Residuo** | quello che gli altri soci possono ancora fatturare |
+
+Un **socio** è un utente con ruolo *admin*: è lui che fattura allo studio invece
+di essere pagato in busta.
+
+Il residuo è **una cosa sola vista da due lati**, non due voci diverse: è
+capienza finché qualcuno la usa, ed è **guadagno extra dello studio** se a
+commessa chiusa nessuno se l'è presa. La scheda lo dice a parole, così non serve
+interpretarlo.
+
+Se le ore valgono più di quanto la commessa incassa, il residuo va in negativo e
+compare l'avviso di **capienza superata**: da lì in poi non c'è più niente da
+fatturare e ogni ora aggiunta è perdita.
+
+Quando qualcuno ha registrato ore in un periodo per cui non è impostato un costo
+orario, quelle ore contano zero e i totali risultano più favorevoli del vero: la
+pagina lo segnala in cima invece di lasciar leggere numeri sbagliati.
 
 ## Direzione lavori: SAL, varianti e compenso che matura col cantiere
 

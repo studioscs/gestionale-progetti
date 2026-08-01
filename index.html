@@ -384,6 +384,7 @@ tbody tr:hover td { background:#f0f4f9; }
     </div>
     <div class="ssec" id="sec-admin">
       <span class="slbl">Amministrazione</span>
+      <button class="sn" data-page="redditivita"><span class="snic">&#128200;</span>Redditivit&agrave;</button>
       <button class="sn" data-page="users"><span class="snic">&#128101;</span>Utenti</button>
     </div>
     <div class="sfoot">
@@ -838,6 +839,7 @@ tbody tr:hover td { background:#f0f4f9; }
         </select>
       </div>
       <div class="fg"><label class="fl">Attivo</label><select class="fc" id="mu-a"><option value="1">S&igrave;</option><option value="0">No (disattivato)</option></select></div>
+      <div id="mu-self"></div>
       <div id="mu-costi"></div>
     </div>
     <div class="mf"><button class="btn" data-close="m-user">Annulla</button><button class="btn btn-p" id="su-btn">Salva</button></div>
@@ -906,7 +908,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.04.1';
+const VERSIONE = '2026.08.04.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2601,7 +2603,7 @@ function render() {
     oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
-    time:rTime, chat:rChat, users:rUsers
+    time:rTime, chat:rChat, redditivita:rRedditivita, users:rUsers
   };
   (P[S.page] || rOggi)();
   updBadges();
@@ -5084,6 +5086,156 @@ function costoCommessa(pid) {
   };
 }
 
+/* ===========================================================================
+   REDDITIVITÀ: CHI DEVE FATTURARE ALLO STUDIO E QUANTO RESTA
+
+   In uno studio associato la stessa persona puo' essere due cose insieme: chi
+   lavora e chi emette parcella allo studio. Le ore di un socio non sono un
+   costo del personale come le altre, sono una fattura che arrivera'.
+
+   Da qui il conto per ogni commessa:
+     guadagno totale   = importo della commessa
+     - quota dei soci  = quanto ciascun socio dovra' fatturare per le ore fatte
+     - costo interno   = le ore di chi socio non e' (stipendi e oneri)
+     = residuo         = quello che gli altri soci possono ancora fatturare;
+                         se nessuno lo fattura, resta guadagno dello studio.
+
+   Il residuo e' una cosa sola vista da due lati, non due voci diverse: e'
+   capienza finche' qualcuno la usa, ed e' utile quando la commessa si chiude.
+   =========================================================================== */
+
+/* Un socio e' un amministratore: e' lui che fattura allo studio invece di
+   essere pagato in busta. */
+const eSocio = uid => { const u = byId(S.profs, uid); return !!u && u.role === 'admin'; };
+
+function redditivita(pid) {
+  const c = costoCommessa(pid);
+  const p = byId(S.projects, pid) || {};
+  const importo = p.amount ? Number(p.amount) : 0;
+
+  const soci = [], interni = [];
+  Object.keys(c.perPersona).forEach(uid => {
+    const x = c.perPersona[uid];
+    (eSocio(uid) ? soci : interni).push({
+      uid, ore: x.ore, importo: r2(x.lordo), netto: r2(x.netto), senzaCosto: x.senzaCosto
+    });
+  });
+  soci.sort((a, b) => b.importo - a.importo);
+  interni.sort((a, b) => b.importo - a.importo);
+
+  const daSoci   = r2(soci.reduce((a, x) => a + x.importo, 0));
+  const daInterni = r2(interni.reduce((a, x) => a + x.importo, 0));
+  const residuo  = importo ? r2(importo - daSoci - daInterni) : null;
+
+  return {
+    importo, soci, interni, daSoci, daInterni, residuo,
+    ore: c.ore,
+    senzaCosto: soci.concat(interni).some(x => x.senzaCosto),
+    /* Capienza esaurita: le ore valgono piu' di quanto la commessa incassa */
+    sforato: residuo !== null && residuo < 0
+  };
+}
+
+function rRedditivita() {
+  if (!isAd()) return el('page').innerHTML =
+    '<div class="card"><div class="empty"><p>Sezione riservata agli amministratori.</p></div></div>';
+
+  el('crumb').textContent = 'Per ogni commessa: quanto ha reso, quanto deve fatturare ciascun socio e quanto resta.';
+
+  const attive = S.projects.filter(x => !x.archiviato)
+    .map(x => ({ p: x, r: redditivita(x.id) }))
+    .filter(x => x.r.importo > 0 || x.r.ore > 0)
+    .sort((a, b) => (b.r.importo || 0) - (a.r.importo || 0));
+
+  if (!attive.length) return el('page').innerHTML =
+    '<div class="card"><div class="empty"><i>📈</i><p>Nessuna commessa con importo od ore registrate.</p></div></div>';
+
+  const tot = attive.reduce((a, x) => ({
+    importo: a.importo + x.r.importo,
+    soci:    a.soci    + x.r.daSoci,
+    interni: a.interni + x.r.daInterni,
+    residuo: a.residuo + (x.r.residuo || 0)
+  }), { importo:0, soci:0, interni:0, residuo:0 });
+
+  const senza = attive.some(x => x.r.senzaCosto);
+
+  el('page').innerHTML =
+      '<div class="kgrid mb16">'
+      + kpi('Guadagno totale', feuro(r2(tot.importo)), attive.length + ' commesse', 100, 'var(--navy)')
+      + kpi('Da fatturare dai soci', feuro(r2(tot.soci)),
+            'parcelle che arriveranno allo studio',
+            tot.importo ? tot.soci / tot.importo * 100 : 0, 'var(--vio)')
+      + kpi('Costo interno', feuro(r2(tot.interni)), 'ore di chi non è socio',
+            tot.importo ? tot.interni / tot.importo * 100 : 0, 'var(--red)')
+      + kpi('Residuo', feuro(r2(tot.residuo)),
+            'ancora fatturabile, altrimenti guadagno extra',
+            tot.importo ? Math.max(0, tot.residuo) / tot.importo * 100 : 0,
+            tot.residuo < 0 ? 'var(--red)' : 'var(--grn)')
+    + '</div>'
+
+    + '<div class="ibox mb16"><b>Come si legge.</b> Il <b>residuo</b> è quello che i soci che non hanno '
+      + 'ancora fatturato possono ancora prendersi su quella commessa. Se resta lì, a commessa chiusa '
+      + 'diventa <b>guadagno extra dello studio</b>: è la stessa cifra vista da due lati, non due voci diverse.</div>'
+
+    + (senza ? '<div class="wbox mb16">Alcune persone hanno registrato ore in periodi per cui non è '
+      + 'impostato un costo orario: quelle ore contano zero e i numeri qui sotto sono in eccesso. '
+      + 'Imposta i costi da <b>Amministrazione → Utenti</b>.</div>' : '')
+
+    + attive.map(x => schedaRedditivita(x.p, x.r)).join('');
+}
+
+function schedaRedditivita(p, r) {
+  const riga = (x, socio) =>
+      '<tr><td><span class="row">' + av(x.uid, 24) + esc(un(x.uid))
+        + (socio ? ' <span class="chip chip-a">socio</span>' : '') + '</span></td>'
+    + '<td style="text-align:right">' + x.ore.toFixed(1) + '</td>'
+    + '<td style="text-align:right"><b>' + feuro(x.importo) + '</b>'
+      + (x.senzaCosto ? '<div style="font-size:11px;color:var(--ora)">costo orario mancante</div>' : '') + '</td>'
+    + '<td style="font-size:12px;color:var(--mut)">'
+      + (socio ? 'deve fatturare allo studio' : 'costo del personale') + '</td></tr>';
+
+  const barra = (l, v, col) => !r.importo ? '' :
+      '<div style="margin-bottom:7px"><div class="spread" style="font-size:12px;margin-bottom:3px">'
+    + '<span>' + l + '</span><b>' + feuro(v) + '</b></div>'
+    + '<div class="pb"><div class="pbf" style="width:'
+    + Math.min(100, Math.abs(v) / r.importo * 100) + '%;background:' + col + '"></div></div></div>';
+
+  return '<div class="card mb16">'
+    + '<div class="card-h"><span class="card-t">' + esc(p.name) + '</span>'
+      + '<span class="row"><span style="font-size:12px;color:var(--mut)">' + esc(p.client || '') + '</span>'
+      + '<button class="btn btn-xs" data-proj="' + p.id + '">Apri</button></span></div>'
+
+    + '<div class="g2">'
+      + '<div>'
+        + '<div class="spread" style="font-size:13px;margin-bottom:10px">'
+          + '<span>Guadagno totale</span><b>' + (r.importo ? feuro(r.importo)
+            : '<span style="color:var(--ora)">importo non inserito</span>') + '</b></div>'
+        + barra('Quota dei soci', r.daSoci, 'var(--vio)')
+        + barra('Costo interno', r.daInterni, 'var(--red)')
+        + (r.residuo !== null ? barra(r.sforato ? 'Capienza superata' : 'Residuo',
+            r.residuo, r.sforato ? 'var(--red)' : 'var(--grn)') : '')
+        + (r.sforato
+            ? '<div class="wbox" style="margin-top:8px">Le ore valgono ' + feuro(Math.abs(r.residuo))
+              + ' più di quanto la commessa incassa: non c’è più niente da fatturare, e ogni ora '
+              + 'aggiunta è perdita.</div>'
+            : r.residuo !== null && r.residuo > 0
+              ? '<div class="hint" style="margin-top:8px">Restano <b>' + feuro(r.residuo) + '</b> che i soci '
+                + 'possono ancora fatturare. Se nessuno li fattura, sono guadagno extra dello studio.</div>'
+              : '')
+      + '</div>'
+      + '<div>'
+        + (r.soci.length || r.interni.length
+          ? '<div class="tw"><table class="tsm"><thead><tr><th>Chi ha lavorato</th>'
+            + '<th style="text-align:right">Ore</th><th style="text-align:right">Importo</th>'
+            + '<th></th></tr></thead><tbody>'
+            + r.soci.map(x => riga(x, true)).join('')
+            + r.interni.map(x => riga(x, false)).join('')
+            + '</tbody></table></div>'
+          : '<div class="empty" style="padding:20px"><p>Nessuna ora registrata su questa commessa.</p></div>')
+      + '</div>'
+    + '</div></div>';
+}
+
 /* Pannello economico dentro la scheda Ore della commessa */
 function costoPanel(pid) {
   const c = costoCommessa(pid);
@@ -5227,8 +5379,9 @@ function rUsers() {
                   + (c.costo_orario_netto !== null ? feuro(c.costo_orario_netto) + ' netto' : '') + '</div>'
                 : '<span style="color:var(--mut2)">non impostato</span>';
             })() + '</td>'
-          + '<td class="ac">' + (u.id === S.me.id ? '<span style="font-size:11px;color:var(--mut)">tu</span>'
-              : '<button class="btn btn-sm" data-usr="' + u.id + '">Modifica</button>') + '</td></tr>';
+          + '<td class="ac">'
+            + (u.id === S.me.id ? '<span style="font-size:11px;color:var(--mut);margin-right:6px">tu</span>' : '')
+            + '<button class="btn btn-sm" data-usr="' + u.id + '">Modifica</button></td></tr>';
       }).join('')
     + '</tbody></table></div></div>';
 }
@@ -6270,15 +6423,31 @@ function openUser(id) {
   el('mu-r').value = u.role || 'viewer';
   el('mu-a').value = u.attivo === false ? '0' : '1';
   el('mu-costi').innerHTML = costiUtenteHtml(id);
+
+  /* Sulla propria scheda si cambia il nome e si imposta il proprio costo, ma
+     ruolo e stato restano bloccati: un amministratore che si declassa o si
+     disattiva da solo perde l'accesso e non ha piu' modo di rimediare
+     dall'applicazione. Serve un altro amministratore, o Supabase. */
+  const io = id === S.me.id;
+  el('mu-r').disabled = io;
+  el('mu-a').disabled = io;
+  el('mu-self').innerHTML = io
+    ? '<div class="ibox" style="font-size:12px">Questa è la tua scheda. Puoi cambiare il tuo nome e '
+      + 'impostare il <b>tuo costo orario</b>. Ruolo e stato sono bloccati: declassarti o disattivarti '
+      + 'da solo ti chiuderebbe fuori, e da qui non potresti più rimediare.</div>'
+    : '';
   openM('m-user');
 }
 async function saveUser() {
   setLoading('su-btn', true);
-  const { error } = await SB.from('profiles').update({
-    full_name: el('mu-n').value.trim(),
-    role: el('mu-r').value,
-    attivo: el('mu-a').value === '1'
-  }).eq('id', EUID);
+  /* Su se stessi si aggiorna il solo nome: ruolo e stato non partono nemmeno,
+     cosi' la regola vale anche se qualcuno riabilitasse i campi dal browser. */
+  const patch = { full_name: el('mu-n').value.trim() };
+  if (EUID !== S.me.id) {
+    patch.role   = el('mu-r').value;
+    patch.attivo = el('mu-a').value === '1';
+  }
+  const { error } = await SB.from('profiles').update(patch).eq('id', EUID);
   if (error) { setLoading('su-btn', false); return sbErr(error, 'utente'); }
   await salvaCosto(EUID);
   setLoading('su-btn', false);
