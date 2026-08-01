@@ -715,6 +715,7 @@ tbody tr:hover td { background:#f0f4f9; }
         </select>
       </div>
       <div class="fg"><label class="fl">Attivo</label><select class="fc" id="mu-a"><option value="1">S&igrave;</option><option value="0">No (disattivato)</option></select></div>
+      <div id="mu-costi"></div>
     </div>
     <div class="mf"><button class="btn" data-close="m-user">Annulla</button><button class="btn btn-p" id="su-btn">Salva</button></div>
   </div>
@@ -776,7 +777,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.01.9';
+const VERSIONE = '2026.08.02.10';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -788,7 +789,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, fatture: [], clienti: [], loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
@@ -1572,7 +1573,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -1582,7 +1583,8 @@ async function loadAll(silent) {
       SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000),
       SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento'),
       SB.from('commessa_fatture').select('*').order('ordine'),
-      SB.from('clienti').select('*').order('denominazione')
+      SB.from('clienti').select('*').order('denominazione'),
+      SB.from('profili_costi').select('*').order('valido_dal', {ascending:false})
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1597,6 +1599,9 @@ async function loadAll(silent) {
     if (!rc.error) (rc.data || []).forEach(r => S.chat[r.pratica_id] = r.messaggi || 0);
     S.fatture   = rfa.error ? [] : (rfa.data || []);
     S.clienti   = rcl.error ? [] : (rcl.data || []);
+    /* I costi arrivano solo agli amministratori: per gli altri la RLS
+       restituisce un elenco vuoto, e va bene cosi'. */
+    S.costi     = rco.error ? [] : (rco.data || []);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -3210,7 +3215,7 @@ function rProject() {
   } else if (S.tab === 'anagrafica') {
     body += anagraficaPanel(p);
   } else if (S.tab === 'ore') {
-    body += orePanel(p.id);
+    body += (isAd() ? costoPanel(p.id) + '<div style="height:16px"></div>' : '') + orePanel(p.id);
   } else if (S.tab === 'file') {
     body += '<div id="filepanel"><div class="empty"><i>⏳</i><p>Caricamento file...</p></div></div>';
     setTimeout(() => drawFiles(p.id), 0);
@@ -3837,6 +3842,168 @@ async function upFile(file, pid) {
   if (e2) { st('⚠ metadati'); sbErr(e2, 'file meta'); } else { st('✓ Caricato'); }
 }
 
+
+/* ===========================================================================
+   COSTO DEL PERSONALE E DELLA COMMESSA
+   I costi sono storicizzati: un aumento non riscrive il valore delle commesse
+   gia' chiuse. Sono leggibili ai soli amministratori (RLS lato database), per
+   questo tutte le sezioni che li mostrano sono condizionate a isAd().
+   =========================================================================== */
+
+/* Costo in vigore per una persona a una certa data */
+function costoDi(uid, data) {
+  const d = data || todayISO();
+  return S.costi.find(c => c.profile_id === uid
+    && c.valido_dal <= d
+    && (!c.valido_al || c.valido_al >= d)) || null;
+}
+const costoAttuale = uid => S.costi.find(c => c.profile_id === uid && !c.valido_al) || null;
+
+/* Valorizzazione delle ore di una commessa, con lo stesso criterio del database */
+function costoCommessa(pid) {
+  const ore = S.time.filter(e => e.project_id === pid);
+  let lordo = 0, netto = 0, h = 0;
+  const perPersona = {};
+  ore.forEach(e => {
+    const c = costoDi(e.operator_id, e.entry_date);
+    const ore_ = Number(e.hours || 0);
+    const l = ore_ * Number((c && c.costo_orario_lordo) || 0);
+    const n = ore_ * Number((c && c.costo_orario_netto) || 0);
+    h += ore_; lordo += l; netto += n;
+    const p = perPersona[e.operator_id] = perPersona[e.operator_id] || { ore:0, lordo:0, netto:0, senzaCosto:false };
+    p.ore += ore_; p.lordo += l; p.netto += n;
+    if (!c) p.senzaCosto = true;
+  });
+  const date = ore.map(e => e.entry_date).filter(Boolean).sort();
+  const proj = byId(S.projects, pid) || {};
+  return {
+    ore: h, lordo: r2(lordo), netto: r2(netto),
+    medio: h ? r2(lordo / h) : 0,
+    persone: Object.keys(perPersona).length,
+    perPersona,
+    prima: date[0] || null, ultima: date[date.length - 1] || null,
+    giorni: date.length ? diffD(date[date.length - 1], date[0]) + 1 : 0,
+    margine: proj.amount ? r2(Number(proj.amount) - lordo) : null,
+    importo: proj.amount ? Number(proj.amount) : null
+  };
+}
+
+/* Pannello economico dentro la scheda Ore della commessa */
+function costoPanel(pid) {
+  const c = costoCommessa(pid);
+  if (!c.ore) return '<div class="card"><div class="empty"><i>💰</i><p>Nessuna ora registrata: '
+    + 'non c’è ancora un costo da calcolare.</p></div></div>';
+
+  const senzaTariffa = Object.keys(c.perPersona).filter(u => c.perPersona[u].senzaCosto);
+  const pctMargine = c.importo ? Math.round(c.margine / c.importo * 100) : null;
+
+  const righe = Object.keys(c.perPersona)
+    .sort((a, b) => c.perPersona[b].lordo - c.perPersona[a].lordo)
+    .map(u => {
+      const x = c.perPersona[u];
+      const co = costoAttuale(u);
+      return '<tr><td><span class="row">' + av(u, 22) + esc(un(u)) + '</span></td>'
+        + '<td style="text-align:right">' + x.ore.toFixed(1) + '</td>'
+        + '<td style="text-align:right;font-size:12px;color:var(--mut)">'
+          + (co ? feuro(co.costo_orario_lordo) + '/h' : '<span style="color:var(--ora)">non impostato</span>') + '</td>'
+        + '<td style="text-align:right"><b>' + feuro(x.lordo) + '</b></td>'
+        + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(x.netto) + '</td>'
+        + '<td style="text-align:right;font-size:12px;color:var(--mut)">'
+          + (c.lordo ? Math.round(x.lordo / c.lordo * 100) + '%' : '-') + '</td></tr>';
+    }).join('');
+
+  return '<div class="kgrid">'
+      + kpi('Costo del lavoro', feuro(c.lordo), 'lordo, ' + feuro(c.netto) + ' netto',
+            c.importo ? Math.min(100, c.lordo / c.importo * 100) : 50, 'var(--red)')
+      + kpi('Costo orario medio', feuro(c.medio), c.ore.toFixed(1) + ' ore · ' + c.persone
+            + (c.persone === 1 ? ' persona' : ' persone'), 60, 'var(--blue)')
+      + kpi('Periodo di lavoro', c.giorni + ' gg',
+            c.prima ? fdate(c.prima) + ' → ' + fdate(c.ultima) : '-', 60, 'var(--mut2)')
+      + (c.importo !== null
+          ? kpi('Margine lordo', feuro(c.margine),
+                (pctMargine !== null ? pctMargine + '% su ' + feuro(c.importo) : ''),
+                Math.max(0, pctMargine || 0), c.margine < 0 ? 'var(--red)' : 'var(--grn)')
+          : kpi('Margine', '—', 'manca l’importo di commessa', 0, 'var(--mut2)'))
+    + '</div>'
+    + (senzaTariffa.length
+        ? '<div class="wbox mb16">Per ' + senzaTariffa.map(u => esc(un(u))).join(', ')
+          + ' non è impostato un costo orario nel periodo lavorato: quelle ore contano zero e '
+          + 'il costo reale è più alto. Lo imposti da <b>Amministrazione → Utenti</b>.</div>'
+        : '')
+    + (c.margine !== null && c.margine < 0
+        ? '<div class="wbox mb16">Il costo del lavoro ha superato l’importo di commessa di '
+          + feuro(Math.abs(c.margine)) + '.</div>' : '')
+    + '<div class="card"><div class="card-h"><span class="card-t">Chi ci ha lavorato</span>'
+      + '<span style="font-size:12px;color:var(--mut)">costo valorizzato alla tariffa in vigore nel giorno di ogni registrazione</span></div>'
+      + '<div class="tw"><table class="tsm"><thead><tr><th>Collaboratore</th>'
+      + '<th style="text-align:right">Ore</th><th style="text-align:right">Costo orario</th>'
+      + '<th style="text-align:right">Costo lordo</th><th style="text-align:right">Netto</th>'
+      + '<th style="text-align:right">Quota</th></tr></thead><tbody>' + righe
+      + '<tr style="background:var(--bg)"><td><b>Totale</b></td>'
+      + '<td style="text-align:right"><b>' + c.ore.toFixed(1) + '</b></td>'
+      + '<td style="text-align:right;font-size:12px">' + feuro(c.medio) + '/h</td>'
+      + '<td style="text-align:right"><b>' + feuro(c.lordo) + '</b></td>'
+      + '<td style="text-align:right;font-size:12px">' + feuro(c.netto) + '</td>'
+      + '<td></td></tr></tbody></table></div></div>';
+}
+
+/* Blocco dei costi nella scheda utente (solo amministratori) */
+function costiUtenteHtml(uid) {
+  if (!isAd()) return '';
+  const attuale = costoAttuale(uid);
+  const storico = S.costi.filter(c => c.profile_id === uid && c.valido_al)
+    .sort((a, b) => (b.valido_dal || '').localeCompare(a.valido_dal || ''));
+  return sez('Costo orario', 'visibile ai soli amministratori')
+    + '<div class="fg3">'
+      + '<div class="fg"><label class="fl">Costo lordo €/h</label>'
+        + '<input type="number" class="fc" id="mu-cl" step="0.01" min="0" value="'
+        + (attuale && attuale.costo_orario_lordo !== null ? attuale.costo_orario_lordo : '') + '"></div>'
+      + '<div class="fg"><label class="fl">Netto €/h</label>'
+        + '<input type="number" class="fc" id="mu-cn" step="0.01" min="0" value="'
+        + (attuale && attuale.costo_orario_netto !== null ? attuale.costo_orario_netto : '') + '"></div>'
+      + '<div class="fg"><label class="fl">In vigore dal</label>'
+        + '<input type="date" class="fc" id="mu-cd" value="' + (attuale ? attuale.valido_dal : todayISO()) + '"></div>'
+    + '</div>'
+    + '<div class="hint">Il costo lordo è quello che la commessa paga: retribuzione più oneri. '
+      + 'Cambiandolo si apre un nuovo periodo e il precedente si chiude da solo: le ore già registrate '
+      + 'restano valorizzate alla tariffa di allora.</div>'
+    + (storico.length
+        ? '<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+          + 'letter-spacing:.06em;color:var(--mut);margin-bottom:5px">Periodi precedenti</div>'
+          + storico.map(c => '<div class="spread" style="font-size:12px;padding:3px 0;color:var(--mut)">'
+            + '<span>' + fdate(c.valido_dal) + ' → ' + fdate(c.valido_al) + '</span>'
+            + '<span>' + feuro(c.costo_orario_lordo) + '/h lordo</span></div>').join('') + '</div>'
+        : '');
+}
+
+/* Salva un nuovo periodo di costo se i valori sono cambiati */
+async function salvaCosto(uid) {
+  if (!isAd() || !el('mu-cl')) return;
+  const lordo = el('mu-cl').value === '' ? null : parseFloat(el('mu-cl').value);
+  const netto = el('mu-cn').value === '' ? null : parseFloat(el('mu-cn').value);
+  const dal   = el('mu-cd').value || todayISO();
+  const att   = costoAttuale(uid);
+
+  const uguale = att
+    && Number(att.costo_orario_lordo) === lordo
+    && Number(att.costo_orario_netto) === netto
+    && att.valido_dal === dal;
+  if (uguale || (lordo === null && netto === null && !att)) return;
+
+  /* Stessa decorrenza: correzione del periodo in corso, non un nuovo periodo */
+  if (att && att.valido_dal === dal) {
+    const { error } = await SB.from('profili_costi')
+      .update({ costo_orario_lordo: lordo, costo_orario_netto: netto }).eq('id', att.id);
+    if (error) sbErr(error, 'costo');
+    return;
+  }
+  const { error } = await SB.from('profili_costi').insert({
+    profile_id: uid, costo_orario_lordo: lordo, costo_orario_netto: netto,
+    valido_dal: dal, created_by: S.me.id
+  });
+  if (error) sbErr(error, 'costo');
+}
+
 /* ===========================================================================
    PAGINA: UTENTI
    =========================================================================== */
@@ -3845,7 +4012,8 @@ function rUsers() {
   el('top-act').innerHTML = '<div class="ibox" style="font-size:11.5px;max-width:520px">'
     + 'Invita gli utenti da Supabase &rarr; Authentication &rarr; Users, oppure falli registrare: nascono <b>Viewer</b> e li attivi qui.</div>';
   el('page').innerHTML = '<div class="card"><div class="tw"><table><thead><tr>'
-    + '<th>Utente</th><th>Email</th><th>Ruolo</th><th>Stato</th><th>Attività aperte</th><th></th></tr></thead><tbody>'
+    + '<th>Utente</th><th>Email</th><th>Ruolo</th><th>Stato</th><th>Attività aperte</th>'
+    + '<th style="text-align:right">Costo orario</th><th></th></tr></thead><tbody>'
     + S.profs.map(u => {
         const open = S.tasks.filter(t => isOpen(t) && t.assignee_id === u.id).length;
         const rc = u.role === 'admin' ? '<span class="chip chip-a">Admin</span>'
@@ -3856,6 +4024,13 @@ function rUsers() {
           + '<td>' + rc + '</td>'
           + '<td>' + (u.attivo === false ? '<span class="chip chip-a">disattivato</span>' : '<span class="chip chip-n">attivo</span>') + '</td>'
           + '<td style="font-size:12px">' + open + '</td>'
+          + '<td style="text-align:right;font-size:12px">' + (() => {
+              const c = costoAttuale(u.id);
+              return c && c.costo_orario_lordo !== null
+                ? '<b>' + feuro(c.costo_orario_lordo) + '</b><div style="color:var(--mut)">'
+                  + (c.costo_orario_netto !== null ? feuro(c.costo_orario_netto) + ' netto' : '') + '</div>'
+                : '<span style="color:var(--mut2)">non impostato</span>';
+            })() + '</td>'
           + '<td class="ac">' + (u.id === S.me.id ? '<span style="font-size:11px;color:var(--mut)">tu</span>'
               : '<button class="btn btn-sm" data-usr="' + u.id + '">Modifica</button>') + '</td></tr>';
       }).join('')
@@ -4636,6 +4811,7 @@ function openUser(id) {
   el('mu-e').value = u.email || '';
   el('mu-r').value = u.role || 'viewer';
   el('mu-a').value = u.attivo === false ? '0' : '1';
+  el('mu-costi').innerHTML = costiUtenteHtml(id);
   openM('m-user');
 }
 async function saveUser() {
@@ -4645,8 +4821,9 @@ async function saveUser() {
     role: el('mu-r').value,
     attivo: el('mu-a').value === '1'
   }).eq('id', EUID);
+  if (error) { setLoading('su-btn', false); return sbErr(error, 'utente'); }
+  await salvaCosto(EUID);
   setLoading('su-btn', false);
-  if (error) return sbErr(error, 'utente');
   closeM('m-user'); await loadAll(true); render(); toast('Utente aggiornato', 'success');
 }
 

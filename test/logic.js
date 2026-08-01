@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const t=(name,cond,got)=>{ if(!cond){fail++;console.log('  ✗',name,'→',JSON.stringify(got));} else console.log('  ✓',name); };
@@ -156,6 +156,40 @@ t('le pratiche telematiche sono marcate proc',
   ctx.PRATICHE_CAT.filter(x=>x.proc).length>=15, ctx.PRATICHE_CAT.filter(x=>x.proc).length);
 t('catasto e notifiche non richiedono procura speciale',
   !ctx.PRATICHE_CAT.find(x=>x.k==='docfa').proc && !ctx.PRATICHE_CAT.find(x=>x.k==='notifica81').proc, null);
+
+console.log('\n— COSTO DEL PERSONALE —');
+/* Due periodi per la stessa persona: 25 €/h fino al 31/03, 30 €/h dal 01/04 */
+ctx.S.costi=[
+  {id:'c1',profile_id:'u1',costo_orario_lordo:25,costo_orario_netto:15,valido_dal:'2026-01-01',valido_al:'2026-03-31'},
+  {id:'c2',profile_id:'u1',costo_orario_lordo:30,costo_orario_netto:18,valido_dal:'2026-04-01',valido_al:null},
+  {id:'c3',profile_id:'u2',costo_orario_lordo:40,costo_orario_netto:24,valido_dal:'2026-01-01',valido_al:null}];
+ctx.S.projects=[{id:'p1',name:'Commessa test',amount:10000}];
+ctx.S.time=[
+  {project_id:'p1',operator_id:'u1',entry_date:'2026-02-10',hours:10},
+  {project_id:'p1',operator_id:'u1',entry_date:'2026-05-10',hours:10},
+  {project_id:'p1',operator_id:'u2',entry_date:'2026-05-10',hours:5},
+  {project_id:'p1',operator_id:'u3',entry_date:'2026-05-10',hours:3}];
+
+t('costo di febbraio alla tariffa vecchia',ctx.costoDi('u1','2026-02-10').costo_orario_lordo===25,
+  ctx.costoDi('u1','2026-02-10'));
+t('costo di maggio alla tariffa nuova',ctx.costoDi('u1','2026-05-10').costo_orario_lordo===30,null);
+t('ultimo giorno del vecchio periodo',ctx.costoDi('u1','2026-03-31').costo_orario_lordo===25,null);
+t('primo giorno del nuovo periodo',ctx.costoDi('u1','2026-04-01').costo_orario_lordo===30,null);
+t('prima di ogni periodo: nessun costo',ctx.costoDi('u1','2025-12-31')===null,ctx.costoDi('u1','2025-12-31'));
+t('chi non ha tariffa non ha costo',ctx.costoDi('u3','2026-05-10')===null,null);
+t('periodo aperto = costo attuale',ctx.costoAttuale('u1').costo_orario_lordo===30,null);
+
+const cc=ctx.costoCommessa('p1');
+t('ore totali',cc.ore===28,cc.ore);
+t('costo lordo alle tariffe del giorno',cc.lordo===750,cc.lordo); // 250+300+200+0
+t('costo netto',cc.netto===450,cc.netto);                        // 150+180+120+0
+t('costo orario medio sul totale ore',cc.medio===26.79,cc.medio); // 750/28
+t('persone coinvolte',cc.persone===3,cc.persone);
+t('durata dalla prima all ultima ora',cc.giorni===90,cc.giorni);  // 10/02 -> 10/05
+t('margine sull importo di commessa',cc.margine===9250,cc.margine);
+t('segnala chi lavora senza tariffa',cc.perPersona.u3.senzaCosto===true&&cc.perPersona.u1.senzaCosto===false,null);
+t('commessa senza ore: nessun costo',(()=>{const v=ctx.costoCommessa('mai');
+  return v.ore===0&&v.lordo===0&&v.giorni===0&&v.medio===0;})(),ctx.costoCommessa('mai'));
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

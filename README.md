@@ -26,6 +26,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 5. [`sql/006_verifica_sicurezza.sql`](sql/006_verifica_sicurezza.sql) — **RLS sulle tabelle preesistenti: da eseguire**
 6. [`sql/007_referente_tecnico.sql`](sql/007_referente_tecnico.sql) — secondo referente di commessa
 7. [`sql/008_anagrafica_clienti.sql`](sql/008_anagrafica_clienti.sql) — anagrafica clienti
+8. [`sql/009_costi_personale.sql`](sql/009_costi_personale.sql) — costo orario e costo del lavoro per commessa
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -245,6 +246,30 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   referente operativo con i riferimenti della commessa, all'amministrativo con
   numero, imponibile, IVA e totale della fattura (l'allegato va aggiunto a mano:
   un `mailto:` non può allegare file).
+- **Costo del lavoro per commessa** (solo amministratori). In *Amministrazione →
+  Utenti* ogni collaboratore ha un **costo orario lordo** (retribuzione più oneri:
+  quello che la commessa paga davvero) e un **netto**, con una data di decorrenza.
+  Nella scheda **Ore** di ogni commessa compare allora un pannello con costo del
+  lavoro, costo orario medio, durata effettiva dalla prima all'ultima registrazione
+  di ore, margine sull'importo di commessa e la tabella di chi ci ha lavorato con
+  ore, costo e quota percentuale. Se qualcuno ha registrato ore senza avere una
+  tariffa nel periodo, il pannello lo dice invece di far passare per buono un costo
+  più basso del reale.
+
+  Due scelte deliberate dietro a questa funzione:
+
+  - **I costi non stanno in `profiles`.** Quella tabella è leggibile da ogni utente
+    autenticato — serve ad assegnare le attività e mostrare i nomi. Mettendoci lo
+    stipendio, chiunque potrebbe leggere quello degli altri interrogando l'API con
+    la chiave anon, che è pubblica. I costi vivono in `profili_costi`, con RLS che
+    ammette i soli amministratori. Non è una questione di interfaccia: un
+    collaboratore che interroga il database a mano ottiene comunque zero righe.
+  - **I costi sono storicizzati.** Un aumento non riscrive il costo delle commesse
+    già chiuse. Ogni riga vale da una data a un'altra; salvando un nuovo costo il
+    periodo precedente si chiude da solo il giorno prima, e le ore già registrate
+    restano valorizzate alla tariffa di allora. Se correggi un costo lasciando la
+    stessa decorrenza, è una correzione del periodo in corso e non ne apre uno nuovo.
+
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -339,8 +364,10 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
-node logic.js        # 40 asserzioni su date, template, pianificazione, avanzamento
-node e2e.js          # 103 test end-to-end in Chromium su un mock di Supabase
+node logic.js        # 90 asserzioni su date, template, pianificazione, avanzamento, costi
+node e2e.js          # 114 test end-to-end in Chromium su un mock di Supabase
+node password.js     # 11 test sul recupero password
+node fattura.js      # XML FatturaPA validato contro l'XSD ufficiale
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -348,8 +375,9 @@ riapertura di un'attività, avanzamento automatico delle fasi, popover di
 assegnazione e scadenza, drag & drop Kanban, calcolo dei termini di legge,
 Gantt pluriennale, archiviazione con ripristino, eliminazione con conferma e
 verifica che non restino record orfani, filtri e raggruppamenti delle pratiche,
-invio ed eliminazione di messaggi in chat, tutte le pagine e l'assenza di errori
-in console.
+invio ed eliminazione di messaggi in chat, anagrafica clienti, costo orario dei
+collaboratori con chiusura del periodo precedente, tutte le pagine e l'assenza di
+errori in console.
 `mock.js` è un Supabase in memoria: i test non toccano il database reale.
 
 ---

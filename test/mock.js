@@ -6,11 +6,14 @@
               {id:U2,full_name:'Anna Verdi',email:'a@scs.it',role:'collaboratore',attivo:true}],
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
-    project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[]
+    project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
+    profili_costi:[]
   };
   window.__DB=DB;
   let seq=0; const uid=()=>'id'+(++seq);
   const clone=x=>JSON.parse(JSON.stringify(x));
+  const giornoPrima=d=>{ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()-1);
+    return x.toISOString().slice(0,10); };
 
   function Q(table){
     // vista calcolata: conteggio messaggi per pratica
@@ -32,6 +35,11 @@
       maybeSingle(){ maybe=true; return api; },
       insert(v){ const arr=Array.isArray(v)?v:[v];
         const made=arr.map(x=>Object.assign({id:uid(),created_at:new Date().toISOString()},x));
+        /* Replica il trigger trg_chiudi_costo della migrazione 009: inserendo un
+           nuovo costo, il periodo aperto precedente si chiude il giorno prima. */
+        if(table==='profili_costi') made.forEach(n=>{
+          DB.profili_costi.forEach(r=>{ if(r.profile_id===n.profile_id&&!r.valido_al&&r.valido_dal<n.valido_dal)
+            r.valido_al=giornoPrima(n.valido_dal); }); });
         DB[table].push(...made); api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];

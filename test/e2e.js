@@ -698,6 +698,100 @@ function launchOpts(){
   });
 
 
+  // --- COSTO DEL PERSONALE ---
+  await t('scheda utente: campi di costo per l amministratore',async()=>{
+    await p.click('.sn[data-page="users"]'); await p.waitForTimeout(500);
+    must(await p.locator('tbody [data-usr]').count()>=1,'nessun utente modificabile');
+    await p.click('tbody [data-usr]'); await p.waitForSelector('#m-user.show');
+    must(await p.isVisible('#mu-cl'),'campo costo lordo assente');
+    must(await p.isVisible('#mu-cn'),'campo costo netto assente');
+    must(await p.isVisible('#mu-cd'),'campo decorrenza assente');
+  });
+  await t('salva il primo costo orario',async()=>{
+    await p.fill('#mu-cl','25'); await p.fill('#mu-cn','15'); await p.fill('#mu-cd','2026-01-01');
+    await p.click('#su-btn'); await p.waitForTimeout(1200);
+    const r=await p.evaluate(()=>__DB.profili_costi);
+    must(r.length===1,'righe di costo: '+r.length);
+    must(Number(r[0].costo_orario_lordo)===25&&Number(r[0].costo_orario_netto)===15,'valori errati');
+    must(r[0].valido_dal==='2026-01-01'&&!r[0].valido_al,'periodo non aperto dal 01/01');
+  });
+  await t('il costo compare nell elenco utenti',async()=>{
+    must(/25,00|25\.00/.test(await p.textContent('#page')),'costo non mostrato in tabella');
+  });
+  await t('un aumento chiude il periodo precedente',async()=>{
+    await p.click('tbody [data-usr]'); await p.waitForSelector('#m-user.show');
+    await p.fill('#mu-cl','30'); await p.fill('#mu-cn','18'); await p.fill('#mu-cd','2026-04-01');
+    await p.click('#su-btn'); await p.waitForTimeout(1200);
+    const r=await p.evaluate(()=>__DB.profili_costi.slice().sort((a,b)=>a.valido_dal<b.valido_dal?-1:1));
+    must(r.length===2,'periodi: '+r.length);
+    must(r[0].valido_al==='2026-03-31','vecchio periodo chiuso il '+r[0].valido_al);
+    must(!r[1].valido_al&&Number(r[1].costo_orario_lordo)===30,'nuovo periodo errato');
+  });
+  await t('lo storico dei periodi si vede nella scheda',async()=>{
+    await p.click('tbody [data-usr]'); await p.waitForSelector('#m-user.show');
+    await p.waitForTimeout(200);
+    const h=await p.textContent('#mu-costi');
+    must(/Periodi precedenti/.test(h),'storico assente');
+    must((await p.inputValue('#mu-cl'))==='30','non mostra il costo in vigore');
+    await p.keyboard.press('Escape');
+  });
+  await t('stessa decorrenza: corregge invece di aprire un periodo',async()=>{
+    await p.click('tbody [data-usr]'); await p.waitForSelector('#m-user.show');
+    await p.fill('#mu-cl','32'); await p.click('#su-btn'); await p.waitForTimeout(1200);
+    const r=await p.evaluate(()=>__DB.profili_costi);
+    must(r.length===2,'ha aperto un periodo di troppo: '+r.length);
+    must(r.some(x=>!x.valido_al&&Number(x.costo_orario_lordo)===32),'correzione non applicata');
+  });
+  await t('valorizza le ore alla tariffa del giorno',async()=>{
+    const c=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Commessa da valorizzare',status:'attivo',
+        start_date:'2026-02-01',amount:5000}).select().single();
+      await SB.from('time_entries').insert([
+        {project_id:data.id,hours:10,entry_date:'2026-02-10',operator_id:'u-due'},   // 25 €/h
+        {project_id:data.id,hours:10,entry_date:'2026-05-10',operator_id:'u-due'}]); // 32 €/h
+      await loadAll(true);
+      return costoCommessa(data.id);
+    });
+    must(c.ore===20,'ore: '+c.ore);
+    must(c.lordo===570,'costo lordo atteso 570, ottenuto '+c.lordo);   // 250 + 320
+    must(c.medio===28.5,'costo orario medio: '+c.medio);
+    must(c.giorni===90,'giorni lavorati: '+c.giorni);                  // 10/02 → 10/05
+    must(c.margine===4430,'margine: '+c.margine);
+  });
+  await t('pannello economico nella scheda Ore',async()=>{
+    await p.evaluate(()=>{ S.pq=''; S.pst=''; S.par=''; go('projects'); });
+    await p.waitForTimeout(500);
+    await p.locator('.card:has-text("Commessa da valorizzare")').first().click();
+    await p.waitForTimeout(500);
+    await p.click('[data-tab="ore"]'); await p.waitForTimeout(400);
+    const h=await p.textContent('#page');
+    must(/Costo del lavoro/.test(h),'pannello assente');
+    must(/Chi ci ha lavorato/.test(h),'dettaglio per persona assente');
+    must(/Margine lordo/.test(h),'margine assente');
+  });
+  await t('avvisa se manca il costo di chi ha lavorato',async()=>{
+    await p.evaluate(async()=>{
+      const pr=__DB.projects.find(x=>x.name==='Commessa da valorizzare');
+      await SB.from('time_entries').insert({project_id:pr.id,hours:4,entry_date:'2026-06-01',operator_id:'u-me'});
+      await loadAll(true); render();
+    });
+    await p.waitForTimeout(500);
+    must(/non è impostato un costo orario/.test(await p.textContent('#page')),'avviso assente');
+  });
+  await t('il collaboratore non vede costi',async()=>{
+    await p.evaluate(()=>{ S.prof.role='collaboratore'; render(); });
+    await p.waitForTimeout(400);
+    const h=await p.textContent('#page');
+    must(!/Costo del lavoro/.test(h),'pannello economico visibile a un collaboratore');
+    must(!/Margine lordo/.test(h),'margine visibile a un collaboratore');
+    must(/Ore per collaboratore/.test(h),'la scheda Ore normale è sparita');
+  });
+  await t('il collaboratore non ha la scheda utenti',async()=>{
+    must(await p.evaluate(()=>costiUtenteHtml('u-due'))==='','scheda costi generata per un collaboratore');
+    await p.evaluate(()=>{ S.prof.role='admin'; render(); });
+    await p.waitForTimeout(300);
+  });
+
   // --- ARCHIVIAZIONE ED ELIMINAZIONE ---
   // Lavora su una commessa usa-e-getta, cosi' la principale resta per gli screenshot
   await t('prepara commessa di prova',async()=>{
