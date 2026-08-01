@@ -7,7 +7,7 @@
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
-    profili_costi:[], enti_pa:[]
+    profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -25,6 +25,40 @@
   const clone=x=>JSON.parse(JSON.stringify(x));
   const giornoPrima=d=>{ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()-1);
     return x.toISOString().slice(0,10); };
+  const r2=n=>Math.round(n*100)/100;
+
+  /* --- trigger della migrazione 012, replicati --- */
+  function percSal(s){
+    if(s.percentuale!=null) return;
+    const p=DB.projects.find(x=>x.id===s.project_id);
+    const base=p&&Number(p.importo_lavori||0);
+    if(base>0) s.percentuale=Math.min(100,r2(Number(s.importo_progressivo||0)/base*100));
+  }
+  function maturaDL(s){
+    const p=DB.projects.find(x=>x.id===s.project_id);
+    const compenso=p?Number(p.compenso_dl||0):0;
+    const perc=Number(s.percentuale||0);
+    if(compenso<=0||perc<=0) return;
+    const maturato=r2(compenso*perc/100);
+    const prima=DB.commessa_fatture.filter(f=>f.project_id===s.project_id&&f.sal_id&&f.stato!=='annullata')
+      .filter(f=>{const s2=DB.commessa_sal.find(y=>y.id===f.sal_id); return s2&&s2.numero<s.numero;})
+      .reduce((a,f)=>a+Number(f.imponibile||0),0);
+    const quota=r2(maturato-prima);
+    const desc='Direzione lavori — quota su SAL n. '+s.numero+' ('+perc.toFixed(2)+'%)';
+    const esistente=DB.commessa_fatture.find(f=>f.sal_id===s.id&&f.stato!=='annullata');
+    if(quota<=0){ if(esistente&&['da_emettere','pronta'].includes(esistente.stato)) esistente.imponibile=0; return; }
+    if(esistente){ if(['da_emettere','pronta'].includes(esistente.stato)){
+        esistente.imponibile=quota; esistente.descrizione=desc; } return; }
+    DB.commessa_fatture.push({id:uid(),project_id:s.project_id,descrizione:desc,
+      ordine:DB.commessa_fatture.filter(f=>f.project_id===s.project_id).length+1,
+      imponibile:quota,data_prevista:s.data_emissione||null,stato:'pronta',sal_id:s.id,
+      created_at:new Date().toISOString()});
+  }
+  function applicaVariante(v){
+    if(v.stato!=='approvata'||v._applicata||!v.aggiorna_importo||v.importo==null) return;
+    const p=DB.projects.find(x=>x.id===v.project_id);
+    if(p){ p.importo_lavori=Number(p.importo_lavori||0)+Number(v.importo); v._applicata=true; }
+  }
 
   function Q(table){
     // vista calcolata: conteggio messaggi per pratica
@@ -52,7 +86,12 @@
         if(table==='profili_costi') made.forEach(n=>{
           DB.profili_costi.forEach(r=>{ if(r.profile_id===n.profile_id&&!r.valido_al&&r.valido_dal<n.valido_dal)
             r.valido_al=giornoPrima(n.valido_dal); }); });
-        DB[table].push(...made); api._res=made; return api; },
+        DB[table].push(...made);
+        /* Trigger della migrazione 012: percentuale calcolata e quota di DL
+           che matura sul SAL. Replicati qui perche' l'app ci conta. */
+        if(table==='commessa_sal') made.forEach(percSal), made.forEach(maturaDL);
+        if(table==='commessa_varianti') made.forEach(applicaVariante);
+        api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];
         arr.forEach(x=>{ const dup=keys.length&&DB[table].some(r=>keys.every(k=>r[k]===x[k]));
@@ -61,11 +100,18 @@
         api._res=made; return api; },
       update(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
         api._upd=v; return api; },
+      _dopoUpdate(){
+        if(table==='commessa_sal') DB.commessa_sal.filter(r=>flt.every(f=>f(r)))
+          .forEach(r=>{ percSal(r); maturaDL(r); });
+        if(table==='commessa_varianti') DB.commessa_varianti.filter(r=>flt.every(f=>f(r)))
+          .forEach(applicaVariante);
+      },
       delete(){ api._del=true; return api; },
       then(res,rej){
         try{
           if(api._err) return res({data:null,error:api._err});
-          if(api._upd){ DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); }); return res({data:null,error:null}); }
+          if(api._upd){ DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); });
+            api._dopoUpdate(); return res({data:null,error:null}); }
           if(api._del){ DB[table]=DB[table].filter(r=>!flt.every(f=>f(r))); return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }
           let d=rows().filter(r=>flt.every(f=>f(r)));

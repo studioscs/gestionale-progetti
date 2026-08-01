@@ -29,6 +29,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 8. [`sql/009_costi_personale.sql`](sql/009_costi_personale.sql) — costo orario e costo del lavoro per commessa
 9. [`sql/010_lavori_sisma.sql`](sql/010_lavori_sisma.sql) — contrassegno lavori sisma e IBAN dedicato
 10. [`sql/011_fatturazione_pa.sql`](sql/011_fatturazione_pa.sql) — fatturazione alla PA, registro uffici, CIG/CUP separati
+11. [`sql/012_dl_sal_varianti.sql`](sql/012_dl_sal_varianti.sql) — SAL, varianti e maturazione del compenso di DL
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -293,6 +294,14 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   dove ogni campo dell'XML è modificabile e i totali si ricalcolano mentre scrivi.
   Finché manca un dato obbligatorio il pulsante *Genera* resta spento e la
   finestra dice cosa manca.
+- **Sola direzione lavori e CSE** — c'è un percorso per gli incarichi che partono
+  a progetto già approvato e gara già fatta: nessuna fase di progettazione, si
+  comincia dall'atto di nomina. Nella scheda **Contabilità & SAL** si registrano
+  gli stati di avanzamento e le varianti.
+- **Il SAL fa maturare l'onorario da solo.** Registrato un SAL, il gestionale
+  calcola la percentuale sull'importo contrattuale dei lavori e apre lo scaglione
+  di fatturazione corrispondente, già pronto da emettere: compenso di DL per la
+  percentuale del SAL, meno quanto già fatturato sui SAL precedenti.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -387,8 +396,8 @@ un solo handler delegato al posto di centinaia di listener per riga.
 ```bash
 cd test
 npm install          # solo playwright
-node logic.js        # 101 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 140 test end-to-end in Chromium su un mock di Supabase
+node logic.js        # 132 asserzioni su date, template, pianificazione, avanzamento, costi
+node e2e.js          # 156 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
@@ -556,6 +565,61 @@ I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
 destinatario SDI o PEC) si compilano nella scheda della commessa.
 
 ---
+
+## Direzione lavori: SAL, varianti e compenso che matura col cantiere
+
+Il compenso per direzione lavori e CSE non matura a fasi come la progettazione:
+matura con l'avanzamento del cantiere. Se la DL emette il SAL n. 2 che porta i
+lavori contabilizzati al 55%, allo studio spetta il 55% del compenso, meno quanto
+già fatturato.
+
+Farlo a mano vuol dire ricalcolare ogni volta la differenza e ricordarsi di
+emettere. È il punto in cui più spesso si perdono soldi, perché **un SAL non
+fatturato non se lo ricorda nessuno**. Qui il calcolo lo fa il database quando il
+SAL viene registrato.
+
+Servono due importi sulla commessa, da non confondere:
+
+| | Che cos'è |
+|---|---|
+| **Importo contrattuale dei lavori** | l'appalto dell'impresa: la base su cui si calcola la percentuale del SAL |
+| **Compenso per DL e CSE** | la quota del *nostro* onorario che matura col cantiere |
+
+L'importo del SAL va inserito **progressivo** — i lavori contabilizzati
+dall'inizio, non quelli del solo periodo. È l'errore più comune e porterebbe a
+fatturare due volte lo stesso avanzamento; il modulo lo dice in cima, e mentre si
+scrive mostra quanto quel SAL renderà fatturabile.
+
+Le **varianti** si registrano nella stessa scheda. Una variante approvata aumenta
+l'importo contrattuale dei lavori, e i SAL successivi calcolano la percentuale
+sulla nuova base. Vale anche per una variante inserita già approvata — il caso
+normale, quando si registra a posteriori qualcosa deciso il mese prima.
+
+Quando c'è compenso maturato e non ancora fatturato, la scheda lo dice a chiare
+lettere con l'importo.
+
+## Il PFTE segue l'Allegato I.7
+
+Il D.Lgs 36/2023 ha ridotto i livelli di progettazione a due: **PFTE ed
+esecutivo**. Il PFTE ha assorbito il vecchio progetto definitivo, quindi la fase
+*Progetto definitivo* è stata tolta dal percorso delle opere pubbliche (resta in
+quello privato, dove il definitivo è una fase di prassi e non un livello del
+Codice).
+
+Le attività del PFTE ricalcano ora gli elaborati dell'**Allegato I.7, art. 6
+c. 7**, lettera per lettera: dalla relazione generale al piano di sicurezza e
+coordinamento, più il piano particellare di esproprio quando la condizione
+*Espropri e asservimenti* è attiva. Ogni attività porta con sé il riferimento
+normativo e un campo **"cosa deve contenere"**, consultabile dalla riga di
+checklist senza aprire l'attività.
+
+> **Quei testi sono sintesi operative, non il testo di legge.** Il contenuto
+> degli articoli non è stato trascritto alla lettera: l'ambiente in cui il
+> gestionale è stato sviluppato blocca l'accesso alle banche dati normative, e
+> riportare a memoria il testo di una norma è il modo peggiore di trattarla.
+> Ogni voce richiama l'articolo esatto perché sia verificabile in un attimo, e
+> l'app stessa lo ripete accanto al testo. Prima di una consegna, il riscontro
+> va fatto sull'Allegato.
 
 ## Fonti
 

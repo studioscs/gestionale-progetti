@@ -30,7 +30,7 @@ t('ini due iniziali',ctx.ini('Mario Rossi Bianchi')==='MR',ctx.ini('Mario Rossi 
 
 console.log('\n— TEMPLATE —');
 const tk=Object.keys(ctx.TEMPLATES);
-t('6 template',tk.length===6,tk);
+t('7 template',tk.length===7,tk);
 let tot=0,fasiTot=0;
 tk.forEach(k=>{const T=ctx.TEMPLATES[k];fasiTot+=T.fasi.length;T.fasi.forEach(f=>tot+=f.att.length);});
 console.log('   fasi totali:',fasiTot,'| attività totali:',tot);
@@ -68,7 +68,7 @@ t('senza vvf: nessuna pratica VVF',!p2.pratiche.some(x=>/Vigili/.test(x.ente)),n
 const p3=ctx.pianifica('vuoto',[],null);
 t('template vuoto: 1 fase 0 attività',p3.fasi.length===1&&p3.fasi[0].att.length===0,p3.fasi.length);
 const p4=ctx.pianifica('pubblico',full,'2026-02-02');
-t('pubblico: 10 fasi',p4.fasi.length===10,p4.fasi.length);
+t('pubblico: 9 fasi',p4.fasi.length===9,p4.fasi.length);
 const p5=ctx.pianifica('strutture',full,null);
 t('strutture: 8 fasi',p5.fasi.length===8,p5.fasi.length);
 const p6=ctx.pianifica('vincolo',full,null);
@@ -146,10 +146,64 @@ t('stralcio archeologico nella fase enti, non nel PFTE',
 t('prerequisiti dei pareri marcati',
   pu.fasi[iEnti].att.filter(a=>a.categoria==='prereq_parere').length>=5,
   pu.fasi[iEnti].att.filter(a=>a.categoria==='prereq_parere').length);
-t('definitivo escluso se non richiesto',
-  ctx.pianifica('pubblico',['strutture','dl'],null).fasi.every(f=>f.fase_key!=='definitivo'),null);
-t('definitivo incluso se richiesto',
-  ctx.pianifica('pubblico',['definitivo','strutture'],null).fasi.some(f=>f.fase_key==='definitivo'),null);
+/* Il PFTE ha assorbito il vecchio definitivo: quella fase non deve piu' esistere
+   in nessuna configurazione del template pubblico. */
+t('il progetto definitivo non esiste piu nel pubblico',
+  ctx.TEMPLATES.pubblico.fasi.every(f=>f.k!=='definitivo'),
+  ctx.TEMPLATES.pubblico.fasi.map(f=>f.k));
+t('nessuna condizione "definitivo" residua',
+  !ctx.CONDIZIONI.some(c=>c.k==='definitivo'),ctx.CONDIZIONI.map(c=>c.k));
+t('generando non compare la fase definitivo',
+  ctx.pianifica('pubblico',['strutture','dl','definitivo'],null).fasi.every(f=>f.fase_key!=='definitivo'),null);
+
+console.log('\n— PFTE SECONDO L ALLEGATO I.7 —');
+const pfte=ctx.TEMPLATES.pubblico.fasi.find(f=>f.k==='pfte');
+t('la fase PFTE esiste',!!pfte,null);
+const tit=pfte.att.map(a=>a.t);
+/* Le lettere dell'art. 6 c. 7: se una sparisce dal template, l'elaborato non
+   viene generato e il collaboratore non sa che deve produrlo. */
+['a) Relazione generale','b) Relazione tecnica','c) Relazione di verifica preventiva',
+ 'd) Studio di impatto ambientale','e) Relazione di sostenibilità','f) Rilievi plano-altimetrici',
+ 'g) Modelli informativi','h) Elaborati grafici','i) Computo estimativo',
+ 'l) Quadro economico','m) Piano economico e finanziario','n) Cronoprogramma',
+ 'o) Piano di sicurezza'].forEach(x=>
+  t('elaborato presente: '+x, tit.some(y=>y.indexOf(x)===0), tit.filter(y=>y[0]===x[0])));
+t('piano particellare di esproprio previsto',
+  tit.some(y=>/particellare di esproprio/i.test(y)),null);
+t('verifica di completezza sull Allegato I.7',
+  tit.some(y=>/completezza rispetto all/i.test(y)),null);
+t('ogni elaborato richiama la norma',
+  pfte.att.filter(a=>/^[a-o]\)/.test(a.t)).every(a=>/All\. I\.7/.test(a.rif||'')),
+  pfte.att.filter(a=>/^[a-o]\)/.test(a.t)&&!/All\. I\.7/.test(a.rif||'')).map(a=>a.t));
+t('ogni elaborato dice cosa deve contenere',
+  pfte.att.filter(a=>/^[a-o]\)/.test(a.t)).every(a=>(a.cont||'').length>80),
+  pfte.att.filter(a=>/^[a-o]\)/.test(a.t)&&(a.cont||'').length<=80).map(a=>a.t));
+t('gli elaborati condizionati restano tali',
+  pfte.att.find(a=>/^d\)/.test(a.t)).cond==='via'
+  && pfte.att.find(a=>/^c\)/.test(a.t)).cond==='archeologico',null);
+t('esproprio e una condizione selezionabile',
+  ctx.CONDIZIONI.some(c=>c.k==='esproprio'),null);
+t('senza esproprio il piano particellare non viene generato',
+  ctx.pianifica('pubblico',['strutture'],null).fasi
+    .find(f=>f.fase_key==='pfte').att.every(a=>!/particellare/i.test(a.title)),null);
+
+console.log('\n— TEMPLATE SOLA DIREZIONE LAVORI —');
+const dl=ctx.TEMPLATES.dl_cse;
+t('il template esiste',!!dl,null);
+t('nessuna fase di progettazione',
+  dl.fasi.every(f=>['pfte','esecutivo','definitivo','progetto','cds','gara'].indexOf(f.k)<0),
+  dl.fasi.map(f=>f.k));
+t('parte dall affidamento dell incarico',dl.fasi[0].k==='incarico',dl.fasi[0].k);
+t('ha la fase di contabilita e SAL',dl.fasi.some(f=>f.k==='contabilita'),null);
+t('ha la fase delle varianti',dl.fasi.some(f=>f.k==='varianti'),null);
+t('ha il coordinamento sicurezza in esecuzione',dl.fasi.some(f=>f.k==='sicurezza_ese'),null);
+t('chiede di registrare importo lavori e compenso DL',
+  dl.fasi[0].att.some(a=>/importo contrattuale.*compenso/i.test(a.t)),null);
+const genDl=ctx.pianifica('dl_cse',['sicurezza','dl'],'2026-03-01');
+t('genera fasi e attivita',genDl.fasi.length>=6&&genDl.fasi.reduce((a,f)=>a+f.att.length,0)>=40,
+  [genDl.fasi.length,genDl.fasi.reduce((a,f)=>a+f.att.length,0)]);
+t('non genera pratiche di progetto',
+  genDl.pratiche.every(x=>x.k==='notifica81'),genDl.pratiche.map(x=>x.k));
 
 console.log('\n— PROCURE PER PRATICA —');
 t('le pratiche telematiche sono marcate proc',

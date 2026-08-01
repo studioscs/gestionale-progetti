@@ -866,6 +866,156 @@ function launchOpts(){
     must(f.xml_generato_at,'generazione non registrata');
   });
 
+  // --- SOLA DIREZIONE LAVORI: SAL, VARIANTI, QUOTA DI ONORARIO ---
+  await t('il template sola DL/CSE è offerto nel wizard',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.fill('#w-name','DL Palestra comunale');
+    await p.fill('#w-cli','Comune di Recanati');
+    await p.fill('#w-lav','1000000'); await p.fill('#w-cdl','40000');
+    await p.click('#mp-next'); await p.waitForTimeout(200);
+    must(await p.locator('[data-tpl="dl_cse"]').count()===1,'template assente');
+  });
+  await t('il template DL non genera fasi di progettazione',async()=>{
+    await p.click('[data-tpl="dl_cse"]'); await p.waitForTimeout(200);
+    await p.click('#mp-next'); await p.click('#mp-save'); await p.waitForTimeout(2000);
+    const fasi=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='DL Palestra comunale');
+      return __DB.commessa_fasi.filter(f=>f.project_id===pr.id).map(f=>f.fase_key);
+    });
+    must(fasi.length>=6,'poche fasi: '+fasi.join(','));
+    must(!fasi.some(k=>['pfte','esecutivo','cds','gara'].includes(k)),'contiene progettazione: '+fasi.join(','));
+    must(fasi.includes('contabilita')&&fasi.includes('varianti'),'mancano contabilità o varianti');
+  });
+  await t('gli importi di riferimento sono salvati',async()=>{
+    const pr=await p.evaluate(()=>__DB.projects.find(x=>x.name==='DL Palestra comunale'));
+    must(Number(pr.importo_lavori)===1000000,'importo lavori: '+pr.importo_lavori);
+    must(Number(pr.compenso_dl)===40000,'compenso DL: '+pr.compenso_dl);
+  });
+  await t('la scheda Contabilità esiste',async()=>{
+    await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='DL Palestra comunale');
+      S.projId=x.id; S.tab='contabilita'; go('project');});
+    await p.waitForTimeout(500);
+    must(await p.locator('[data-tab="contabilita"]').count()===1,'scheda assente');
+    must(/Stati di avanzamento/.test(await p.textContent('#page')),'pannello assente');
+  });
+  await t('registra il SAL 1 e calcola la percentuale',async()=>{
+    await p.click('[data-newsal]'); await p.waitForSelector('#m-sal.show');
+    await p.fill('#sa-imp','300000'); await p.waitForTimeout(300);
+    must(/30\.00%/.test(await p.textContent('#sa-calc')),'percentuale non calcolata: '+(await p.textContent('#sa-calc')));
+    must(/12\.000|12000/.test((await p.textContent('#sa-calc')).replace(/\s/g,'')),'quota non annunciata');
+    await p.click('#sa-save'); await p.waitForTimeout(1200);
+    const s1=await p.evaluate(()=>__DB.commessa_sal.find(x=>x.numero===1));
+    must(s1&&Number(s1.percentuale)===30,'percentuale salvata: '+(s1&&s1.percentuale));
+  });
+  await t('il SAL apre da solo la quota di onorario da fatturare',async()=>{
+    const f=await p.evaluate(()=>__DB.commessa_fatture.find(x=>x.sal_id));
+    must(f,'nessuno scaglione creato');
+    must(Number(f.imponibile)===12000,'quota: '+f.imponibile);
+    must(f.stato==='pronta','stato: '+f.stato);
+    must(/SAL n\. 1/.test(f.descrizione),'descrizione: '+f.descrizione);
+  });
+  await t('il SAL 2 matura solo la differenza',async()=>{
+    await p.click('[data-newsal]'); await p.waitForSelector('#m-sal.show');
+    must((await p.inputValue('#sa-num'))==='2','numero non proposto');
+    await p.fill('#sa-imp','550000'); await p.waitForTimeout(300);
+    await p.click('#sa-save'); await p.waitForTimeout(1200);
+    const f=await p.evaluate(()=>{
+      const s2=__DB.commessa_sal.find(x=>x.numero===2);
+      return __DB.commessa_fatture.find(x=>x.sal_id===s2.id);
+    });
+    must(Number(f.imponibile)===10000,'quota SAL 2: '+f.imponibile+' (attesa 10000, non 22000)');
+  });
+  await t('il totale maturato non supera il compenso',async()=>{
+    const tot=await p.evaluate(()=>__DB.commessa_fatture.filter(x=>x.sal_id)
+      .reduce((a,f)=>a+Number(f.imponibile||0),0));
+    must(tot===22000,'totale: '+tot);
+  });
+  await t('avvisa che c è compenso maturato non fatturato',async()=>{
+    await p.evaluate(()=>{ S.tab='contabilita'; render(); });
+    await p.waitForTimeout(400);
+    must(/non è ancora stato fatturato/.test(await p.textContent('#page')),'avviso assente');
+  });
+  await t('una variante approvata cambia la base dei SAL',async()=>{
+    await p.click('[data-newvar]'); await p.waitForSelector('#m-var.show');
+    await p.fill('#va-desc','Consolidamento fondazioni');
+    await p.fill('#va-imp','200000');
+    await p.selectOption('#va-stato','approvata');
+    await p.click('#va-save'); await p.waitForTimeout(1400);
+    const pr=await p.evaluate(()=>__DB.projects.find(x=>x.name==='DL Palestra comunale'));
+    must(Number(pr.importo_lavori)===1200000,'importo lavori non aggiornato: '+pr.importo_lavori);
+  });
+  await t('il SAL successivo usa la nuova base',async()=>{
+    await p.evaluate(()=>{ S.tab='contabilita'; render(); });
+    await p.waitForTimeout(400);
+    await p.click('[data-newsal]'); await p.waitForSelector('#m-sal.show');
+    await p.fill('#sa-imp','900000'); await p.waitForTimeout(300);
+    await p.click('#sa-save'); await p.waitForTimeout(1200);
+    const s3=await p.evaluate(()=>__DB.commessa_sal.find(x=>x.numero===3));
+    must(Number(s3.percentuale)===75,'percentuale su nuova base: '+s3.percentuale);
+    const f=await p.evaluate(()=>{const s=__DB.commessa_sal.find(x=>x.numero===3);
+      return __DB.commessa_fatture.find(x=>x.sal_id===s.id);});
+    must(Number(f.imponibile)===8000,'quota SAL 3: '+f.imponibile);
+  });
+  await t('senza gli importi il pannello lo dice invece di sbagliare',async()=>{
+    await p.evaluate(()=>{
+      const x=__DB.projects.find(y=>y.name==='DL Palestra comunale');
+      const p2=byId(S.projects,x.id); p2.importo_lavori=null; p2.compenso_dl=null;
+      S.tab='contabilita'; render();
+    });
+    await p.waitForTimeout(400);
+    const h=await p.textContent('#page');
+    must(/Mancano gli importi di riferimento/.test(h),'non segnala gli importi mancanti');
+    must(/Importo contrattuale dei lavori/.test(h)&&/Compenso per direzione lavori/.test(h),
+      'non dice quali importi servono');
+  });
+
+  // --- PFTE SECONDO L'ALLEGATO I.7 ---
+  await t('il PFTE genera gli elaborati dell Allegato I.7',async()=>{
+    const att=await p.evaluate(()=>{
+      const pl=pianifica('pubblico',['strutture','sicurezza','esproprio','via','archeologico'],'2026-01-07');
+      return pl.fasi.find(f=>f.fase_key==='pfte').att.map(a=>a.title);
+    });
+    ['a) Relazione generale','b) Relazione tecnica','h) Elaborati grafici','l) Quadro economico',
+     'o) Piano di sicurezza'].forEach(x=>
+      must(att.some(y=>y.indexOf(x)===0),'manca l elaborato '+x));
+    must(att.some(y=>/particellare di esproprio/i.test(y)),'manca il piano particellare');
+  });
+  await t('ogni elaborato porta con sé cosa deve contenere',async()=>{
+    const cont=await p.evaluate(()=>{
+      const pl=pianifica('pubblico',['strutture','sicurezza'],'2026-01-07');
+      return pl.fasi.find(f=>f.fase_key==='pfte').att
+        .filter(a=>/^[a-o]\)/.test(a.title)).map(a=>({t:a.title,c:a.contenuto}));
+    });
+    must(cont.length>=10,'pochi elaborati: '+cont.length);
+    must(cont.every(x=>x.c&&x.c.length>80),'senza contenuto: '
+      +cont.filter(x=>!x.c||x.c.length<=80).map(x=>x.t).join(', '));
+  });
+  await t('il contenuto è consultabile dalla riga di checklist',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Opera pubblica I.7',status:'attivo',
+        start_date:'2026-01-07'}).select().single();
+      await generaStruttura(data.id,'pubblico',['strutture','sicurezza'],'2026-01-07');
+      await loadAll(true); S.projId=data.id; S.tab='avanzamento'; go('project');
+    });
+    await p.waitForTimeout(800);
+    await p.evaluate(()=>{ document.querySelectorAll('.grp-h').forEach(g=>g.click()); });
+    await p.waitForTimeout(400);
+    must(await p.locator('[data-cont]').count()>0,'nessun rimando al contenuto');
+    ultimoDialogo='';
+    await p.locator('[data-cont]').first().click(); await p.waitForTimeout(500);
+    must(/All\. I\.7/.test(ultimoDialogo),'il contenuto non richiama la norma: '+ultimoDialogo);
+    must(/Sintesi operativa/.test(ultimoDialogo),'non avverte che è una sintesi');
+  });
+  await t('nessuna fase "progetto definitivo" nell opera pubblica',async()=>{
+    const fasi=await p.evaluate(()=>{
+      const pr=__DB.projects.find(x=>x.name==='Opera pubblica I.7');
+      return __DB.commessa_fasi.filter(f=>f.project_id===pr.id).map(f=>f.nome);
+    });
+    must(!fasi.some(n=>/progetto definitivo/i.test(n)),'ancora presente: '+fasi.join(' | '));
+    must(fasi.some(n=>/fattibilità tecnica ed economica/i.test(n)),'manca il PFTE');
+  });
+
   // --- DATABASE NON AGGIORNATO: IL MESSAGGIO DEVE INDIRIZZARE ---
   await t('salvando con una colonna mancante indica la migrazione giusta',async()=>{
     await p.evaluate(()=>{ window.__COLONNE_ASSENTI=['sisma']; });

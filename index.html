@@ -482,6 +482,82 @@ tbody tr:hover td { background:#f0f4f9; }
 </div>
 
 <!-- Scaglione di fatturazione -->
+<!-- Stato di avanzamento lavori -->
+<div class="ov" id="m-sal">
+  <div class="modal">
+    <div class="mh"><h3 id="msal-t">Stato di avanzamento</h3><button class="mx" data-close="m-sal">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16">L&rsquo;importo &egrave; <b>progressivo</b>: i lavori contabilizzati dall&rsquo;inizio,
+        non quelli del solo periodo. &Egrave; l&rsquo;errore pi&ugrave; comune e porta a fatturare due volte lo stesso avanzamento.</div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Numero *</label><input type="number" class="fc" id="sa-num" min="1"></div>
+        <div class="fg"><label class="fl">Data di emissione</label><input type="date" class="fc" id="sa-data"></div>
+        <div class="fg"><label class="fl">Stato</label><select class="fc" id="sa-stato">
+          <option value="redatto">Redatto</option><option value="trasmesso">Trasmesso al RUP</option>
+          <option value="certificato">Certificato di pagamento emesso</option>
+          <option value="pagato">Pagato</option><option value="annullato">Annullato</option>
+        </select></div>
+      </div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Lavori contabilizzati (progressivi) &euro;</label>
+          <input type="number" class="fc" id="sa-imp" step="0.01" min="0"></div>
+        <div class="fg"><label class="fl">Percentuale %</label>
+          <input type="number" class="fc" id="sa-perc" step="0.01" min="0" max="100" placeholder="calcolata da sola">
+          <div class="hint">Lasciala vuota per calcolarla sull&rsquo;importo contrattuale.</div></div>
+      </div>
+      <div class="hint" id="sa-calc" style="margin:-6px 0 14px"></div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Data certificato di pagamento</label><input type="date" class="fc" id="sa-dcert"></div>
+        <div class="fg"><label class="fl">Importo certificato &euro;</label><input type="number" class="fc" id="sa-icert" step="0.01"></div>
+      </div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="sa-note" rows="2"></textarea></div>
+      <input type="hidden" id="sa-id">
+    </div>
+    <div class="mf">
+      <button class="btn btn-d left" id="sa-del" style="display:none">Elimina</button>
+      <button class="btn" data-close="m-sal">Annulla</button>
+      <button class="btn btn-p" id="sa-save">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Variante in corso d'opera -->
+<div class="ov" id="m-var">
+  <div class="modal">
+    <div class="mh"><h3 id="mvar-t">Variante in corso d&rsquo;opera</h3><button class="mx" data-close="m-var">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg2">
+        <div class="fg"><label class="fl">Numero *</label><input type="number" class="fc" id="va-num" min="1"></div>
+        <div class="fg"><label class="fl">Stato</label><select class="fc" id="va-stato">
+          <option value="in_redazione">In redazione</option><option value="trasmessa">Trasmessa</option>
+          <option value="approvata">Approvata</option><option value="respinta">Respinta</option>
+          <option value="ritirata">Ritirata</option>
+        </select></div>
+      </div>
+      <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="va-desc" placeholder="Es. Consolidamento delle fondazioni"></div>
+      <div class="fg"><label class="fl">Presupposto normativo</label>
+        <input class="fc" id="va-mot" placeholder="Es. art. 120 c.1 lett. c) D.Lgs 36/2023">
+        <div class="hint">Le modifiche in corso di esecuzione sono ammesse solo nei casi dell&rsquo;art. 120:
+          la motivazione va documentata prima di redigere la perizia.</div></div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Importo &euro;</label><input type="number" class="fc" id="va-imp" step="0.01"></div>
+        <div class="fg"><label class="fl">Data redazione</label><input type="date" class="fc" id="va-dred"></div>
+        <div class="fg"><label class="fl">Data approvazione</label><input type="date" class="fc" id="va-dapp"></div>
+      </div>
+      <div class="fg"><label class="row" style="cursor:pointer;font-size:13px">
+        <input type="checkbox" id="va-agg" checked>&nbsp;All&rsquo;approvazione aggiorna l&rsquo;importo contrattuale dei lavori</label>
+        <div class="hint">Cambiando la base, i SAL successivi calcolano la percentuale su quella nuova.</div></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="va-note" rows="2"></textarea></div>
+      <input type="hidden" id="va-id">
+    </div>
+    <div class="mf">
+      <button class="btn btn-d left" id="va-del" style="display:none">Elimina</button>
+      <button class="btn" data-close="m-var">Annulla</button>
+      <button class="btn btn-p" id="va-save">Salva</button>
+    </div>
+  </div>
+</div>
+
 <!-- Revisione della fattura: ultimo passaggio prima di produrre il file.
      Ogni campo che finisce nell'XML e' modificabile qui, senza dover tornare
      indietro a correggere la commessa o lo scaglione. -->
@@ -597,6 +673,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Scadenza</label><input type="date" class="fc" id="tt-d"><div id="tt-quick" class="row" style="margin-top:6px;flex-wrap:wrap"></div></div>
         <div class="fg"><label class="fl">Ente / riferimento</label><input class="fc" id="tt-ente" placeholder="Es. Soprintendenza"><div class="hint" id="tt-rif"></div></div>
       </div>
+      <div id="tt-cont"></div>
       <div class="fg"><label class="fl">Note</label><textarea class="fc" id="tt-no" rows="3"></textarea></div>
       <input type="hidden" id="tt-id">
     </div>
@@ -810,7 +887,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.02.13';
+const VERSIONE = '2026.08.03.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -822,7 +899,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], enti: [], loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
@@ -956,7 +1033,9 @@ const MIGRAZIONI = {
   '009_costi_personale':  ['profili_costi'],
   '010_lavori_sisma':     ['sisma'],
   '011_fatturazione_pa':  ['ente_pubblico','codice_ufficio','split_payment','cup','rif_incarico',
-                           'rif_incarico_data','rif_incarico_tipo','oggetto_servizio','ente_pa_id','enti_pa']
+                           'rif_incarico_data','rif_incarico_tipo','oggetto_servizio','ente_pa_id','enti_pa'],
+  '012_dl_sal_varianti':  ['importo_lavori','compenso_dl','contenuto','sal_id',
+                           'commessa_sal','commessa_varianti']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -1049,7 +1128,7 @@ const CONDIZIONI = [
   { k:'dl',            l:'Direzione lavori',               d:'DL, contabilità, SAL, certificato di regolare esecuzione' },
   { k:'catasto',       l:'Aggiornamento catastale',        d:'DOCFA / Pregeo a fine lavori' },
   { k:'agibilita', proc:1,     l:'Agibilità a fine lavori',        d:'SCIA di agibilità art. 24 DPR 380/2001' },
-  { k:'definitivo',    l:'Livello definitivo richiesto',    d:'Solo opere pubbliche: la stazione appaltante chiede il definitivo oltre a PFTE ed esecutivo' }
+  { k:'esproprio',     l:'Espropri e asservimenti',        d:'Opere pubbliche: piano particellare nel PFTE, DPR 327/2001' }
 ];
 
 /* --- Catalogo pratiche/enti: termini indicativi da verificare --- */
@@ -1397,7 +1476,7 @@ privato: {
 /* ------------------------------ OPERA PUBBLICA ------------------------------ */
 pubblico: {
   label: 'Opera pubblica — D.Lgs 36/2023',
-  desc:  'Due soli livelli di progettazione (PFTE ed esecutivo). I pareri si raccolgono in conferenza di servizi sul PFTE: la documentazione che li alimenta va prodotta prima, non dopo.',
+  desc:  'Due soli livelli di progettazione: PFTE ed esecutivo. Il PFTE ha assorbito il vecchio progetto definitivo e i suoi elaborati seguono l’Allegato I.7. I pareri si raccolgono in conferenza di servizi sul PFTE: la documentazione che li alimenta va prodotta prima, non dopo.',
   fasi: [
   { k:'avvio', nome:'1. Avvio e programmazione', ic:'📋', dur:20, att:[
     { t:'Acquisizione del documento di indirizzo alla progettazione (DIP)', h:4 },
@@ -1422,20 +1501,43 @@ pubblico: {
     { t:'Relazione preliminare antincendio', h:12, cond:'vvf', cat:'prereq_parere' },
     { t:'Incontri preliminari con gli enti per anticipare le prescrizioni', h:10 }
   ]},
-  { k:'pfte', nome:'3. Progetto di fattibilità tecnica ed economica', ic:'📐', dur:60,
-    desc:'Contenuti minimi all’Allegato I.7. Il PFTE è il livello su cui si esprimono gli enti: quanto più è completo, tanto meno integrazioni arriveranno in conferenza.', att:[
-    { t:'Relazione generale e quadro esigenziale', h:16 },
-    { t:'Documento di fattibilità delle alternative progettuali', h:20 },
-    { t:'Relazione geologica, idrologica e geotecnica', h:16, cond:'geologia' },
-    { t:'Relazione di verifica preventiva dell’interesse archeologico', h:10, cond:'archeologico', rif:'All. I.8 D.Lgs 36/2023' },
-    { t:'Studio di impatto ambientale', h:30, cond:'via' },
-    { t:'Elaborati grafici di inquadramento e soluzione progettuale', h:40 },
-    { t:'Modelli informativi e relazioni specialistiche', h:24, opt:1 },
-    { t:'Prime indicazioni per la stesura del PSC', h:8, cond:'sicurezza' },
-    { t:'Computo estimativo e quadro economico', h:16 },
-    { t:'Cronoprogramma e piano economico-finanziario', h:8 },
-    { t:'Verifica di completezza rispetto all’Allegato I.7', h:6, ms:1 },
-    { t:'Trasmissione del PFTE alla stazione appaltante', h:2, ms:1 }
+  { k:'pfte', nome:'3. Progetto di fattibilità tecnica ed economica', ic:'📐', dur:75,
+    desc:'Il D.Lgs 36/2023 ha ridotto i livelli a due: il PFTE ha assorbito il vecchio progetto definitivo ed è il livello su cui gli enti si esprimono e su cui si avviano gli espropri. L’elenco che segue ricalca gli elaborati dell’Allegato I.7, art. 6 c. 7, lettera per lettera. Il campo “contenuto” di ogni attività riassume che cosa l’elaborato deve contenere: è una sintesi operativa, non il testo di legge, e va confrontata con l’Allegato prima della consegna.', att:[
+    { t:'a) Relazione generale', h:24, rif:'All. I.7 artt. 6 c.7 lett. a) e 7',
+      cont:'Motivazioni che giustificano la necessità dell’intervento, in rapporto agli obiettivi generali fissati dal committente nel quadro esigenziale. Obiettivi posti a base della progettazione secondo il DIP e requisiti tecnico-prestazionali da soddisfare. Descrizione della soluzione prescelta nelle sue caratteristiche tipologiche, funzionali, tecniche, gestionali ed economico-finanziarie, con il supporto degli elaborati descrittivi e grafici. Sintesi, descrittiva e grafica, delle alternative progettuali esaminate nel DOCFAP, se redatto.' },
+    { t:'b) Relazione tecnica, con rilievi, accertamenti, indagini e studi specialistici', h:32, rif:'All. I.7 artt. 6 c.7 lett. b) e 8',
+      cont:'Esigenze, requisiti e livelli prestazionali che l’intervento deve soddisfare rispetto a quanto definito nel DIP, ed esiti degli studi, delle indagini e delle analisi condotte. Le indagini e gli studi specialistici ne costituiscono allegato e sono firmati dai rispettivi tecnici abilitati. Vi confluiscono le conoscenze acquisite su morfologia, geologia, geotecnica, idrologia e idraulica, sismica, strutture, ecosistemi, evoluzione storica, uso del suolo, urbanistica, paesaggio, valori architettonici e storico-culturali, vincoli.' },
+    { t:'c) Relazione di verifica preventiva dell’interesse archeologico', h:12, cond:'archeologico',
+      rif:'All. I.7 art. 6 c.7 lett. c) — All. I.8 D.Lgs 36/2023',
+      cont:'Documentazione per l’archeologia preventiva da trasmettere alla Soprintendenza. Il termine per il riscontro è perentorio: conviene inviare lo stralcio appena è sufficiente, senza attendere il PFTE completo.' },
+    { t:'d) Studio di impatto ambientale', h:40, cond:'via', rif:'All. I.7 art. 6 c.7 lett. d) — D.Lgs 152/2006',
+      cont:'Dovuto per le opere soggette a valutazione di impatto ambientale. Per le opere soggette alla sola verifica di assoggettabilità si produce invece la documentazione di screening.' },
+    { t:'e) Relazione di sostenibilità dell’opera', h:20, rif:'All. I.7 art. 6 c.7 lett. e)',
+      cont:'Verifica della rispondenza dell’intervento ai criteri di sostenibilità ambientale, sociale ed economica, compresi i criteri ambientali minimi applicabili e il principio di non arrecare danno significativo (DNSH) quando l’opera è finanziata da fondi che lo impongono.' },
+    { t:'f) Rilievi plano-altimetrici e stato di consistenza delle opere esistenti', h:24, rif:'All. I.7 art. 6 c.7 lett. f)',
+      cont:'Rilievo dell’area e dei manufatti esistenti, anche con tecnologie digitali, così da restituire lo stato dei luoghi su cui si innesta il progetto. È il presupposto degli elaborati grafici e del computo: farlo tardi significa rifare.' },
+    { t:'g) Modelli informativi e relazione specialistica sulla modellazione', h:28, opt:1,
+      rif:'All. I.7 art. 6 c.7 lett. g) — art. 43 D.Lgs 36/2023',
+      cont:'Modelli informativi dell’opera e relazione che ne descrive struttura, livelli di sviluppo e usi. Dovuti quando la stazione appaltante richiede la gestione informativa digitale; si verifica nel DIP e nel capitolato informativo.' },
+    { t:'h) Elaborati grafici delle opere', h:70, rif:'All. I.7 art. 6 c.7 lett. h)',
+      cont:'Inquadramento territoriale e urbanistico, planimetrie generali, piante, prospetti e sezioni della soluzione prescelta, alle scale adeguate alla tipologia dell’opera, con il livello di dettaglio necessario a far esprimere gli enti e ad avviare gli espropri.' },
+    { t:'i) Computo estimativo dell’opera', h:28, rif:'All. I.7 art. 6 c.7 lett. i)',
+      cont:'Stima del costo dell’opera fondata su prezzari di riferimento e, per le lavorazioni non presenti, su analisi dei prezzi. È la base del quadro economico e del successivo importo a base di gara.' },
+    { t:'l) Quadro economico di progetto', h:12, rif:'All. I.7 art. 6 c.7 lett. l)',
+      cont:'Oltre all’importo dei lavori comprende gli oneri della sicurezza non soggetti a ribasso e tutte le somme a disposizione della stazione appaltante: espropri, allacciamenti, imprevisti, spese tecniche, IVA e altre imposte.' },
+    { t:'m) Piano economico e finanziario di massima', h:14, opt:1, rif:'All. I.7 art. 6 c.7 lett. m)',
+      cont:'Sostenibilità finanziaria dell’intervento: fonti di copertura, flussi e, nelle opere che lo richiedono, equilibrio economico-finanziario della gestione.' },
+    { t:'n) Cronoprogramma', h:10, rif:'All. I.7 art. 6 c.7 lett. n)',
+      cont:'Diagramma lineare che rappresenta lo sviluppo temporale delle attività di progettazione, affidamento ed esecuzione dei lavori, suddivise per macrocategorie.' },
+    { t:'o) Piano di sicurezza e di coordinamento', h:24, cond:'sicurezza',
+      rif:'All. I.7 art. 6 c.7 lett. o) — D.Lgs 81/2008 Titolo IV',
+      cont:'Piano di sicurezza e coordinamento riferito alla soluzione del PFTE, con la stima dei relativi oneri, che non sono soggetti a ribasso d’asta. Sarà sviluppato e aggiornato nel progetto esecutivo.' },
+    { t:'Piano particellare di esproprio e degli asservimenti', h:20, cond:'esproprio',
+      rif:'art. 41 D.Lgs 36/2023 — DPR 327/2001',
+      cont:'Elenco delle ditte catastali, delle particelle interessate e delle indennità stimate. Il PFTE deve contenere quanto serve ad avviare le procedure espropriative: senza questo elaborato la dichiarazione di pubblica utilità non parte.' },
+    { t:'Verifica di completezza rispetto all’Allegato I.7', h:8, ms:1,
+      cont:'Riscontro elaborato per elaborato dell’elenco dell’art. 6 c. 7. Le lettere non pertinenti all’intervento vanno motivate per iscritto, non semplicemente omesse: è la prima cosa che il verificatore controlla.' },
+    { t:'Trasmissione del PFTE alla stazione appaltante', h:3, ms:1 }
   ]},
   { k:'cds', nome:'4. Conferenza di servizi sul PFTE', ic:'🏛️', dur:90,
     desc:'Conferenza decisoria in forma semplificata e modalità asincrona. Termini: 60 giorni per i pareri, 90 per gli enti preposti alla tutela di paesaggio, beni culturali e ambiente. La determinazione conclusiva approva il progetto e vale come variante urbanistica.', att:[
@@ -1447,16 +1549,7 @@ pubblico: {
     { t:'Determinazione conclusiva della conferenza di servizi', h:2, ms:1 },
     { t:'Verifica degli effetti di variante urbanistica', h:6, opt:1 }
   ]},
-  { k:'definitivo', nome:'5. Progetto definitivo (solo se richiesto)', ic:'✏️', dur:60, cond:'definitivo',
-    desc:'Il D.Lgs 36/2023 ha ridotto i livelli a due: PFTE ed esecutivo. Attiva questa fase solo se la stazione appaltante lo richiede espressamente o per procedimenti avviati sotto la disciplina previgente.', att:[
-    { t:'Relazione generale e relazioni specialistiche', h:32, cond:'definitivo' },
-    { t:'Elaborati grafici architettonici', h:60, cond:'definitivo' },
-    { t:'Progetto strutturale definitivo', h:50, cond:'definitivo' },
-    { t:'Progetto impiantistico definitivo', h:40, cond:'definitivo' },
-    { t:'Disciplinare descrittivo e prestazionale', h:14, cond:'definitivo' },
-    { t:'Computo metrico estimativo e quadro economico', h:24, cond:'definitivo' }
-  ]},
-  { k:'esecutivo', nome:'6. Progetto esecutivo', ic:'📏', dur:60, att:[
+  { k:'esecutivo', nome:'5. Progetto esecutivo', ic:'📏', dur:60, att:[
     { t:'Relazione generale e relazioni di calcolo', h:32 },
     { t:'Elaborati esecutivi architettonici e dettagli', h:70 },
     { t:'Elaborati esecutivi strutturali e piani di manutenzione', h:60, cond:'strutture' },
@@ -1471,7 +1564,7 @@ pubblico: {
     { t:'Piano particellare di esproprio', h:16, opt:1 },
     { t:'Verifica di coerenza con le prescrizioni della conferenza di servizi', h:8, ms:1 }
   ]},
-  { k:'verifica', nome:'7. Verifica e validazione', ic:'🔍', dur:45, att:[
+  { k:'verifica', nome:'6. Verifica e validazione', ic:'🔍', dur:45, att:[
     { t:'Consegna del progetto al soggetto verificatore', h:4, rif:'art. 42 D.Lgs 36/2023', ms:1 },
     { t:'Gestione dei rilievi del verificatore', h:24 },
     { t:'Adeguamento degli elaborati alle osservazioni', h:32 },
@@ -1479,7 +1572,7 @@ pubblico: {
     { t:'Validazione del progetto da parte del RUP', h:2, ms:1 },
     { t:'Approvazione del progetto esecutivo', h:2, ms:1 }
   ]},
-  { k:'gara', nome:'8. Gara e affidamento', ic:'🤝', dur:90, att:[
+  { k:'gara', nome:'7. Gara e affidamento', ic:'🤝', dur:90, att:[
     { t:'Supporto alla predisposizione del bando e del disciplinare', h:16 },
     { t:'Predisposizione degli elaborati per la piattaforma telematica', h:10, cat:'piattaforma' },
     { t:'Risposta ai chiarimenti dei concorrenti', h:12 },
@@ -1487,7 +1580,7 @@ pubblico: {
     { t:'Verifica dell’anomalia dell’offerta', h:10, opt:1 },
     { t:'Aggiudicazione e stipula del contratto', h:6, ms:1 }
   ]},
-  { k:'dl', nome:'9. Direzione lavori ed esecuzione', ic:'👷', dur:365, cond:'dl', att:[
+  { k:'dl', nome:'8. Direzione lavori ed esecuzione', ic:'👷', dur:365, cond:'dl', att:[
     { t:'Nomina dell’ufficio di direzione lavori e del CSE', h:2, cond:'dl' },
     { t:'Verbale di consegna dei lavori', h:4, cond:'dl', ms:1 },
     { t:'Notifica preliminare', h:2, rif:'art. 99 D.Lgs 81/2008', cond:'sicurezza', cat:'piattaforma' },
@@ -1501,7 +1594,7 @@ pubblico: {
     { t:'Verbale di ultimazione dei lavori', h:3, cond:'dl', ms:1 },
     { t:'Conto finale e relazione del RUP', h:16, cond:'dl' }
   ]},
-  { k:'collaudo', nome:'10. Collaudo e chiusura', ic:'✅', dur:90, att:[
+  { k:'collaudo', nome:'9. Collaudo e chiusura', ic:'✅', dur:90, att:[
     { t:'Nomina del collaudatore', h:2 },
     { t:'Visite di collaudo in corso d’opera', h:16, opt:1 },
     { t:'Collaudo statico', h:12, cond:'strutture', ms:1 },
@@ -1518,6 +1611,94 @@ pubblico: {
 },
 
 /* ---------------------------- INCARICO STRUTTURALE ---------------------------- */
+/* ------------------ SOLA DIREZIONE LAVORI E SICUREZZA (PUBBLICO) ------------------ */
+dl_cse: {
+  label: 'Direzione lavori e CSE — appalto pubblico',
+  desc:  'Incarico che parte a progetto già approvato e gara già fatta: nessuna fase di progettazione. Il compenso non matura a fasi ma con il cantiere, quindi ogni SAL emesso rende fatturabile la quota corrispondente di onorario.',
+  prat: ['notifica81'],
+  fasi: [
+  { k:'incarico', nome:'1. Affidamento e avvio dell’incarico', ic:'📋', dur:20,
+    desc:'Prima di mettere piede in cantiere: atto di nomina, polizza, e la lettura del progetto che si è chiamati a dirigere ma non si è redatto.', att:[
+    { t:'Acquisizione dell’atto di nomina a direttore dei lavori', h:3, ms:1 },
+    { t:'Acquisizione dell’atto di nomina a coordinatore per l’esecuzione', h:3, cond:'sicurezza', ms:1,
+      rif:'art. 92 D.Lgs 81/2008' },
+    { t:'Sottoscrizione della convenzione e polizza professionale', h:4, ms:1 },
+    { t:'Registrazione di importo contrattuale dei lavori e compenso di DL', h:2, ms:1,
+      cont:'Vanno inseriti nella scheda della commessa: sono le due grandezze da cui si calcola la quota di onorario che ogni SAL rende fatturabile.' },
+    { t:'Esame del progetto esecutivo approvato e delle prescrizioni degli enti', h:20,
+      cont:'Il DL risponde di quello che dirige. Le prescrizioni della conferenza di servizi e degli enti vanno estratte in un elenco di riscontro, perché il collaudo le richiederà una per una.' },
+    { t:'Verifica della disponibilità delle aree e dello stato dei luoghi', h:8 },
+    { t:'Costituzione dell’ufficio di direzione lavori', h:4, opt:1 }
+  ]},
+  { k:'consegna', nome:'2. Consegna dei lavori e avvio del cantiere', ic:'🚧', dur:25, att:[
+    { t:'Verifica del piano operativo di sicurezza dell’impresa', h:10, cond:'sicurezza' },
+    { t:'Aggiornamento del PSC e del fascicolo dell’opera', h:16, cond:'sicurezza',
+      rif:'art. 92 D.Lgs 81/2008' },
+    { t:'Notifica preliminare all’ASL e alla DTL', h:3, cond:'sicurezza', cat:'piattaforma',
+      rif:'art. 99 D.Lgs 81/2008',
+      cont:'Da trasmettere prima dell’inizio dei lavori e da aggiornare a ogni variazione. Copia va affissa in cantiere.' },
+    { t:'Verbale di consegna dei lavori', h:5, ms:1,
+      cont:'Da qui decorre il tempo contrattuale. Vanno verbalizzati lo stato dei luoghi, le aree consegnate e le eventuali riserve dell’impresa.' },
+    { t:'Verifica di iscrizioni, DURC e idoneità dell’impresa e dei subappaltatori', h:10 },
+    { t:'Cartello di cantiere e adempimenti di avvio', h:4 },
+    { t:'Prima riunione di coordinamento', h:5, cond:'sicurezza' }
+  ]},
+  { k:'esecuzione', nome:'3. Direzione dei lavori in corso d’opera', ic:'👷', dur:365, att:[
+    { t:'Sorveglianza sull’esecuzione e verifica di conformità al progetto', h:120 },
+    { t:'Giornale dei lavori', h:60 },
+    { t:'Libretto delle misure e registro di contabilità', h:60 },
+    { t:'Verifica dei materiali e delle certificazioni di accettazione', h:30 },
+    { t:'Ordini di servizio e disposizioni all’impresa', h:20 },
+    { t:'Verbali di sospensione e ripresa dei lavori', h:10, opt:1 },
+    { t:'Gestione delle riserve iscritte dall’impresa', h:20, opt:1,
+      cont:'Le riserve vanno esaminate e controdedotte nei termini: il silenzio del DL le consolida.' }
+  ]},
+  { k:'sicurezza_ese', nome:'4. Coordinamento della sicurezza in esecuzione', ic:'🦺', dur:365, cond:'sicurezza',
+    desc:'Compiti del CSE. Sono attività continuative: la loro spunta segna il presidio, non un evento unico.', att:[
+    { t:'Riunioni periodiche di coordinamento', h:40, rif:'art. 92 D.Lgs 81/2008' },
+    { t:'Verifica dell’applicazione del PSC da parte delle imprese', h:60 },
+    { t:'Verifica dei POS delle imprese subentranti', h:20 },
+    { t:'Aggiornamento del PSC per varianti e nuove lavorazioni', h:24, opt:1 },
+    { t:'Sospensione delle lavorazioni in caso di pericolo grave e imminente', h:4, opt:1,
+      cont:'Potere-dovere del CSE. Va esercitato per iscritto e comunicato al committente: è il punto su cui si misura la responsabilità del coordinatore.' },
+    { t:'Aggiornamento del fascicolo dell’opera', h:12 }
+  ]},
+  { k:'contabilita', nome:'5. Contabilità, SAL e fatturazione della DL', ic:'📊', dur:365,
+    desc:'Ogni SAL registrato nella scheda Contabilità fa maturare da solo la quota di onorario corrispondente, già pronta da fatturare. È il punto in cui più spesso si perdono compensi, perché un SAL non fatturato non se lo ricorda nessuno.', att:[
+    { t:'Redazione ed emissione dei SAL', h:40, ms:1,
+      cont:'Il SAL riporta l’importo dei lavori contabilizzati dall’inizio, non quelli del solo periodo. Registrandolo nella scheda Contabilità, il gestionale calcola la percentuale sull’importo contrattuale e apre la quota di onorario corrispondente.' },
+    { t:'Trasmissione al RUP per il certificato di pagamento', h:12 },
+    { t:'Verifica del DURC e delle ritenute prima del pagamento', h:12 },
+    { t:'Fatturazione della quota di DL maturata sul SAL', h:8, cat:'fatturazione',
+      cont:'La quota è già calcolata: compenso di DL per la percentuale del SAL, meno quanto già fatturato sui SAL precedenti.' },
+    { t:'Tenuta della ritenuta di garanzia dello 0,50%', h:6, rif:'art. 125 D.Lgs 36/2023', opt:1 }
+  ]},
+  { k:'varianti', nome:'6. Varianti in corso d’opera', ic:'🔀', dur:120, opt:1,
+    desc:'Da attivare solo se servono. Ogni variante approvata modifica l’importo contrattuale e quindi la base di calcolo dei SAL successivi: registrandola nella scheda Contabilità il ricalcolo è automatico.', att:[
+    { t:'Accertamento dei presupposti della variante', h:12, rif:'art. 120 D.Lgs 36/2023',
+      cont:'Le modifiche del contratto in corso di esecuzione sono ammesse solo nei casi previsti dall’art. 120. La motivazione va documentata prima di redigere la perizia, non dopo.' },
+    { t:'Redazione della perizia di variante e suppletiva', h:40 },
+    { t:'Nuovi prezzi e verbale di concordamento', h:16, opt:1 },
+    { t:'Atto di sottomissione o atto aggiuntivo', h:10 },
+    { t:'Approvazione della variante da parte della stazione appaltante', h:6, ms:1 },
+    { t:'Aggiornamento del PSC e del cronoprogramma', h:12, cond:'sicurezza' },
+    { t:'Registrazione della variante e ricalcolo della base dei SAL', h:3, ms:1 }
+  ]},
+  { k:'chiusura', nome:'7. Ultimazione, collaudo e chiusura', ic:'✅', dur:120, att:[
+    { t:'Verbale di ultimazione dei lavori', h:4, ms:1 },
+    { t:'Conto finale e relazione del direttore dei lavori', h:24, ms:1 },
+    { t:'Certificato di regolare esecuzione o assistenza al collaudo', h:16, ms:1 },
+    { t:'Collaudo statico', h:12, cond:'strutture', opt:1 },
+    { t:'Raccolta delle dichiarazioni di conformità degli impianti', h:8, cond:'impianti' },
+    { t:'Consegna del fascicolo dell’opera al committente', h:6, cond:'sicurezza', ms:1 },
+    { t:'Elaborati as-built e documentazione finale', h:20 },
+    { t:'Svincolo della ritenuta di garanzia e delle cauzioni', h:6 },
+    { t:'Fattura a saldo del compenso di direzione lavori', h:4, cat:'fatturazione', ms:1 },
+    { t:'Archiviazione della commessa', h:4 }
+  ]}
+  ]
+},
+
 strutture: {
   label: 'Incarico strutturale / sismico',
   desc:  'Solo la parte strutturale: indagini, calcolo, deposito o autorizzazione sismica, direzione lavori strutturale e collaudo.',
@@ -1667,14 +1848,14 @@ const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','soprall
    DATI
    =========================================================================== */
 const TASK_COLS = 'id,title,project_id,commessa_fase_id,assignee_id,responsabile_id,status,priority,'
-                + 'due_date,estimated_hours,notes,sort_order,is_milestone,opzionale,ente,rif_normativo,categoria,'
+                + 'due_date,estimated_hours,notes,sort_order,is_milestone,opzionale,ente,rif_normativo,categoria,contenuto,'
                 + 'completed_at,completed_by,created_by,created_at';
 
 async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -1686,7 +1867,9 @@ async function loadAll(silent) {
       SB.from('commessa_fatture').select('*').order('ordine'),
       SB.from('clienti').select('*').order('denominazione'),
       SB.from('profili_costi').select('*').order('valido_dal', {ascending:false}),
-      SB.from('enti_pa').select('*').order('denominazione')
+      SB.from('enti_pa').select('*').order('denominazione'),
+      SB.from('commessa_sal').select('*').order('numero'),
+      SB.from('commessa_varianti').select('*').order('numero')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1705,10 +1888,13 @@ async function loadAll(silent) {
        restituisce un elenco vuoto, e va bene cosi'. */
     S.costi     = rco.error ? [] : (rco.data || []);
     S.enti      = ren.error ? [] : (ren.data || []);
+    S.sal       = rsa.error ? [] : (rsa.data || []);
+    S.varianti  = rva.error ? [] : (rva.data || []);
     /* Se una tabella non esiste ancora, e' una migrazione non eseguita: va
        detto subito, non al primo salvataggio che fallisce. */
     controllaSchema([[rfa, 'commessa_fatture'], [rcl, 'clienti'],
-                     [rco, 'profili_costi'],    [ren, 'enti_pa']]);
+                     [rco, 'profili_costi'],    [ren, 'enti_pa'],
+                     [rsa, 'commessa_sal'],     [rva, 'commessa_varianti']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -1777,6 +1963,7 @@ function pianifica(tplKey, conds, dataInizio) {
         title: a.t,
         estimated_hours: a.h || null,
         rif_normativo: a.rif || null,
+        contenuto: a.cont || null,
         ente: a.ente || null,
         categoria: a.cat || null,
         is_milestone: !!a.ms,
@@ -2325,6 +2512,10 @@ function itemRow(t, showProj) {
   if (t.ente)          sub.push('<span>🏛️ ' + esc(t.ente) + '</span>');
   if (t.rif_normativo) sub.push('<span>' + esc(t.rif_normativo) + '</span>');
   if (t.estimated_hours) sub.push('<span>' + t.estimated_hours + ' h</span>');
+  /* Il contenuto prescritto si apre solo se richiesto: in elenco sarebbe rumore,
+     ma al momento di redigere l'elaborato e' quello che serve avere sott'occhio. */
+  if (t.contenuto) sub.push('<span class="lnk" data-cont="' + t.id + '" '
+    + 'style="cursor:pointer;color:var(--blue)">cosa deve contenere</span>');
   if (t.status === 'revisione') sub.push('<span style="color:var(--yel)">in verifica: ' + esc(un(t.responsabile_id)) + '</span>');
 
   return '<div class="it ' + (done ? 'done ' : '') + (t.opzionale ? 'opt' : '') + '">'
@@ -2896,6 +3087,276 @@ function xmlDaDati(d) {
 const xmlFattura = f => xmlDaDati(datiFattura(f));
 
 
+/* ===========================================================================
+   CONTABILITÀ DEI LAVORI: SAL E VARIANTI
+
+   Il compenso per direzione lavori non matura a fasi come la progettazione, ma
+   con il cantiere. Registrato un SAL, la quota di onorario corrispondente si
+   apre da sola fra gli scaglioni pronti da emettere: e' il punto in cui piu'
+   spesso si perdono compensi, perche' un SAL non fatturato non se lo ricorda
+   nessuno.
+   =========================================================================== */
+const salOf      = pid => S.sal.filter(x => x.project_id === pid)
+                            .sort((a, b) => (a.numero || 0) - (b.numero || 0));
+const variantiOf = pid => S.varianti.filter(x => x.project_id === pid)
+                            .sort((a, b) => (a.numero || 0) - (b.numero || 0));
+
+const ST_SAL = {
+  redatto:     ['Redatto',     'chip'],
+  trasmesso:   ['Trasmesso',   'chip-c'],
+  certificato: ['Certificato', 'chip-n'],
+  pagato:      ['Pagato',      'chip-n'],
+  annullato:   ['Annullato',   'chip-a']
+};
+const ST_VAR = {
+  in_redazione: ['In redazione', 'chip'],
+  trasmessa:    ['Trasmessa',    'chip-c'],
+  approvata:    ['Approvata',    'chip-n'],
+  respinta:     ['Respinta',     'chip-a'],
+  ritirata:     ['Ritirata',     'chip-a']
+};
+
+/* Quota di onorario che un SAL rende esigibile, con la stessa regola del
+   database: maturato alla percentuale, meno quanto gia' agganciato ai SAL
+   precedenti. Serve per mostrarla prima di salvare. */
+function quotaDL(p, sal) {
+  const compenso = Number(p.compenso_dl || 0);
+  const perc = Number(sal.percentuale || 0);
+  if (!compenso || !perc) return 0;
+  const maturato = r2(compenso * perc / 100);
+  const prima = S.fatture
+    .filter(f => f.project_id === p.id && f.sal_id && f.stato !== 'annullata')
+    .filter(f => { const s2 = byId(S.sal, f.sal_id); return s2 && s2.numero < sal.numero; })
+    .reduce((a, f) => a + Number(f.imponibile || 0), 0);
+  return r2(maturato - prima);
+}
+
+function contabilitaPanel(p) {
+  const sal = salOf(p.id), varianti = variantiOf(p.id);
+  const lavori = Number(p.importo_lavori || 0);
+  const compenso = Number(p.compenso_dl || 0);
+  const ultimo = sal.filter(x => x.stato !== 'annullato').slice(-1)[0];
+  const perc = ultimo ? Number(ultimo.percentuale || 0) : 0;
+
+  if (!lavori || !compenso) {
+    return '<div class="wbox mb16"><b>Mancano gli importi di riferimento.</b> '
+      + 'Per far maturare la quota di direzione lavori sui SAL servono due dati, da inserire con '
+      + '<b>Modifica</b> sulla commessa:<ul style="margin:6px 0 0 18px">'
+      + (!lavori   ? '<li><b>Importo contrattuale dei lavori</b> — l’appalto dell’impresa, base di calcolo della percentuale del SAL</li>' : '')
+      + (!compenso ? '<li><b>Compenso per direzione lavori e CSE</b> — la quota del nostro onorario che matura col cantiere</li>' : '')
+      + '</ul></div>'
+      + (canW() ? '<button class="btn btn-p" data-act="editproj">Inserisci gli importi</button>' : '');
+  }
+
+  const maturato = r2(compenso * perc / 100);
+  const fattDL = S.fatture.filter(f => f.project_id === p.id && f.sal_id && f.stato !== 'annullata');
+  const emesso = fattDL.filter(f => ['emessa','incassata'].indexOf(f.stato) >= 0)
+    .reduce((a, f) => a + Number(f.imponibile || 0), 0);
+  const daEmettere = fattDL.filter(f => ['da_emettere','pronta'].indexOf(f.stato) >= 0)
+    .reduce((a, f) => a + Number(f.imponibile || 0), 0);
+
+  const righeSal = sal.map(x => {
+    const f = S.fatture.find(y => y.sal_id === x.id && y.stato !== 'annullata');
+    return '<tr data-sal="' + x.id + '" style="cursor:pointer">'
+      + '<td><b>SAL n. ' + x.numero + '</b>'
+        + (x.data_emissione ? '<div style="font-size:11px;color:var(--mut)">' + fdate(x.data_emissione) + '</div>' : '') + '</td>'
+      + '<td>' + bdg(x.stato, ST_SAL) + '</td>'
+      + '<td style="text-align:right">' + feuro(x.importo_progressivo) + '</td>'
+      + '<td style="text-align:right"><b>' + (Number(x.percentuale || 0)).toFixed(2) + '%</b></td>'
+      + '<td style="text-align:right">' + feuro(r2(compenso * Number(x.percentuale || 0) / 100)) + '</td>'
+      + '<td style="text-align:right">' + (f
+          ? '<b>' + feuro(f.imponibile) + '</b><div style="font-size:11px;color:var(--mut)">' + bdg(f.stato, ST_FATT) + '</div>'
+          : '<span style="color:var(--mut2)">—</span>') + '</td></tr>';
+  }).join('');
+
+  const righeVar = varianti.map(v =>
+      '<tr data-var="' + v.id + '" style="cursor:pointer">'
+    + '<td><b>n. ' + v.numero + '</b> ' + esc(v.descrizione)
+      + (v.motivo ? '<div style="font-size:11px;color:var(--mut)">' + esc(v.motivo) + '</div>' : '') + '</td>'
+    + '<td>' + bdg(v.stato, ST_VAR) + '</td>'
+    + '<td style="text-align:right">' + feuro(v.importo) + '</td>'
+    + '<td style="text-align:right;font-size:12px;color:var(--mut)">'
+      + (lavori && v.importo ? (Number(v.importo) / lavori * 100).toFixed(1) + '%' : '-') + '</td>'
+    + '<td style="font-size:12px;color:var(--mut)">' + fdate(v.data_approvazione) + '</td></tr>').join('');
+
+  return '<div class="kgrid mb16">'
+      + kpi('Avanzamento lavori', perc.toFixed(2) + '%',
+            ultimo ? feuro(ultimo.importo_progressivo) + ' su ' + feuro(lavori) : 'nessun SAL registrato',
+            perc, 'var(--blue)')
+      + kpi('Compenso DL maturato', feuro(maturato), 'su ' + feuro(compenso) + ' di incarico',
+            compenso ? maturato / compenso * 100 : 0, 'var(--grn)')
+      + kpi('Già fatturato sui SAL', feuro(emesso),
+            daEmettere ? feuro(daEmettere) + ' pronto da emettere' : 'niente in attesa',
+            compenso ? emesso / compenso * 100 : 0, 'var(--vio)')
+      + kpi('Varianti approvate', String(varianti.filter(v => v.stato === 'approvata').length),
+            feuro(varianti.filter(v => v.stato === 'approvata')
+              .reduce((a, v) => a + Number(v.importo || 0), 0)) + ' di maggiore spesa', 40, 'var(--ora)')
+    + '</div>'
+    + (daEmettere > 0
+        ? '<div class="wbox mb16"><b>' + feuro(daEmettere) + ' di direzione lavori è maturato e non è ancora stato fatturato.</b> '
+          + 'Lo trovi fra gli scaglioni pronti nella scheda <b>Fatturazione</b> e nella pagina <b>Da fatturare</b>.</div>'
+        : '')
+    + '<div class="card mb16"><div class="card-h"><span class="card-t">Stati di avanzamento</span>'
+      + '<span class="row">'
+        + '<span style="font-size:12px;color:var(--mut)">l’importo è progressivo: il contabilizzato dall’inizio</span>'
+        + (canW() ? '<button class="btn btn-p btn-sm" data-newsal="">＋ SAL</button>' : '') + '</span></div>'
+    + (sal.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>SAL</th><th>Stato</th>'
+          + '<th style="text-align:right">Lavori progressivi</th><th style="text-align:right">%</th>'
+          + '<th style="text-align:right">Compenso maturato</th><th style="text-align:right">Quota fatturabile</th>'
+          + '</tr></thead><tbody>' + righeSal + '</tbody></table></div>'
+        : '<div class="empty"><i>📊</i><p>Nessun SAL registrato.</p>'
+          + '<p style="font-size:12px;margin-top:6px">Registrando un SAL, la quota di onorario corrispondente '
+          + 'si apre da sola fra gli scaglioni pronti da emettere.</p></div>')
+    + '</div>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Varianti in corso d’opera</span>'
+      + (canW() ? '<button class="btn btn-sm" data-newvar="">＋ Variante</button>' : '') + '</div>'
+    + (varianti.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>Variante</th><th>Stato</th>'
+          + '<th style="text-align:right">Importo</th><th style="text-align:right">Incidenza</th>'
+          + '<th>Approvata il</th></tr></thead><tbody>' + righeVar + '</tbody></table></div>'
+          + '<div class="hint" style="margin-top:8px">Una variante <b>approvata</b> aumenta l’importo '
+          + 'contrattuale dei lavori: i SAL successivi calcolano la percentuale sulla nuova base.</div>'
+        : '<div class="empty"><i>🔀</i><p>Nessuna variante.</p></div>')
+    + '</div>';
+}
+
+/* ------------------------- MODALI SAL E VARIANTI ------------------------- */
+let SAL_PID = null, VAR_PID = null;
+
+function openSal(pid, id) {
+  SAL_PID = pid;
+  const x = id ? byId(S.sal, id) : null;
+  const esistenti = salOf(pid);
+  el('msal-t').textContent = x ? 'SAL n. ' + x.numero : 'Nuovo stato di avanzamento';
+  el('sa-id').value    = x ? x.id : '';
+  el('sa-num').value   = x ? x.numero : (esistenti.length ? Math.max.apply(null, esistenti.map(y => y.numero)) + 1 : 1);
+  el('sa-data').value  = x ? (x.data_emissione || '') : todayISO();
+  el('sa-stato').value = x ? x.stato : 'redatto';
+  el('sa-imp').value   = x ? (x.importo_progressivo || '') : '';
+  el('sa-perc').value  = x ? (x.percentuale || '') : '';
+  el('sa-dcert').value = x ? (x.data_certificato || '') : '';
+  el('sa-icert').value = x ? (x.importo_certificato || '') : '';
+  el('sa-note').value  = x ? (x.note || '') : '';
+  el('sa-del').style.display = (x && isAd()) ? 'inline-flex' : 'none';
+  calcSal();
+  openM('m-sal');
+}
+
+/* Mostra, mentre si scrive, quanto quel SAL rendera' fatturabile */
+function calcSal() {
+  const p = byId(S.projects, SAL_PID); if (!p) return;
+  const lavori = Number(p.importo_lavori || 0);
+  const imp = parseFloat(el('sa-imp').value) || 0;
+  let perc = parseFloat(el('sa-perc').value);
+  if (isNaN(perc)) perc = lavori ? Math.min(100, r2(imp / lavori * 100)) : 0;
+  const finto = { numero: parseInt(el('sa-num').value, 10) || 1, percentuale: perc };
+  const quota = quotaDL(p, finto);
+  el('sa-calc').innerHTML = !lavori
+    ? '<span style="color:var(--ora)">Manca l’importo contrattuale dei lavori sulla commessa: la percentuale non si può calcolare.</span>'
+    : 'Avanzamento <b>' + perc.toFixed(2) + '%</b> · compenso maturato '
+      + feuro(r2(Number(p.compenso_dl || 0) * perc / 100))
+      + (quota > 0
+          ? ' · <b style="color:var(--grn)">' + feuro(quota) + ' da fatturare con questo SAL</b>'
+          : ' · <span style="color:var(--mut)">nessuna ulteriore quota da fatturare</span>');
+}
+
+async function salvaSal() {
+  const p = byId(S.projects, SAL_PID); if (!p) return;
+  const num = parseInt(el('sa-num').value, 10);
+  if (!num) return toast('Il numero del SAL è obbligatorio.', 'error');
+  const perc = el('sa-perc').value === '' ? null : parseFloat(el('sa-perc').value);
+  const pay = {
+    project_id: SAL_PID, numero: num,
+    data_emissione: el('sa-data').value || null,
+    importo_progressivo: parseFloat(el('sa-imp').value) || 0,
+    percentuale: perc,
+    stato: el('sa-stato').value,
+    data_certificato: el('sa-dcert').value || null,
+    importo_certificato: el('sa-icert').value === '' ? null : parseFloat(el('sa-icert').value),
+    note: el('sa-note').value.trim() || null
+  };
+  setLoading('sa-save', true);
+  try {
+    const id = el('sa-id').value;
+    const { error } = id
+      ? await SB.from('commessa_sal').update(pay).eq('id', id)
+      : await SB.from('commessa_sal').insert(Object.assign({ created_by: S.me.id }, pay));
+    if (error) return sbErr(error, 'SAL');
+    closeM('m-sal'); await loadAll(true); render();
+    toast(id ? 'SAL aggiornato' : 'SAL registrato: la quota di DL è pronta da fatturare', 'success');
+  } finally { setLoading('sa-save', false); }
+}
+
+async function delSal(id) {
+  const x = byId(S.sal, id); if (!x) return;
+  if (!confirm('Eliminare il SAL n. ' + x.numero + '?\n\nLo scaglione di fatturazione collegato, '
+    + 'se non è ancora stato emesso, resta in elenco e va rimosso a parte.')) return;
+  const { error } = await SB.from('commessa_sal').delete().eq('id', id);
+  if (error) return sbErr(error, 'elimina SAL');
+  closeM('m-sal'); await loadAll(true); render(); toast('SAL eliminato');
+}
+
+function openVar(pid, id) {
+  VAR_PID = pid;
+  const x = id ? byId(S.varianti, id) : null;
+  const esistenti = variantiOf(pid);
+  el('mvar-t').textContent = x ? 'Variante n. ' + x.numero : 'Nuova variante';
+  el('va-id').value    = x ? x.id : '';
+  el('va-num').value   = x ? x.numero : (esistenti.length ? Math.max.apply(null, esistenti.map(y => y.numero)) + 1 : 1);
+  el('va-stato').value = x ? x.stato : 'in_redazione';
+  el('va-desc').value  = x ? (x.descrizione || '') : '';
+  el('va-mot').value   = x ? (x.motivo || '') : 'art. 120 D.Lgs 36/2023';
+  el('va-imp').value   = x ? (x.importo || '') : '';
+  el('va-dred').value  = x ? (x.data_redazione || '') : todayISO();
+  el('va-dapp').value  = x ? (x.data_approvazione || '') : '';
+  el('va-agg').checked = x ? x.aggiorna_importo !== false : true;
+  el('va-note').value  = x ? (x.note || '') : '';
+  el('va-del').style.display = (x && isAd()) ? 'inline-flex' : 'none';
+  openM('m-var');
+}
+
+async function salvaVar() {
+  const num = parseInt(el('va-num').value, 10);
+  const desc = el('va-desc').value.trim();
+  if (!num)  return toast('Il numero della variante è obbligatorio.', 'error');
+  if (!desc) return toast('La descrizione della variante è obbligatoria.', 'error');
+  const p = byId(S.projects, VAR_PID) || {};
+  const imp = el('va-imp').value === '' ? null : parseFloat(el('va-imp').value);
+  const pay = {
+    project_id: VAR_PID, numero: num, descrizione: desc,
+    motivo: el('va-mot').value.trim() || null,
+    importo: imp,
+    incidenza: (imp && p.importo_lavori) ? r2(imp / Number(p.importo_lavori) * 100) : null,
+    data_redazione: el('va-dred').value || null,
+    data_approvazione: el('va-dapp').value || null,
+    stato: el('va-stato').value,
+    aggiorna_importo: el('va-agg').checked,
+    note: el('va-note').value.trim() || null
+  };
+  setLoading('va-save', true);
+  try {
+    const id = el('va-id').value;
+    const { error } = id
+      ? await SB.from('commessa_varianti').update(pay).eq('id', id)
+      : await SB.from('commessa_varianti').insert(Object.assign({ created_by: S.me.id }, pay));
+    if (error) return sbErr(error, 'variante');
+    closeM('m-var'); await loadAll(true); render();
+    toast(pay.stato === 'approvata'
+      ? 'Variante approvata: l’importo dei lavori è stato aggiornato'
+      : 'Variante salvata', 'success');
+  } finally { setLoading('va-save', false); }
+}
+
+async function delVar(id) {
+  const x = byId(S.varianti, id); if (!x) return;
+  if (!confirm('Eliminare la variante n. ' + x.numero + '?\n\nSe era approvata, l’importo dei lavori '
+    + 'non torna indietro da solo: va corretto a mano sulla commessa.')) return;
+  const { error } = await SB.from('commessa_varianti').delete().eq('id', id);
+  if (error) return sbErr(error, 'elimina variante');
+  closeM('m-var'); await loadAll(true); render(); toast('Variante eliminata');
+}
+
 /* -------------------------- PANNELLO DI COMMESSA -------------------------- */
 function fatturePanel(pid) {
   const p = byId(S.projects, pid) || {};
@@ -3334,6 +3795,16 @@ function scaricaFile(nome, contenuto) {
 /* Punto d'ingresso storico: ora passa sempre dalla revisione */
 const scaricaXml = id => openRevisione(id);
 
+/* Che cosa deve contenere l'elaborato: si apre dalla riga di checklist, senza
+   dover entrare nell'attivita'. */
+function mostraContenuto(id) {
+  const t = byId(S.tasks, id); if (!t || !t.contenuto) return;
+  alert(t.title + '\n\n'
+    + (t.rif_normativo ? t.rif_normativo + '\n\n' : '')
+    + t.contenuto
+    + '\n\n— Sintesi operativa, non testo di legge: verificala sulla norma richiamata.');
+}
+
 /* ===========================================================================
    PAGINA: FIRME DEL CLIENTE
    Raggruppa tutto cio' che il committente deve firmare, per commessa, cosi'
@@ -3679,6 +4150,7 @@ function rProject() {
     ['avanzamento', 'Avanzamento', pr.tot],
     ['pratiche',    'Pratiche & Enti', praticheOf(p.id).length],
     ['fatture',     'Fatturazione', fattureOf(p.id).length],
+    ['contabilita', 'Contabilità & SAL', salOf(p.id).length || null],
     ['anagrafica',  'Anagrafica', null],
     ['ore',         'Ore', null],
     ['file',        'File', null]
@@ -3717,6 +4189,8 @@ function rProject() {
     body += pratichePanel(p.id);
   } else if (S.tab === 'fatture') {
     body += fatturePanel(p.id);
+  } else if (S.tab === 'contabilita') {
+    body += contabilitaPanel(p);
   } else if (S.tab === 'anagrafica') {
     body += anagraficaPanel(p);
   } else if (S.tab === 'ore') {
@@ -4647,6 +5121,12 @@ function drawWizard() {
       + '<div class="fg"><label class="fl">Responsabile</label><select class="fc" id="w-own">' + uopts + '</select></div>'
       + fld('Importo €', 'w-imp', d.amount, '', 'number')
       + '</div><div class="fg2">'
+      + fld('Importo contrattuale dei lavori €', 'w-lav', d.importo_lavori, 'appalto dell’impresa', 'number')
+      + fld('di cui compenso per DL e CSE €', 'w-cdl', d.compenso_dl, 'matura sui SAL', 'number')
+      + '</div><div class="hint" style="margin:-8px 0 14px">Servono solo se segui la direzione lavori: '
+      + 'il primo è la base su cui si calcola la percentuale del SAL, il secondo la quota di onorario '
+      + 'che ogni SAL rende fatturabile.</div>'
+      + '<div class="fg2">'
       + fld('Data inizio', 'w-di', d.start_date, '', 'date') + fld('Fine prevista', 'w-df', d.end_date, '', 'date')
       + '</div>'
       + '<div class="fg"><label class="fl">Descrizione</label><textarea class="fc" id="w-desc" rows="2">' + esc(d.description || '') + '</textarea></div>';
@@ -4813,6 +5293,7 @@ function wzCollect() {
     indirizzo: g('w-ind') || null, dati_catastali: g('w-cat') || null,
     status: g('w-st') || 'attivo', owner_id: g('w-own') || null,
     amount: g('w-imp') || null, start_date: g('w-di') || null, end_date: g('w-df') || null,
+    importo_lavori: g('w-lav') || null, compenso_dl: g('w-cdl') || null,
     cliente_piva: g('w-cpiva') || null, cliente_cf: g('w-ccf') || null,
     cliente_sdi: g('w-csdi') || null, cliente_pec: g('w-cpec') || null,
     cliente_indirizzo: g('w-cind') || null, cliente_cap: g('w-ccap') || null,
@@ -5019,6 +5500,13 @@ function openTask(id, presetPid, presetFase) {
   el('tt-h').value  = t ? (t.estimated_hours || '') : '';
   el('tt-ente').value = t ? (t.ente || '') : '';
   el('tt-rif').textContent = t && t.rif_normativo ? t.rif_normativo : '';
+  el('tt-cont').innerHTML = t && t.contenuto
+    ? '<div class="ibox" style="font-size:12px;line-height:1.6"><b>Che cosa deve contenere</b>'
+      + (t.rif_normativo ? ' <span style="color:var(--mut)">— ' + esc(t.rif_normativo) + '</span>' : '')
+      + '<div style="margin-top:5px">' + esc(t.contenuto) + '</div>'
+      + '<div style="margin-top:6px;color:var(--mut);font-size:11px">Sintesi operativa, non testo di legge: '
+      + 'verificala sulla norma richiamata prima della consegna.</div></div>'
+    : '';
   el('tt-s').value  = t ? t.status : 'da_fare';
   el('tt-pr').value = t ? (t.priority || 'media') : 'media';
 
@@ -5555,6 +6043,13 @@ document.addEventListener('DOMContentLoaded', () => {
     el('del-go').disabled = !p || e.target.value.trim().toLowerCase() !== p.name.trim().toLowerCase();
   };
   el('del-conf').onkeydown = e => { if (e.key === 'Enter' && !el('del-go').disabled) delProj(); };
+  el('sa-save').onclick = salvaSal;
+  el('sa-del').onclick  = () => delSal(el('sa-id').value);
+  el('sa-imp').oninput  = calcSal;
+  el('sa-perc').oninput = calcSal;
+  el('sa-num').oninput  = calcSal;
+  el('va-save').onclick = salvaVar;
+  el('va-del').onclick  = () => delVar(el('va-id').value);
   el('cl-save').onclick = saveCliente;
   el('cl-del').onclick  = () => delCliente(el('cl-id').value);
   el('mp-body').addEventListener('change', e => {
@@ -5648,6 +6143,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const f = sel => e.target.closest('[' + sel + ']');
     let n;
     if ((n = f('data-ck')))    { e.stopPropagation(); return toggleTask(n.dataset.ck); }
+    if ((n = f('data-cont')))  { e.stopPropagation(); return mostraContenuto(n.dataset.cont); }
+    if ((n = f('data-newsal'))) { e.stopPropagation(); return openSal(S.projId); }
+    if ((n = f('data-newvar'))) { e.stopPropagation(); return openVar(S.projId); }
+    if ((n = f('data-sal')))   { e.stopPropagation(); return openSal(S.projId, n.dataset.sal); }
+    if ((n = f('data-var')))   { e.stopPropagation(); return openVar(S.projId, n.dataset.var); }
     if ((n = f('data-as')))    { e.stopPropagation(); return pickAssignee(n, n.dataset.as); }
     if ((n = f('data-due')))   { e.stopPropagation(); return pickDue(n, n.dataset.due); }
     if ((n = f('data-fase')))  { e.stopPropagation(); return openFase(n.dataset.fase); }
