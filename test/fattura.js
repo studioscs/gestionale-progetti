@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,byId,pd,iso,addD,esc});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,byId,pd,iso,addD,esc});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -149,6 +149,97 @@ t('blocca la fattura se l IBAN non e valido',
 t('il messaggio dice quale dei due conti',
   !!rotto.errori&&/sisma/.test(rotto.errori.join()),rotto.errori);
 ctx.STUDIO.pagamento.ibanSisma=ibSalvo; ctx.S.projects[0].sisma=false;
+
+
+console.log('\n— TESTO AMMESSO DALLO SCHEMA —');
+t('virgolette curve convertite',ctx.latin('l’incarico “esecutivo”')==="l'incarico \"esecutivo\"",
+  ctx.latin('l’incarico “esecutivo”'));
+t('trattino lungo e puntini',ctx.latin('A — B…')==='A - B...',ctx.latin('A — B…'));
+t('accenti conservati',ctx.latin('città perché più')==='città perché più',ctx.latin('città perché più'));
+t('a capo del copia-incolla appiattiti',ctx.latin('riga uno\nriga due\t fine')==='riga uno riga due fine',
+  ctx.latin('riga uno\nriga due\t fine'));
+t('caratteri fuori Latin-1 rimossi',ctx.latin('ok 中文 fine')==='ok fine',ctx.latin('ok 中文 fine'));
+t('spazio non separabile normalizzato',ctx.latin('a b')==='a b',JSON.stringify(ctx.latin('a b')));
+t('ascii toglie gli accenti dai codici',ctx.ascii('Z1à2')==='Z12',ctx.ascii('Z1à2'));
+t('causale lunga spezzata in piu pezzi',(()=>{const l=ctx.causaleSpezzata('parola '.repeat(80));
+  return l.length>1&&l.every(x=>x.length<=200);})(),ctx.causaleSpezzata('parola '.repeat(80)).map(x=>x.length));
+
+console.log('\n— FATTURA ALLA PUBBLICA AMMINISTRAZIONE —');
+ctx.S.projects.push({id:'pa1', name:'Consolidamento scuola primaria', client:'Comune di Recanati',
+  amount:80000, cliente_cf:'00201180434', cliente_piva:'00201180434',
+  cliente_indirizzo:'Piazza Giacomo Leopardi 26', cliente_cap:'62019',
+  cliente_comune:'Recanati', cliente_prov:'MC',
+  ente_pubblico:true, codice_ufficio:'UFY9MB', split_payment:true,
+  cig:'ZAB12CD345', cup:'J51B22000350001',
+  rif_incarico:'DET-2026-118', rif_incarico_data:'2026-03-04', rif_incarico_tipo:'ordine',
+  oggetto_servizio:'Progettazione esecutiva e coordinamento della sicurezza in fase di progettazione per il consolidamento sismico della scuola primaria “B. Gigli” — CUP J51B22000350001'});
+
+const dPA=ctx.datiFattura({project_id:'pa1',descrizione:'Acconto 30%',imponibile:24000,
+  numero_fattura:'2026/020',data_fattura:'2026-08-03'});
+t('riconosce la commessa pubblica',dPA.pa===true,dPA.pa);
+t('destinatario = codice univoco ufficio',dPA.destinatario==='UFY9MB',dPA.destinatario);
+t('CIG e CUP separati',dPA.cig==='ZAB12CD345'&&dPA.cup==='J51B22000350001',[dPA.cig,dPA.cup]);
+t('oggetto preso dall incarico',/scuola primaria/.test(dPA.oggetto),dPA.oggetto);
+t('split payment attivo',dPA.split===true,dPA.split);
+
+const cPA=ctx.calcolaDa(dPA);
+t('imponibile',cPA.imponibile===24000,cPA.imponibile);
+t('cassa 4%',cPA.cassa===960,cPA.cassa);
+t('base imponibile IVA',cPA.base===24960,cPA.base);
+t('IVA 22%',cPA.iva===5491.2,cPA.iva);
+t('totale documento espone l IVA',cPA.totale===30451.2,cPA.totale);
+t('in split payment l ente paga senza IVA',cPA.netto===24960,cPA.netto);
+
+const rPA=ctx.xmlDaDati(dPA);
+t('genera senza errori',!rPA.errori,rPA.errori);
+if(!rPA.errori){
+  t('formato FPA12',/<FormatoTrasmissione>FPA12<\/FormatoTrasmissione>/.test(rPA.xml),null);
+  t('versione FPA12 sull elemento radice',/versione="FPA12"/.test(rPA.xml),null);
+  t('codice destinatario a 6 caratteri',/<CodiceDestinatario>UFY9MB<\/CodiceDestinatario>/.test(rPA.xml),null);
+  t('CIG nel documento correlato',/<CodiceCIG>ZAB12CD345<\/CodiceCIG>/.test(rPA.xml),null);
+  t('CUP nel documento correlato',/<CodiceCUP>J51B22000350001<\/CodiceCUP>/.test(rPA.xml),null);
+  t('riferimento all atto di affidamento',/<IdDocumento>DET-2026-118<\/IdDocumento>/.test(rPA.xml),null);
+  t('esigibilita IVA in scissione',/<EsigibilitaIVA>S<\/EsigibilitaIVA>/.test(rPA.xml),null);
+  t('importo pagamento al netto dell IVA',/<ImportoPagamento>24960\.00<\/ImportoPagamento>/.test(rPA.xml),null);
+  t('oggetto dell incarico in causale',/Causale>.*scuola primaria/.test(rPA.xml),null);
+  t('virgolette curve ripulite nell XML',!/[‘’“”—]/.test(rPA.xml),null);
+  fs.writeFileSync('/tmp/fatt-pa.xml',rPA.xml);
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-pa.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('VALIDO secondo l XSD ufficiale',haXsd?/validates/.test(out):true,out.slice(0,600));
+}
+
+console.log('\n— CONTROLLI SPECIFICI DELLA PA —');
+const senza=(patch)=>ctx.validaFattura(Object.assign({},dPA,patch)).join(' | ');
+t('blocca senza CIG',/CIG/.test(senza({cig:''})),senza({cig:''}));
+t('blocca CIG di lunghezza sbagliata',/10 caratteri/.test(senza({cig:'ABC'})),senza({cig:'ABC'}));
+t('blocca CUP di lunghezza sbagliata',/15 caratteri/.test(senza({cup:'XYZ'})),senza({cup:'XYZ'}));
+t('blocca senza atto di affidamento',/atto di affidamento/.test(senza({rifDoc:''})),senza({rifDoc:''}));
+t('blocca riferimento troppo lungo',/20 caratteri/.test(senza({rifDoc:'DETERMINAZIONE DIRIGENZIALE 118/2026'})),null);
+t('blocca codice ufficio a 7 caratteri',/6 caratteri/.test(senza({destinatario:'ABCDEFG'})),senza({destinatario:'ABCDEFG'}));
+t('blocca senza oggetto del servizio',/oggetto del servizio/.test(senza({oggetto:''})),senza({oggetto:''}));
+t('una commessa privata non pretende il CIG',
+  ctx.validaFattura(Object.assign({},dPA,{pa:false,destinatario:'ABCDEF1',cig:'',rifDoc:'',oggetto:'x'})).length===0,
+  ctx.validaFattura(Object.assign({},dPA,{pa:false,destinatario:'ABCDEF1',cig:'',rifDoc:'',oggetto:'x'})));
+
+console.log('\n— MODIFICHE FATTE IN REVISIONE —');
+const mod=Object.assign({},dPA,{imponibile:10000,aliquotaIva:10,split:false,
+  numero:'2026/021',oggetto:'Perizia di variante'});
+const cMod=ctx.calcolaDa(mod);
+t('i totali seguono le modifiche',cMod.imponibile===10000&&cMod.cassa===400&&cMod.iva===1040,
+  [cMod.imponibile,cMod.cassa,cMod.iva]);
+t('togliendo lo split l importo torna comprensivo di IVA',cMod.netto===11440,cMod.netto);
+const rMod=ctx.xmlDaDati(mod);
+t('l XML rispecchia le modifiche',!rMod.errori
+  &&/<Numero>2026\/021<\/Numero>/.test(rMod.xml)
+  &&/<EsigibilitaIVA>I<\/EsigibilitaIVA>/.test(rMod.xml)
+  &&/Perizia di variante/.test(rMod.xml),rMod.errori);
+if(!rMod.errori){
+  fs.writeFileSync('/tmp/fatt-mod.xml',rMod.xml);
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-mod.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('anche la fattura modificata e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
+}
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

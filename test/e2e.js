@@ -451,13 +451,17 @@ function launchOpts(){
     must(/Imponibile/.test(txt)&&/IVA/.test(txt)&&/totale/i.test(txt),txt);
     await p.keyboard.press('Escape');
   });
-  await t('XML bloccato finché mancano i dati del committente',async()=>{
-    ultimoDialogo='';
-    await p.locator('[data-fxml]').first().click(); await p.waitForTimeout(900);
-    must(/mancano questi dati/i.test(ultimoDialogo),'nessun elenco di dati mancanti: '+ultimoDialogo);
-    must(/committente|numero della fattura|codice destinatario/i.test(ultimoDialogo),
-      'non indica cosa manca: '+ultimoDialogo);
-    must(!/partita IVA dello studio/i.test(ultimoDialogo),'segnala ancora i dati dello studio come mancanti');
+  await t('la generazione passa dalla finestra di revisione',async()=>{
+    await p.locator('[data-fxml]').first().click();
+    await p.waitForSelector('#m-rev.show',{timeout:4000});
+    must(await p.isVisible('#m-rev'),'finestra di revisione non aperta');
+  });
+  await t('la revisione elenca cosa manca e blocca il pulsante',async()=>{
+    const err=await p.textContent('#rev-err');
+    must(/Manca ancora qualcosa/.test(err),'nessun elenco di dati mancanti: '+err);
+    must(/committente|indirizzo|CAP/i.test(err),'non indica cosa manca: '+err);
+    must(await p.isDisabled('#rev-go'),'il pulsante Genera è attivo con dati mancanti');
+    await p.keyboard.press('Escape');
   });
   await t('XML scaricabile una volta compilati i dati',async()=>{
     const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
@@ -472,11 +476,15 @@ function launchOpts(){
       if(!f.percentuale && !f.imponibile) f.imponibile=10000;
     }, fid);
     ultimoDialogo='';
+    await p.locator('[data-fxml]').first().click();
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(400);
+    must(!(await p.isDisabled('#rev-go')),'ancora bloccato: '+(await p.textContent('#rev-err')));
     const [dl]=await Promise.all([
       p.waitForEvent('download',{timeout:8000}).catch(()=>null),
-      p.locator('[data-fxml]').first().click() ]);
+      p.click('#rev-go') ]);
     must(dl,'nessun download. Motivo riportato dall app: '+ultimoDialogo);
     must(/^IT03512340548_[0-9A-Z]{5}\.xml$/.test(dl.suggestedFilename()),dl.suggestedFilename());
+    await p.waitForTimeout(800);
   });
   await t('pagina Da fatturare',async()=>{
     await p.click('.sn[data-page="fatturare"]'); await p.waitForTimeout(700);
@@ -741,6 +749,121 @@ function launchOpts(){
     const h=await p.textContent('#page');
     must(/conto ordinario/.test(h),'non indica il conto ordinario');
     must(/IT31/.test(h)&&!/IT69/.test(h),'IBAN errato o contaminato');
+  });
+
+  // --- FATTURAZIONE ALLA PUBBLICA AMMINISTRAZIONE ---
+  await t('il wizard ha il blocco committente pubblico',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    must(await p.isVisible('#w-pa'),'casella ente pubblico assente');
+    must(!(await p.isVisible('#w-uff')),'il blocco PA è visibile prima di spuntare');
+  });
+  await t('spuntando ente pubblico compaiono i campi richiesti',async()=>{
+    await p.check('#w-pa'); await p.waitForTimeout(300);
+    for(const id of ['#w-uff','#w-cig','#w-cup','#w-rif','#w-riftipo','#w-ogg','#w-split'])
+      must(await p.isVisible(id),'campo assente: '+id);
+  });
+  await t('CIG e CUP sono due campi distinti',async()=>{
+    await p.fill('#w-cig','ZAB12CD345'); await p.fill('#w-cup','J51B22000350001');
+    must((await p.inputValue('#w-cig'))==='ZAB12CD345','CIG non isolato');
+    must((await p.inputValue('#w-cup'))==='J51B22000350001','CUP non isolato');
+  });
+  await t('il codice ufficio accetta solo 6 caratteri maiuscoli',async()=>{
+    await p.fill('#w-uff','ufy9mb-xx'); await p.waitForTimeout(250);
+    must((await p.inputValue('#w-uff'))==='UFY9MB','normalizzazione errata: '+(await p.inputValue('#w-uff')));
+  });
+  await t('salva la commessa pubblica con tutti i dati',async()=>{
+    await p.fill('#w-name','Consolidamento scuola primaria');
+    await p.fill('#w-cli','Comune di Recanati');
+    await p.fill('#w-ccf','00201180434'); await p.fill('#w-cpiva','00201180434');
+    await p.fill('#w-cind','Piazza Giacomo Leopardi 26'); await p.fill('#w-ccap','62019');
+    await p.fill('#w-ccom','Recanati'); await p.fill('#w-cprov','MC');
+    await p.fill('#w-rif','DET-2026-118'); await p.fill('#w-rifdata','2026-03-04');
+    await p.fill('#w-ogg','Progettazione esecutiva e coordinamento della sicurezza\nper il consolidamento sismico della scuola primaria “B. Gigli”');
+    await p.fill('#w-imp','80000');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
+    await p.waitForTimeout(1800);
+    const pr=await p.evaluate(()=>__DB.projects.find(x=>x.name==='Consolidamento scuola primaria'));
+    must(pr,'commessa non creata');
+    must(pr.ente_pubblico===true,'ente_pubblico non salvato');
+    must(pr.codice_ufficio==='UFY9MB','codice ufficio: '+pr.codice_ufficio);
+    must(pr.cig==='ZAB12CD345'&&pr.cup==='J51B22000350001','CIG/CUP: '+pr.cig+' '+pr.cup);
+    must(pr.rif_incarico==='DET-2026-118','atto: '+pr.rif_incarico);
+    must(/scuola primaria/.test(pr.oggetto_servizio||''),'oggetto non salvato');
+    must(pr.split_payment===true,'split payment non attivo');
+  });
+  await t('l ufficio entra da solo nel registro',async()=>{
+    const e=await p.evaluate(()=>__DB.enti_pa.find(x=>x.codice_univoco==='UFY9MB'));
+    must(e,'ufficio non registrato');
+    must(e.denominazione==='Comune di Recanati','denominazione: '+e.denominazione);
+    must(e.comune==='Recanati'&&e.cf==='00201180434','dati fiscali non copiati');
+  });
+  await t('digitando il codice i dati si ricompilano da soli',async()=>{
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.check('#w-pa'); await p.waitForTimeout(300);
+    await p.fill('#w-uff','UFY9MB'); await p.waitForTimeout(500);
+    must((await p.inputValue('#w-cli'))==='Comune di Recanati','committente non compilato');
+    must((await p.inputValue('#w-ccom'))==='Recanati','comune non compilato');
+    must((await p.inputValue('#w-ccap'))==='62019','CAP non compilato');
+    must((await p.inputValue('#w-ccf'))==='00201180434','codice fiscale non compilato');
+    must(/Comune di Recanati/.test(await p.textContent('#w-uff-h')),'il riscontro non nomina l ente');
+    await p.keyboard.press('Escape');
+  });
+  await t('la scheda Anagrafica separa CIG e CUP',async()=>{
+    await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Consolidamento scuola primaria');
+      S.projId=x.id; S.tab='anagrafica'; go('project');});
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Ente pubblico/.test(h),'non indica il committente pubblico');
+    must(/Scissione dei pagamenti/.test(h),'non indica il regime IVA');
+    must(/DET-2026-118/.test(h),'non mostra l atto di affidamento');
+  });
+  await t('revisione di una fattura verso la PA',async()=>{
+    await p.evaluate(async()=>{
+      const x=__DB.projects.find(y=>y.name==='Consolidamento scuola primaria');
+      await SB.from('commessa_fatture').insert({project_id:x.id,descrizione:'Acconto 30%',
+        imponibile:24000,stato:'pronta',ordine:1});
+      await loadAll(true); S.projId=x.id; S.tab='fatture'; go('project');
+    });
+    await p.waitForTimeout(700);
+    await p.locator('#page [data-fxml]').first().click();
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(400);
+    const h=await p.textContent('#m-rev');
+    must(/FPA12/.test(h),'non annuncia il formato FPA12');
+    must(/Codice Univoco Ufficio/.test(h),'manca il campo codice ufficio');
+    must(/CIG/.test(h)&&/CUP/.test(h),'mancano CIG o CUP');
+    must(/scissione|Scissione/.test(h),'non menziona la scissione dei pagamenti');
+  });
+  await t('il riepilogo distingue totale documento e incasso',async()=>{
+    const h=await p.textContent('#rev-tot');
+    must(/Totale documento/.test(h),'manca il totale documento');
+    must(/versata dall/.test(h),'non spiega che l IVA la versa l ente');
+  });
+  await t('modificando l imponibile i totali seguono',async()=>{
+    await p.fill('[data-rev="imponibile"]','10000'); await p.waitForTimeout(400);
+    const h=await p.textContent('#rev-tot');
+    must(/10\.000|10000/.test(h.replace(/\s/g,'')),'imponibile non aggiornato: '+h.slice(0,200));
+  });
+  await t('togliendo il CIG la generazione si blocca',async()=>{
+    await p.fill('[data-rev="cig"]',''); await p.waitForTimeout(400);
+    must(/CIG/.test(await p.textContent('#rev-err')),'non segnala il CIG mancante');
+    must(await p.isDisabled('#rev-go'),'il pulsante resta attivo senza CIG');
+    await p.fill('[data-rev="cig"]','ZAB12CD345'); await p.waitForTimeout(400);
+    must(!(await p.isDisabled('#rev-go')),'resta bloccato dopo aver rimesso il CIG');
+  });
+  await t('genera l XML della fattura pubblica',async()=>{
+    const [dl]=await Promise.all([
+      p.waitForEvent('download',{timeout:8000}).catch(()=>null),
+      p.click('#rev-go') ]);
+    must(dl,'nessun download');
+    await p.waitForTimeout(900);
+  });
+  await t('numero e data digitati tornano sullo scaglione',async()=>{
+    const f=await p.evaluate(()=>__DB.commessa_fatture.find(x=>x.descrizione==='Acconto 30%'));
+    must(f&&f.numero_fattura,'numero non riportato sullo scaglione');
+    must(f.stato==='emessa','stato non aggiornato: '+f.stato);
+    must(f.xml_generato_at,'generazione non registrata');
   });
 
   // --- COSTO DEL PERSONALE ---

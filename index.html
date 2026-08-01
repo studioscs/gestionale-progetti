@@ -479,6 +479,30 @@ tbody tr:hover td { background:#f0f4f9; }
 </div>
 
 <!-- Scaglione di fatturazione -->
+<!-- Revisione della fattura: ultimo passaggio prima di produrre il file.
+     Ogni campo che finisce nell'XML e' modificabile qui, senza dover tornare
+     indietro a correggere la commessa o lo scaglione. -->
+<div class="ov" id="m-rev">
+  <div class="modal" style="max-width:860px">
+    <div class="mh"><h3>Revisione della fattura</h3><button class="mx" data-close="m-rev">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16">Controlla e correggi quello che serve: <b>queste modifiche valgono per questo file</b>
+        e non cambiano la commessa. Il riepilogo degli importi si aggiorna mentre scrivi.</div>
+      <div id="rev-err"></div>
+      <div id="rev-body"></div>
+      <div id="rev-tot"></div>
+    </div>
+    <div class="mf">
+      <span class="left row">
+        <button class="btn" id="rev-reset">Ripristina i dati della commessa</button>
+        <button class="btn" id="rev-ant">&#128065; Anteprima XML</button>
+      </span>
+      <button class="btn" data-close="m-rev">Annulla</button>
+      <button class="btn btn-p" id="rev-go">&#128229; Genera XML</button>
+    </div>
+  </div>
+</div>
+
 <div class="ov" id="m-fatt">
   <div class="modal">
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
@@ -783,7 +807,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.02.11';
+const VERSIONE = '2026.08.02.12';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -795,7 +819,7 @@ const S = {
   profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
-  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], loaded: false, pollTimer: null,
+  openGrp: new Set(), chat: {}, fatture: [], clienti: [], costi: [], enti: [], loaded: false, pollTimer: null,
   prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati'
 };
 
@@ -1579,7 +1603,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -1590,7 +1614,8 @@ async function loadAll(silent) {
       SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento'),
       SB.from('commessa_fatture').select('*').order('ordine'),
       SB.from('clienti').select('*').order('denominazione'),
-      SB.from('profili_costi').select('*').order('valido_dal', {ascending:false})
+      SB.from('profili_costi').select('*').order('valido_dal', {ascending:false}),
+      SB.from('enti_pa').select('*').order('denominazione')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -1608,6 +1633,7 @@ async function loadAll(silent) {
     /* I costi arrivano solo agli amministratori: per gli altri la RLS
        restituisce un elenco vuoto, e va bene cosi'. */
     S.costi     = rco.error ? [] : (rco.data || []);
+    S.enti      = ren.error ? [] : (ren.data || []);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -2479,44 +2505,214 @@ function ibanValido(v) {
 const ibanLeggibile = v => (v || '').replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim();
 
 /* --------------------------------------------------------------------------
-   GENERAZIONE XML FatturaPA 1.2 (FPR12)
-   Restituisce { nome, xml } oppure { errori: [...] } se manca qualcosa.
+   TESTO AMMESSO DALLO SCHEMA FatturaPA
+   I campi di testo della fattura accettano solo Latin-1: lettere accentate si',
+   ma virgolette curve, trattini lunghi e puntini di sospensione no. Sono
+   esattamente i caratteri che Word mette al posto di quelli battuti, quindi un
+   oggetto del servizio incollato dal disciplinare li contiene quasi sempre e
+   farebbe scartare la fattura per un motivo incomprensibile a chi la emette.
+   Qui vengono convertiti nell'equivalente battibile invece di essere buttati.
+   I campi sono anche "normalizedString": niente a capo o tabulazioni.
    -------------------------------------------------------------------------- */
-function xmlFattura(f) {
-  const p = byId(S.projects, f.project_id) || {};
+const MAPPA_LATIN = {
+  '‘': "'", '’': "'", '‚': "'", '‛': "'",   // virgolette singole curve
+  '“': '"', '”': '"', '„': '"', '‟': '"',   // virgolette doppie curve
+  '–': '-', '—': '-', '―': '-', '−': '-',   // trattini lunghi, meno
+  '…': '...', '•': '-',                               // puntini, punto elenco
+  ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ',   // spazi non separabili
+  '€': 'EUR', '™': '(TM)', '­': ''               // euro, marchio, trattino molle
+};
+const RE_LATIN = /[‘’‚‛“”„‟–—―−…•    €™­]/g;
+
+function latin(v, max) {
+  const s = String(v === null || v === undefined ? '' : v)
+    .replace(RE_LATIN, c => MAPPA_LATIN[c])
+    /* Prima si toglie il non ammesso, poi si compattano gli spazi: invertendo,
+       ogni carattere rimosso lascerebbe un doppio spazio al suo posto. */
+    .replace(/[^\x20-\x7E\xC0-\xFF\s]/g, '')     // fuori da Latin-1 stampabile: via
+    .replace(/\s+/g, ' ')                        // normalizedString: nessun a capo
+    .trim();
+  return max ? s.slice(0, max) : s;
+}
+
+/* Solo ASCII: e' quello che lo schema ammette per CIG, CUP e riferimenti */
+const ascii = (v, max) => String(v === null || v === undefined ? '' : v)
+  .replace(/[^\x20-\x7E\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, max || 999);
+
+/* Il Causale sta in 200 caratteri per elemento, ma puo' ripetersi: una dicitura
+   lunga si spezza su piu' elementi invece di essere troncata. */
+function causaleSpezzata(testo, maxPezzi) {
+  const s = latin(testo);
+  if (!s) return [];
+  const out = [];
+  let resto = s;
+  while (resto && out.length < (maxPezzi || 5)) {
+    if (resto.length <= 200) { out.push(resto); break; }
+    let taglio = resto.lastIndexOf(' ', 200);
+    if (taglio < 120) taglio = 200;
+    out.push(resto.slice(0, taglio).trim());
+    resto = resto.slice(taglio).trim();
+  }
+  return out;
+}
+
+/* --------------------------------------------------------------------------
+   DATI DELLA FATTURA, RISOLTI IN UN SOLO OGGETTO
+
+   Tutto cio' che finisce nell'XML viene prima raccolto qui: dallo scaglione,
+   dalla commessa e dalla configurazione dello studio. Serve a due cose insieme:
+   la generazione automatica legge questo oggetto, e la finestra di revisione lo
+   mostra campo per campo perche' l'utente possa correggere qualunque cosa prima
+   di produrre il file. Modificare la fattura e generarla passano dalla stessa
+   struttura, quindi non possono divergere.
+   -------------------------------------------------------------------------- */
+function datiFattura(f) {
+  const p  = byId(S.projects, f.project_id) || {};
+  const pa = !!p.ente_pubblico;
+  const pg = STUDIO.pagamento || {};
+  return {
+    projectId : p.id,
+    fattId    : f.id,
+
+    /* Trasmissione */
+    pa          : pa,
+    destinatario: pa ? (p.codice_ufficio || '') : (p.cliente_sdi || ''),
+    pec         : p.cliente_pec || '',
+
+    /* Committente */
+    cliente     : p.client || '',
+    clientePiva : p.cliente_piva || '',
+    clienteCf   : p.cliente_cf || '',
+    clienteInd  : p.cliente_indirizzo || '',
+    clienteCap  : p.cliente_cap || '',
+    clienteCom  : p.cliente_comune || '',
+    clienteProv : p.cliente_prov || '',
+
+    /* Documento */
+    numero      : f.numero_fattura || '',
+    data        : f.data_fattura || todayISO(),
+    imponibile  : r2(impFattura(f)),
+    /* L'oggetto e' la dicitura dell'incarico se c'e', altrimenti la descrizione
+       dello scaglione: e' quello che l'ente rilegge per liquidare. */
+    oggetto     : p.oggetto_servizio || f.descrizione || '',
+    descrizione : f.descrizione || 'Prestazioni professionali',
+    commessa    : p.name || '',
+
+    /* Imposte */
+    aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
+    tipoCassa       : STUDIO.tipoCassa || 'TC04',
+    aliquotaCassa   : Number(STUDIO.aliquotaCassa || 0),
+    cassaSoggettaIva: STUDIO.cassaSoggettaIva !== false,
+    ritenuta        : STUDIO.ritenuta ? Object.assign({}, STUDIO.ritenuta) : null,
+    /* Scissione dei pagamenti: la PA versa l'IVA direttamente all'erario e paga
+       al fornitore il solo imponibile. */
+    split           : !!p.split_payment,
+
+    /* Atto di affidamento: senza il riferimento al documento il blocco che
+       porta CIG e CUP non e' valido, quindi i codici non si possono trasmettere. */
+    rifTipo     : p.rif_incarico_tipo || 'ordine',
+    rifDoc      : p.rif_incarico || '',
+    rifData     : p.rif_incarico_data || '',
+    cig         : p.cig || '',
+    cup         : p.cup || '',
+
+    /* Pagamento */
+    condizioni  : pg.condizioni || 'TP02',
+    modalita    : pg.modalita || 'MP05',
+    giorni      : Number(pg.giorni || 30),
+    iban        : ibanDi(p),
+    sisma       : !!p.sisma
+  };
+}
+
+/* Importi ricalcolati dall'oggetto: cambiando imponibile o aliquote in revisione,
+   i totali seguono. */
+function calcolaDa(d) {
+  const imponibile = r2(Number(d.imponibile) || 0);
+  const cassa = r2(imponibile * (Number(d.aliquotaCassa) || 0) / 100);
+  const base  = r2(imponibile + (d.cassaSoggettaIva ? cassa : 0));
+  const iva   = r2(base * (Number(d.aliquotaIva) || 0) / 100);
+  const rit   = d.ritenuta ? r2(imponibile * Number(d.ritenuta.aliquota) / 100) : 0;
+  const totale = r2(base + iva);
+  /* In scissione dei pagamenti l'IVA non la incassa chi emette: il documento la
+     espone, ma l'importo da pagare ne e' al netto. */
+  const netto = r2((d.split ? base : base + iva) - rit);
+  return { imponibile, cassa, base, iva, totale, ritenuta: rit, netto };
+}
+
+/* Controlli prima di generare. Separati dalla resa dell'XML perche' la finestra
+   di revisione li mostra mentre si corregge, non solo al momento di scaricare. */
+function validaFattura(d) {
   const e = [];
   if (!STUDIO.piva)          e.push('Manca la partita IVA dello studio (blocco STUDIO in cima al file).');
   if (!STUDIO.denominazione) e.push('Manca la denominazione dello studio.');
   if (!/^\d{5}$/.test(STUDIO.cap || '')) e.push('Il CAP dello studio deve essere di 5 cifre.');
   if (!STUDIO.indirizzo || !STUDIO.comune) e.push('Manca l’indirizzo o il comune dello studio.');
-  if (!p.client)             e.push('La commessa non ha il nome del committente.');
-  if (!p.cliente_piva && !p.cliente_cf) e.push('Il committente non ha né partita IVA né codice fiscale.');
-  if (!p.cliente_indirizzo || !p.cliente_comune) e.push('Manca l’indirizzo del committente.');
-  if (!/^\d{5}$/.test(p.cliente_cap || '')) e.push('Il CAP del committente deve essere di 5 cifre.');
-  if (!p.cliente_sdi && !p.cliente_pec) e.push('Serve il codice destinatario SDI oppure la PEC del committente.');
-  if (!f.numero_fattura)     e.push('Manca il numero della fattura.');
-  if (!f.data_fattura)       e.push('Manca la data della fattura.');
-  const imp = impFattura(f);
-  if (!(imp > 0))            e.push('L’imponibile dello scaglione è zero.');
+
+  if (!d.cliente)                       e.push('Manca il nome del committente.');
+  if (!d.clientePiva && !d.clienteCf)   e.push('Il committente non ha né partita IVA né codice fiscale.');
+  if (!d.clienteInd || !d.clienteCom)   e.push('Manca l’indirizzo del committente.');
+  if (!/^\d{5}$/.test(d.clienteCap || '')) e.push('Il CAP del committente deve essere di 5 cifre.');
+
+  if (d.pa) {
+    /* Verso la PA il destinatario e' il Codice Univoco Ufficio dell'IndicePA:
+       sei caratteri, e non esiste il ripiego della PEC. */
+    if (!/^[A-Z0-9]{6}$/.test(String(d.destinatario || '').toUpperCase()))
+      e.push('Il Codice Univoco Ufficio dev’essere di 6 caratteri (lettere e cifre). Lo trovi su indicepa.gov.it.');
+    if (!d.cig)
+      e.push('Manca il CIG: senza, la fattura viene scartata dallo SdI o l’ente non può liquidarla.');
+    if (d.cig && !/^[A-Z0-9]{10}$/.test(ascii(d.cig).toUpperCase()))
+      e.push('Il CIG dev’essere di 10 caratteri alfanumerici: ' + ascii(d.cig));
+    if (d.cup && !/^[A-Z0-9]{15}$/.test(ascii(d.cup).toUpperCase()))
+      e.push('Il CUP dev’essere di 15 caratteri alfanumerici: ' + ascii(d.cup));
+    if (!d.rifDoc)
+      e.push('Mancano gli estremi dell’atto di affidamento (determina, contratto o ordine): '
+        + 'senza, CIG e CUP non si possono riportare in fattura.');
+    if (ascii(d.rifDoc).length > 20)
+      e.push('Il riferimento all’atto di affidamento non può superare i 20 caratteri: ' + ascii(d.rifDoc));
+    if (!d.oggetto)
+      e.push('Manca l’oggetto del servizio: l’ente si aspetta di rileggerlo come nell’incarico.');
+  } else {
+    if (!d.destinatario && !d.pec)
+      e.push('Serve il codice destinatario SDI oppure la PEC del committente.');
+    if (d.destinatario && !/^[A-Z0-9]{7}$/.test(String(d.destinatario).toUpperCase()))
+      e.push('Il codice destinatario SDI dev’essere di 7 caratteri: ' + d.destinatario);
+  }
+
+  if (!d.numero) e.push('Manca il numero della fattura.');
+  if (!d.data)   e.push('Manca la data della fattura.');
+  if (!(Number(d.imponibile) > 0)) e.push('L’imponibile è zero.');
+
   /* L'IBAN non è obbligatorio per lo SdI, ma se c'è dev'essere giusto: una
      cifra sbagliata su una fattura già trasmessa si corregge solo con una nota. */
-  const ib = ibanDi(p);
-  if (ib && !ibanValido(ib))
-    e.push('L’IBAN ' + (p.sisma ? 'del conto sisma' : 'del conto ordinario')
-      + ' non supera il controllo di validità: ' + ibanLeggibile(ib));
+  if (d.iban && !ibanValido(d.iban))
+    e.push('L’IBAN ' + (d.sisma ? 'del conto sisma' : 'del conto ordinario')
+      + ' non supera il controllo di validità: ' + ibanLeggibile(d.iban));
+  return e;
+}
+
+/* --------------------------------------------------------------------------
+   GENERAZIONE XML FatturaPA 1.2
+   FPA12 verso la Pubblica Amministrazione, FPR12 verso i privati.
+   Restituisce { nome, xml } oppure { errori: [...] } se manca qualcosa.
+   -------------------------------------------------------------------------- */
+function xmlDaDati(d) {
+  const e = validaFattura(d);
   if (e.length) return { errori: e };
 
-  const c = calcolaFattura(imp);
-  const n2 = v => Number(v).toFixed(2);
-  const x  = v => esc(v === null || v === undefined ? '' : String(v));
+  const c   = calcolaDa(d);
+  const n2  = v => Number(v).toFixed(2);
+  const x   = v => esc(v === null || v === undefined ? '' : String(v));
   const el2 = (tag, v) => '<' + tag + '>' + x(v) + '</' + tag + '>';
-  const sdi = (p.cliente_sdi && p.cliente_sdi.trim()) ? p.cliente_sdi.trim().toUpperCase() : '0000000';
+  const elL = (tag, v, max) => '<' + tag + '>' + x(latin(v, max)) + '</' + tag + '>';
+  const elA = (tag, v, max) => '<' + tag + '>' + x(ascii(v, max).toUpperCase()) + '</' + tag + '>';
 
+  const dest = String(d.destinatario || '').toUpperCase() || '0000000';
   const sede = (ind, civ, cap, com, pr) =>
-      '<Indirizzo>' + x(ind) + '</Indirizzo>'
-    + (civ ? '<NumeroCivico>' + x(civ) + '</NumeroCivico>' : '')
-    + '<CAP>' + x(cap) + '</CAP><Comune>' + x(com) + '</Comune>'
-    + (pr ? '<Provincia>' + x(String(pr).toUpperCase()) + '</Provincia>' : '')
+      elL('Indirizzo', ind, 60)
+    + (civ ? elL('NumeroCivico', civ, 8) : '')
+    + '<CAP>' + x(cap) + '</CAP>' + elL('Comune', com, 60)
+    + (pr ? el2('Provincia', String(pr).toUpperCase()) : '')
     + '<Nazione>IT</Nazione>';
 
   /* Numerazione del file: progressivo alfanumerico su base 36 */
@@ -2527,14 +2723,14 @@ function xmlFattura(f) {
     +   '<DatiTrasmissione>'
     +     '<IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>' + x(STUDIO.piva) + '</IdCodice></IdTrasmittente>'
     +     el2('ProgressivoInvio', prog)
-    +     '<FormatoTrasmissione>FPR12</FormatoTrasmissione>'
-    +     el2('CodiceDestinatario', sdi)
-    +     (sdi === '0000000' && p.cliente_pec ? el2('PECDestinatario', p.cliente_pec) : '')
+    +     el2('FormatoTrasmissione', d.pa ? 'FPA12' : 'FPR12')
+    +     el2('CodiceDestinatario', dest)
+    +     (!d.pa && dest === '0000000' && d.pec ? elL('PECDestinatario', d.pec, 256) : '')
     +   '</DatiTrasmissione>'
     +   '<CedentePrestatore><DatiAnagrafici>'
     +     '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(STUDIO.piva) + '</IdCodice></IdFiscaleIVA>'
     +     (STUDIO.codiceFiscale ? el2('CodiceFiscale', STUDIO.codiceFiscale) : '')
-    +     '<Anagrafica>' + el2('Denominazione', STUDIO.denominazione) + '</Anagrafica>'
+    +     '<Anagrafica>' + elL('Denominazione', STUDIO.denominazione, 80) + '</Anagrafica>'
     +     el2('RegimeFiscale', STUDIO.regimeFiscale)
     +   '</DatiAnagrafici><Sede>'
     +     sede(STUDIO.indirizzo, STUDIO.civico, STUDIO.cap, STUDIO.comune, STUDIO.provincia)
@@ -2547,61 +2743,82 @@ function xmlFattura(f) {
           + '</IscrizioneREA>' : '')
     +   '</CedentePrestatore>'
     +   '<CessionarioCommittente><DatiAnagrafici>'
-    +     (p.cliente_piva ? '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(p.cliente_piva) + '</IdCodice></IdFiscaleIVA>' : '')
-    +     (p.cliente_cf ? el2('CodiceFiscale', String(p.cliente_cf).toUpperCase()) : '')
-    +     '<Anagrafica>' + el2('Denominazione', p.client) + '</Anagrafica>'
+    +     (d.clientePiva ? '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + x(d.clientePiva) + '</IdCodice></IdFiscaleIVA>' : '')
+    +     (d.clienteCf ? el2('CodiceFiscale', String(d.clienteCf).toUpperCase()) : '')
+    +     '<Anagrafica>' + elL('Denominazione', d.cliente, 80) + '</Anagrafica>'
     +   '</DatiAnagrafici><Sede>'
-    +     sede(p.cliente_indirizzo, '', p.cliente_cap, p.cliente_comune, p.cliente_prov)
+    +     sede(d.clienteInd, '', d.clienteCap, d.clienteCom, d.clienteProv)
     +   '</Sede></CessionarioCommittente>'
     + '</FatturaElettronicaHeader>';
 
-  const causale = (p.name ? 'Commessa: ' + p.name + '. ' : '') + f.descrizione;
-  const scad = iso(addD(pd(f.data_fattura), STUDIO.pagamento.giorni || 30));
-  const iban = ibanDi(p);
+  /* Causale: la dicitura dell'incarico, spezzata su piu' elementi se supera i
+     200 caratteri ammessi da ciascuno. */
+  const causali = causaleSpezzata((d.commessa ? 'Commessa: ' + d.commessa + '. ' : '') + d.oggetto);
+
+  /* CIG e CUP viaggiano dentro il blocco del documento correlato; il tipo di
+     blocco dipende dall'atto con cui l'incarico e' stato affidato. */
+  const tagRif = d.rifTipo === 'contratto' ? 'DatiContratto'
+               : d.rifTipo === 'convenzione' ? 'DatiConvenzione' : 'DatiOrdineAcquisto';
+  const bloccoRif = (d.rifDoc && (d.cig || d.cup))
+    ? '<' + tagRif + '>'
+      + '<RiferimentoNumeroLinea>1</RiferimentoNumeroLinea>'
+      + elA('IdDocumento', d.rifDoc, 20)
+      + (d.rifData ? el2('Data', d.rifData) : '')
+      + (d.cup ? elA('CodiceCUP', d.cup, 15) : '')
+      + (d.cig ? elA('CodiceCIG', d.cig, 15) : '')
+      + '</' + tagRif + '>'
+    : '';
+
+  const scad = iso(addD(pd(d.data), d.giorni || 30));
 
   const body =
       '<FatturaElettronicaBody>'
     +   '<DatiGenerali><DatiGeneraliDocumento>'
     +     '<TipoDocumento>TD01</TipoDocumento><Divisa>EUR</Divisa>'
-    +     el2('Data', f.data_fattura) + el2('Numero', f.numero_fattura)
-    +     (STUDIO.ritenuta
-        ? '<DatiRitenuta>' + el2('TipoRitenuta', STUDIO.ritenuta.tipo || 'RT02')
-          + el2('ImportoRitenuta', n2(c.ritenuta)) + el2('AliquotaRitenuta', n2(STUDIO.ritenuta.aliquota))
-          + el2('CausalePagamento', STUDIO.ritenuta.causale || 'A') + '</DatiRitenuta>' : '')
+    +     el2('Data', d.data) + elA('Numero', d.numero, 20)
+    +     (d.ritenuta
+        ? '<DatiRitenuta>' + el2('TipoRitenuta', d.ritenuta.tipo || 'RT02')
+          + el2('ImportoRitenuta', n2(c.ritenuta)) + el2('AliquotaRitenuta', n2(d.ritenuta.aliquota))
+          + el2('CausalePagamento', d.ritenuta.causale || 'A') + '</DatiRitenuta>' : '')
     +     (c.cassa
-        ? '<DatiCassaPrevidenziale>' + el2('TipoCassa', STUDIO.tipoCassa)
-          + el2('AlCassa', n2(STUDIO.aliquotaCassa)) + el2('ImportoContributoCassa', n2(c.cassa))
+        ? '<DatiCassaPrevidenziale>' + el2('TipoCassa', d.tipoCassa)
+          + el2('AlCassa', n2(d.aliquotaCassa)) + el2('ImportoContributoCassa', n2(c.cassa))
           + el2('ImponibileCassa', n2(c.imponibile))
-          + el2('AliquotaIVA', n2(STUDIO.cassaSoggettaIva ? STUDIO.aliquotaIva : 0))
+          + el2('AliquotaIVA', n2(d.cassaSoggettaIva ? d.aliquotaIva : 0))
           + '</DatiCassaPrevidenziale>' : '')
     +     el2('ImportoTotaleDocumento', n2(c.totale))
-    +     el2('Causale', causale.slice(0, 200))
-    +   '</DatiGeneraliDocumento></DatiGenerali>'
+    +     causali.map(t => elL('Causale', t, 200)).join('')
+    +   '</DatiGeneraliDocumento>'
+    +   bloccoRif
+    +   '</DatiGenerali>'
     +   '<DatiBeniServizi><DettaglioLinee>'
     +     '<NumeroLinea>1</NumeroLinea>'
-    +     el2('Descrizione', (f.descrizione || 'Prestazioni professionali').slice(0, 1000))
+    +     elL('Descrizione', d.oggetto || d.descrizione, 1000)
     +     el2('PrezzoUnitario', n2(c.imponibile)) + el2('PrezzoTotale', n2(c.imponibile))
-    +     el2('AliquotaIVA', n2(STUDIO.aliquotaIva))
+    +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +   '</DettaglioLinee><DatiRiepilogo>'
-    +     el2('AliquotaIVA', n2(STUDIO.aliquotaIva))
+    +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
-    +     '<EsigibilitaIVA>I</EsigibilitaIVA>'
+    +     el2('EsigibilitaIVA', d.split ? 'S' : 'I')
     +   '</DatiRiepilogo></DatiBeniServizi>'
-    +   '<DatiPagamento>' + el2('CondizioniPagamento', STUDIO.pagamento.condizioni)
-    +     '<DettaglioPagamento>' + el2('ModalitaPagamento', STUDIO.pagamento.modalita)
+    +   '<DatiPagamento>' + el2('CondizioniPagamento', d.condizioni)
+    +     '<DettaglioPagamento>' + el2('ModalitaPagamento', d.modalita)
     +       el2('DataScadenzaPagamento', scad) + el2('ImportoPagamento', n2(c.netto))
-    +       (iban ? el2('IBAN', iban) : '')
+    +       (d.iban ? el2('IBAN', d.iban) : '')
     +     '</DettaglioPagamento></DatiPagamento>'
     + '</FatturaElettronicaBody>';
 
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    + '<p:FatturaElettronica versione="FPR12"'
+    + '<p:FatturaElettronica versione="' + (d.pa ? 'FPA12' : 'FPR12') + '"'
     + ' xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2"'
     + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
     + head + body + '</p:FatturaElettronica>';
 
-  return { nome: 'IT' + STUDIO.piva + '_' + prog + '.xml', xml, calcolo: c };
+  return { nome: 'IT' + STUDIO.piva + '_' + prog + '.xml', xml, calcolo: c, dati: d };
 }
+
+/* Scorciatoia storica: genera direttamente dallo scaglione, senza revisione */
+const xmlFattura = f => xmlDaDati(datiFattura(f));
 
 
 /* -------------------------- PANNELLO DI COMMESSA -------------------------- */
@@ -2861,23 +3078,186 @@ async function scaglioniStandard(pid) {
   toast('Creati 3 scaglioni di fatturazione', 'success');
 }
 
-/* Scarica l'XML FatturaPA da trascinare nel software di fatturazione */
-async function scaricaXml(id) {
-  const f = byId(S.fatture, id); if (!f) return;
-  const r = xmlFattura(f);
-  if (r.errori) {
-    return alert('Non posso generare l’XML, mancano questi dati:\n\n• ' + r.errori.join('\n• '));
-  }
-  const blob = new Blob([r.xml], { type: 'application/xml' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = r.nome;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+/* ===========================================================================
+   REVISIONE DELLA FATTURA PRIMA DI GENERARE IL FILE
 
+   La generazione non parte mai di slancio: si apre questa finestra, che mostra
+   tutto quello che finira' nell'XML in campi modificabili. Serve perche' un
+   dato sbagliato scoperto dopo l'invio allo SdI non si corregge piu' - si
+   emette una nota di credito. Le correzioni valgono per il file che si sta
+   producendo e non riscrivono la commessa: il caso tipico e' l'oggetto adattato
+   a questo stato di avanzamento, che non deve cambiare l'incarico.
+   =========================================================================== */
+let REV = null;
+
+function openRevisione(id) {
+  const f = byId(S.fatture, id); if (!f) return;
+  REV = datiFattura(f);
+  if (!REV.numero)  REV.numero = prossimoNumero();
+  disegnaRevisione();
+  openM('m-rev');
+}
+
+/* Propone il numero successivo a quello piu' alto gia' usato nell'anno */
+function prossimoNumero() {
+  const anno = String(today().getFullYear());
+  const usati = S.fatture.map(f => f.numero_fattura || '')
+    .filter(n => n.indexOf(anno) === 0)
+    .map(n => parseInt(String(n).replace(/^\D*\d{4}\D*/, ''), 10))
+    .filter(n => !isNaN(n));
+  return anno + '/' + String((usati.length ? Math.max.apply(null, usati) : 0) + 1).padStart(3, '0');
+}
+
+function disegnaRevisione() {
+  const d = REV;
+  const t = (l, k, ph, tipo, hint) =>
+      '<div class="fg"><label class="fl">' + l + '</label>'
+    + '<input class="fc" type="' + (tipo || 'text') + '" data-rev="' + k + '" value="'
+    + esc(d[k] === null || d[k] === undefined ? '' : d[k]) + '" placeholder="' + esc(ph || '') + '">'
+    + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+
+  el('rev-body').innerHTML =
+      sez('Documento')
+    + '<div class="fg3">' + t('Numero *', 'numero', '2026/014')
+      + t('Data *', 'data', '', 'date')
+      + t('Imponibile €', 'imponibile', '', 'number') + '</div>'
+    + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
+      + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
+      + '<div class="hint">Finisce nell’oggetto della fattura e nella descrizione della riga. '
+      + 'I caratteri non ammessi dallo schema vengono convertiti da soli.</div></div>'
+
+    + sez('Destinatario', d.pa ? 'ente pubblico: formato FPA12' : 'privato: formato FPR12')
+    + '<div class="fg2">'
+      + '<div class="fg"><label class="fl">Tipo di committente</label>'
+        + '<select class="fc" data-rev="pa">'
+          + '<option value="0"' + (d.pa ? '' : ' selected') + '>Privato (codice SDI a 7 caratteri)</option>'
+          + '<option value="1"' + (d.pa ? ' selected' : '') + '>Ente pubblico (codice ufficio a 6)</option>'
+        + '</select></div>'
+      + t(d.pa ? 'Codice Univoco Ufficio *' : 'Codice destinatario SDI', 'destinatario',
+          d.pa ? '6 caratteri' : '7 caratteri')
+    + '</div>'
+    + '<div class="fg2">' + t('Denominazione *', 'cliente') + t('PEC', 'pec') + '</div>'
+    + '<div class="fg2">' + t('Partita IVA', 'clientePiva') + t('Codice fiscale', 'clienteCf') + '</div>'
+    + '<div class="fg2">' + t('Indirizzo *', 'clienteInd') + t('CAP *', 'clienteCap') + '</div>'
+    + '<div class="fg2">' + t('Comune *', 'clienteCom') + t('Provincia', 'clienteProv') + '</div>'
+
+    + (d.pa
+        ? sez('Dati dell’affidamento', 'obbligatori in fattura verso la PA')
+          + '<div class="fg3">' + t('CIG *', 'cig', '10 caratteri') + t('CUP', 'cup', '15 caratteri')
+            + t('Atto di affidamento *', 'rifDoc', 'Es. DET-2026-118') + '</div>'
+          + '<div class="fg3">'
+            + '<div class="fg"><label class="fl">Tipo di atto</label><select class="fc" data-rev="rifTipo">'
+              + ['ordine|Ordine / determina','contratto|Contratto','convenzione|Convenzione'].map(o => {
+                  const k = o.split('|')[0];
+                  return '<option value="' + k + '"' + (d.rifTipo === k ? ' selected' : '') + '>' + o.split('|')[1] + '</option>';
+                }).join('')
+            + '</select></div>'
+            + t('Data dell’atto', 'rifData', '', 'date')
+            + '<div class="fg"><label class="fl">IVA</label><select class="fc" data-rev="split">'
+              + '<option value="1"' + (d.split ? ' selected' : '') + '>Scissione dei pagamenti</option>'
+              + '<option value="0"' + (d.split ? '' : ' selected') + '>Ordinaria</option>'
+            + '</select></div>'
+          + '</div>'
+        : '')
+
+    + sez('Imposte e pagamento')
+    + '<div class="fg3">' + t('Aliquota IVA %', 'aliquotaIva', '', 'number')
+      + t('Cassa %', 'aliquotaCassa', '', 'number')
+      + t('Giorni per il pagamento', 'giorni', '', 'number') + '</div>'
+    + '<div class="fg2">' + t('IBAN', 'iban', '', 'text',
+        d.sisma ? 'Conto dedicato ai lavori sisma.' : 'Conto ordinario.')
+      + '<div class="fg"><label class="fl">Contributo cassa soggetto a IVA</label>'
+        + '<select class="fc" data-rev="cassaSoggettaIva">'
+          + '<option value="1"' + (d.cassaSoggettaIva ? ' selected' : '') + '>Sì</option>'
+          + '<option value="0"' + (d.cassaSoggettaIva ? '' : ' selected') + '>No</option>'
+        + '</select></div>'
+    + '</div>';
+
+  aggiornaTotali();
+}
+
+/* Riepilogo e avvisi, ricalcolati a ogni battuta */
+function aggiornaTotali() {
+  const d = REV, c = calcolaDa(d);
+  const e = validaFattura(d);
+  el('rev-err').innerHTML = e.length
+    ? '<div class="wbox mb16"><b>Manca ancora qualcosa per generare il file:</b><ul style="margin:6px 0 0 18px">'
+      + e.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>'
+    : '';
+  el('rev-go').disabled = e.length > 0;
+
+  const riga = (l, v, forte) => '<div class="spread" style="font-size:13px;padding:3px 0'
+    + (forte ? ';border-top:1px solid var(--bord);margin-top:5px;padding-top:7px' : '') + '">'
+    + '<span>' + l + '</span>' + (forte ? '<b>' : '<span>') + feuro(v) + (forte ? '</b>' : '</span>') + '</div>';
+
+  el('rev-tot').innerHTML = '<div class="card" style="margin-top:16px">'
+    + '<div class="card-h"><span class="card-t">Riepilogo</span>'
+      + '<span style="font-size:12px;color:var(--mut)">' + (d.pa ? 'FPA12 · ente pubblico' : 'FPR12 · privato') + '</span></div>'
+    + riga('Imponibile', c.imponibile)
+    + (c.cassa ? riga('Contributo cassa ' + d.tipoCassa + ' ' + d.aliquotaCassa + '%', c.cassa) : '')
+    + riga('Base imponibile IVA', c.base)
+    + riga('IVA ' + d.aliquotaIva + '%', c.iva)
+    + (c.ritenuta ? riga('Ritenuta d’acconto', -c.ritenuta) : '')
+    + riga('Totale documento', c.totale, true)
+    + riga(d.split ? 'Da incassare (IVA versata dall’ente)' : 'Da incassare', c.netto, true)
+    + (d.split
+        ? '<div class="hint" style="margin-top:8px">In scissione dei pagamenti l’ente versa '
+          + feuro(c.iva) + ' di IVA direttamente all’erario: a noi arriva ' + feuro(c.netto) + '.</div>' : '')
+    + '</div>';
+}
+
+/* Una modifica in finestra aggiorna solo l'oggetto in revisione */
+function revCambia(k, v) {
+  const numerici = ['imponibile','aliquotaIva','aliquotaCassa','giorni'];
+  const booleani = ['pa','split','cassaSoggettaIva'];
+  if (numerici.indexOf(k) >= 0)      REV[k] = v === '' ? 0 : Number(v);
+  else if (booleani.indexOf(k) >= 0) REV[k] = v === '1' || v === true;
+  else                               REV[k] = v;
+  if (k === 'iban') REV.iban = String(v).replace(/\s/g, '').toUpperCase();
+  if (k === 'pa') { disegnaRevisione(); return; }   /* cambiano i campi mostrati */
+  aggiornaTotali();
+}
+
+async function generaDaRevisione() {
+  const r = xmlDaDati(REV);
+  if (r.errori) return alert('Non posso generare l’XML:\n\n• ' + r.errori.join('\n• '));
+  scaricaFile(r.nome, r.xml);
   STUDIO.progressivo = (STUDIO.progressivo || 1) + 1;
-  await SB.from('commessa_fatture').update({ xml_generato_at: new Date().toISOString() }).eq('id', id);
+
+  /* Numero e data digitati in revisione tornano sullo scaglione: e' quello che
+     poi si rilegge nell'elenco e nella pagina "Da fatturare". */
+  const patch = { xml_generato_at: new Date().toISOString() };
+  const f = byId(S.fatture, REV.fattId);
+  if (f && REV.numero && REV.numero !== f.numero_fattura) patch.numero_fattura = REV.numero;
+  if (f && REV.data   && REV.data   !== f.data_fattura)   patch.data_fattura   = REV.data;
+  if (f && ['da_emettere','pronta'].indexOf(f.stato) >= 0) patch.stato = 'emessa';
+  await SB.from('commessa_fatture').update(patch).eq('id', REV.fattId);
+
+  closeM('m-rev');
+  await loadAll(true); render();
   toast('File ' + r.nome + ' scaricato: importalo in FatturaElettronica APP', 'success');
 }
+
+function anteprimaXml() {
+  const r = xmlDaDati(REV);
+  if (r.errori) return alert('Non posso generare l’XML:\n\n• ' + r.errori.join('\n• '));
+  const w = window.open('', '_blank');
+  if (!w) return alert('Il browser ha bloccato la finestra dell’anteprima.');
+  w.document.write('<pre style="font:12px/1.5 monospace;white-space:pre-wrap;padding:16px">'
+    + esc(r.xml) + '</pre>');
+  w.document.close();
+}
+
+function scaricaFile(nome, contenuto) {
+  const blob = new Blob([contenuto], { type: 'application/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* Punto d'ingresso storico: ora passa sempre dalla revisione */
+const scaricaXml = id => openRevisione(id);
 
 /* ===========================================================================
    PAGINA: FIRME DEL CLIENTE
@@ -3313,7 +3693,15 @@ function anagraficaPanel(p) {
   return '<div class="g2">'
     + '<div class="card"><div class="card-h"><span class="card-t">Commessa</span></div>'
       + '<div class="fg2">' + f('Codice', p.codice) + f('Cliente', p.client) + '</div>'
-      + '<div class="fg2">' + f('CIG / CUP', p.cig) + f('Importo', feuro(p.amount)) + '</div>'
+      + '<div class="fg2">' + f('CIG', p.cig) + f('CUP', p.cup) + '</div>'
+      + '<div class="fg2">' + f('Importo', feuro(p.amount))
+        + f('Committente', p.ente_pubblico ? 'Ente pubblico' + (p.codice_ufficio ? ' — ufficio ' + p.codice_ufficio : '') : 'Privato') + '</div>'
+      + (p.ente_pubblico
+          ? '<div class="fg2">' + f('Atto di affidamento',
+                (p.rif_incarico || '-') + (p.rif_incarico_data ? ' del ' + fdate(p.rif_incarico_data) : ''))
+            + f('IVA', p.split_payment ? 'Scissione dei pagamenti' : 'Ordinaria') + '</div>'
+            + f('Oggetto del servizio', p.oggetto_servizio)
+          : '')
       + '<div class="fg2">' + f('Data inizio', fdate(p.start_date)) + f('Fine prevista', fdate(p.end_date)) + '</div>'
       + f('Template applicato', TEMPLATES[p.template_key] ? TEMPLATES[p.template_key].label : p.template_key)
       + '<div class="fg"><label class="fl">Conto di accredito</label><div style="font-size:13px">'
@@ -4153,8 +4541,8 @@ function drawWizard() {
       + fld('Email', 'w-ref2e', d.referente_tec_email, 'tecnico@cliente.it')
       + '</div>'
       + sez('Immobile e commessa')
-      + '<div class="fg3">'
-      + fld('Comune', 'w-com', d.comune) + fld('Provincia', 'w-prov', d.provincia) + fld('CIG / CUP', 'w-cig', d.cig)
+      + '<div class="fg2">'
+      + fld('Comune', 'w-com', d.comune) + fld('Provincia', 'w-prov', d.provincia)
       + '</div><div class="fg2">'
       + fld('Indirizzo', 'w-ind', d.indirizzo) + fld('Dati catastali', 'w-cat', d.dati_catastali, 'Fg. 12 part. 345 sub 2')
       + '</div>'
@@ -4162,10 +4550,15 @@ function drawWizard() {
         + '<input type="checkbox" id="w-sisma"' + (d.sisma ? ' checked' : '') + '>'
         + '&nbsp;<b>Lavoro di ricostruzione post-sisma</b></label>'
         + '<div class="hint" id="w-sisma-h">' + ibanHint(d.sisma) + '</div></div>'
+      + sez('Committente pubblico', 'stazione appaltante: cambia il formato della fattura')
+      + '<div class="fg"><label class="row" style="cursor:pointer;font-size:13px">'
+        + '<input type="checkbox" id="w-pa"' + (d.ente_pubblico ? ' checked' : '') + '>'
+        + '&nbsp;<b>Il committente è un ente pubblico</b></label></div>'
+      + '<div id="w-pa-box"' + (d.ente_pubblico ? '' : ' style="display:none"') + '>' + paBoxHtml(d) + '</div>'
       + sez('Dati fiscali del committente', 'servono solo per generare l’XML della fattura')
       + '<div class="fg3">'
       + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
-      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri')
+      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri, solo privati')
       + '</div><div class="fg2">'
       + fld('PEC', 'w-cpec', d.cliente_pec, 'se non c’è il codice SDI')
       + fld('Indirizzo di fatturazione', 'w-cind', d.cliente_indirizzo)
@@ -4222,6 +4615,102 @@ function sez(titolo, nota) {
     + (nota ? ' <span style="font-weight:400;text-transform:none;letter-spacing:0">— ' + esc(nota) + '</span>' : '')
     + '</div>';
 }
+/* --------------------------------------------------------------------------
+   BLOCCO "COMMITTENTE PUBBLICO" DEL MODULO COMMESSA
+   Il Codice Univoco Ufficio e' la chiave: digitandolo, se quell'ufficio e' gia'
+   nel registro tutto il resto si ricompila da solo. Il registro cresce da se',
+   perche' ogni commessa pubblica salvata ci lascia dentro il suo ufficio: alla
+   seconda commessa con lo stesso ente non si digita piu' nulla.
+   -------------------------------------------------------------------------- */
+function paBoxHtml(d) {
+  return '<div class="fg2">'
+      + '<div class="fg"><label class="fl">Codice Univoco Ufficio *</label>'
+        + '<input class="fc" id="w-uff" maxlength="6" style="text-transform:uppercase" value="'
+        + esc(d.codice_ufficio || '') + '" placeholder="6 caratteri, es. UFY9MB">'
+        + '<div class="hint" id="w-uff-h">' + enteHint(d.codice_ufficio) + '</div></div>'
+      + '<div class="fg"><label class="fl">Regime IVA</label>'
+        + '<select class="fc" id="w-split">'
+          + '<option value="1"' + (d.split_payment !== false ? ' selected' : '') + '>Scissione dei pagamenti (split payment)</option>'
+          + '<option value="0"' + (d.split_payment === false ? ' selected' : '') + '>IVA a carico dell’ente (nessuna scissione)</option>'
+        + '</select>'
+        + '<div class="hint">In scissione l’ente versa l’IVA direttamente all’erario e a noi paga il solo imponibile.</div></div>'
+    + '</div>'
+    + '<div class="fg3">'
+      + fld('CIG *', 'w-cig', d.cig, '10 caratteri')
+      + fld('CUP', 'w-cup', d.cup, '15 caratteri, se c’è')
+      + '<div class="fg"><label class="fl">Atto di affidamento *</label>'
+        + '<input class="fc" id="w-rif" maxlength="20" value="' + esc(d.rif_incarico || '') + '" placeholder="Es. DET-2026-118">'
+        + '</div>'
+    + '</div>'
+    + '<div class="fg2">'
+      + '<div class="fg"><label class="fl">Tipo di atto</label><select class="fc" id="w-riftipo">'
+        + ['ordine|Ordine / determina','contratto|Contratto','convenzione|Convenzione']
+            .map(o => { const k = o.split('|')[0];
+              return '<option value="' + k + '"' + ((d.rif_incarico_tipo || 'ordine') === k ? ' selected' : '') + '>'
+                + o.split('|')[1] + '</option>'; }).join('')
+      + '</select></div>'
+      + fld('Data dell’atto', 'w-rifdata', d.rif_incarico_data, '', 'date')
+    + '</div>'
+    + '<div class="fg"><label class="fl">Oggetto del servizio *</label>'
+      + '<textarea class="fc" id="w-ogg" rows="3" placeholder="Incolla qui la dicitura esatta dal disciplinare d’incarico">'
+      + esc(d.oggetto_servizio || '') + '</textarea>'
+      + '<div class="hint">Copia e incolla dall’atto di affidamento: è la dicitura che l’ente si aspetta di '
+      + 'rileggere identica nell’oggetto della fattura per poterla liquidare senza chiedere chiarimenti. '
+      + 'Virgolette curve e trattini lunghi di Word vengono convertiti da soli in caratteri ammessi dallo schema.</div></div>'
+    + '<div class="ibox" style="font-size:11.5px">Verso la PA la fattura viaggia in formato <b>FPA12</b> e il '
+      + 'destinatario è il Codice Univoco Ufficio a 6 caratteri, non il codice SDI a 7. '
+      + '<b>CIG</b> e riferimento all’atto sono obbligatori: senza, lo SdI scarta la fattura o l’ente non la può pagare.</div>';
+}
+
+/* Che cosa sappiamo dell'ufficio digitato */
+function enteHint(cod) {
+  const c = String(cod || '').toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(c))
+    return 'Sei caratteri fra lettere e cifre. Se non lo conosci lo cerchi su '
+      + '<a href="https://indicepa.gov.it" target="_blank" rel="noopener">indicepa.gov.it</a>.';
+  const e = (S.enti || []).find(x => x.codice_univoco === c);
+  return e
+    ? '✓ <b>' + esc(e.denominazione) + '</b>' + (e.ufficio ? ' — ' + esc(e.ufficio) : '')
+      + (e.comune ? ' (' + esc(e.comune) + ')' : '') + ' — dati ricompilati dal registro.'
+    : 'Ufficio non ancora in archivio: compila i dati del committente qui sotto e '
+      + 'alla prossima commessa per questo ente basterà digitare il codice.';
+}
+
+/* Riempie i campi del committente dai dati dell'ufficio in registro */
+function applicaEnte(cod) {
+  const c = String(cod || '').toUpperCase();
+  const e = (S.enti || []).find(x => x.codice_univoco === c);
+  if (!e) return false;
+  const set = (id, v) => { if (el(id) && v) el(id).value = v; };
+  set('w-cli',   e.denominazione);
+  set('w-ccf',   e.cf);
+  set('w-cpiva', e.piva);
+  set('w-cind',  e.indirizzo);
+  set('w-ccap',  e.cap);
+  set('w-ccom',  e.comune);
+  set('w-cprov', e.provincia);
+  set('w-cpec',  e.pec);
+  if (el('w-split')) el('w-split').value = e.split_payment === false ? '0' : '1';
+  return true;
+}
+
+/* Dopo il salvataggio di una commessa pubblica, l'ufficio entra nel registro:
+   e' cosi' che l'archivio si popola senza che nessuno lo compili apposta. */
+async function registraEnte(d) {
+  const c = String(d.codice_ufficio || '').toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(c) || !d.client) return;
+  if ((S.enti || []).some(x => x.codice_univoco === c)) return;
+  const { error } = await SB.from('enti_pa').insert({
+    codice_univoco: c, denominazione: d.client,
+    cf: d.cliente_cf || null, piva: d.cliente_piva || null,
+    indirizzo: d.cliente_indirizzo || null, cap: d.cliente_cap || null,
+    comune: d.cliente_comune || null, provincia: d.cliente_prov || null,
+    pec: d.cliente_pec || null, split_payment: d.split_payment !== false,
+    created_by: S.me.id
+  });
+  if (error && error.code !== '23505') sbErr(error, 'registro enti');
+}
+
 /* Spiega, mentre si compila, su quale conto finirà l'incasso */
 function ibanHint(sisma) {
   const ib = ibanDi({ sisma: !!sisma });
@@ -4245,7 +4734,7 @@ function wzCollect() {
     referente_tel: g('w-reft') || null, referente_ruolo: g('w-refr') || null,
     referente_tec: g('w-ref2') || null, referente_tec_email: g('w-ref2e') || null,
     referente_tec_tel: g('w-ref2t') || null, referente_tec_ruolo: g('w-ref2r') || null,
-    comune: g('w-com') || null, provincia: g('w-prov') || null, cig: g('w-cig') || null,
+    comune: g('w-com') || null, provincia: g('w-prov') || null,
     indirizzo: g('w-ind') || null, dati_catastali: g('w-cat') || null,
     status: g('w-st') || 'attivo', owner_id: g('w-own') || null,
     amount: g('w-imp') || null, start_date: g('w-di') || null, end_date: g('w-df') || null,
@@ -4257,6 +4746,23 @@ function wzCollect() {
   });
   if (el('w-clid'))  WZ.d.cliente_id = el('w-clid').value || null;
   if (el('w-sisma')) WZ.d.sisma = el('w-sisma').checked;
+
+  /* Committente pubblico: i campi esistono solo quando la casella e' spuntata */
+  if (el('w-pa')) {
+    WZ.d.ente_pubblico = el('w-pa').checked;
+    if (WZ.d.ente_pubblico) {
+      WZ.d.codice_ufficio    = (g('w-uff') || '').toUpperCase() || null;
+      WZ.d.cig               = (g('w-cig') || '').toUpperCase() || null;
+      WZ.d.cup               = (g('w-cup') || '').toUpperCase() || null;
+      WZ.d.rif_incarico      = g('w-rif') || null;
+      WZ.d.rif_incarico_tipo = g('w-riftipo') || 'ordine';
+      WZ.d.rif_incarico_data = g('w-rifdata') || null;
+      WZ.d.split_payment     = el('w-split') ? el('w-split').value === '1' : true;
+      WZ.d.oggetto_servizio  = el('w-ogg') ? el('w-ogg').value.trim() || null : null;
+    } else {
+      WZ.d.split_payment = false;
+    }
+  }
 }
 
 async function wzSave() {
@@ -4272,6 +4778,7 @@ async function wzSave() {
     if (WZ.edit) {
       const { error } = await SB.from('projects').update(pay).eq('id', WZ.edit);
       if (error) return sbErr(error, 'salva commessa');
+      if (pay.ente_pubblico) await registraEnte(pay);
       toast('Commessa aggiornata', 'success');
       closeM('m-proj');
       await loadAll(true); render();
@@ -4282,6 +4789,9 @@ async function wzSave() {
     if (!pay.cliente_id && pay.client) pay.cliente_id = await creaClienteDaCommessa(pay);
     const { data, error } = await SB.from('projects').insert(pay).select().single();
     if (error) return sbErr(error, 'crea commessa');
+    /* L'ufficio destinatario entra nel registro: alla prossima commessa per lo
+       stesso ente bastera' digitare il codice univoco. */
+    if (pay.ente_pubblico) await registraEnte(pay);
 
     /* cartella della commessa su Storage (non bloccante) */
     SB.storage.from('commesse').upload(data.id + '/.keep', new Blob([''], {type:'text/plain'}), {upsert:true})
@@ -4978,6 +5488,21 @@ document.addEventListener('DOMContentLoaded', () => {
        perdere quello che si sta scrivendo */
     if (e.target.id === 'w-sisma' && el('w-sisma-h'))
       el('w-sisma-h').innerHTML = ibanHint(e.target.checked);
+
+    /* Committente pubblico: mostra o nasconde il blocco senza ridisegnare */
+    if (e.target.id === 'w-pa' && el('w-pa-box')) {
+      if (e.target.checked && !el('w-uff')) el('w-pa-box').innerHTML = paBoxHtml(WZ.d);
+      el('w-pa-box').style.display = e.target.checked ? '' : 'none';
+    }
+  });
+
+  /* Il codice ufficio ricompila il committente appena e' completo */
+  el('mp-body').addEventListener('input', e => {
+    if (e.target.id !== 'w-uff') return;
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    if (el('w-uff-h')) el('w-uff-h').innerHTML = enteHint(e.target.value);
+    if (e.target.value.length === 6 && applicaEnte(e.target.value))
+      toast('Dati del committente ricompilati dal registro uffici');
   });
   el('mp-body').addEventListener('click', e => {
     const t = e.target.closest('[data-tpl]');
@@ -5022,7 +5547,20 @@ document.addEventListener('DOMContentLoaded', () => {
   el('fa-save').onclick = saveFase;
   el('fa-save2').onclick = saveFatt;
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
-  el('fa-xml').onclick   = () => scaricaXml(el('fa-id2').value);
+  el('fa-xml').onclick   = () => { const id = el('fa-id2').value; closeM('m-fatt'); openRevisione(id); };
+
+  /* Revisione della fattura */
+  el('rev-go').onclick    = generaDaRevisione;
+  el('rev-ant').onclick   = anteprimaXml;
+  el('rev-reset').onclick = () => {
+    const f = byId(S.fatture, REV && REV.fattId); if (!f) return;
+    REV = datiFattura(f);
+    if (!REV.numero) REV.numero = prossimoNumero();
+    disegnaRevisione(); toast('Ripristinati i dati della commessa');
+  };
+  const revIn = e => { const k = e.target.dataset.rev; if (k) revCambia(k, e.target.value); };
+  el('rev-body').addEventListener('input',  revIn);
+  el('rev-body').addEventListener('change', revIn);
   el('fa-perc').oninput  = aggiornaCalcolo;
   el('fa-imp').oninput   = aggiornaCalcolo;
   el('ste-btn').onclick = saveOre;

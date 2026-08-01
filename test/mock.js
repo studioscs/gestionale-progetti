@@ -7,7 +7,7 @@
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
-    profili_costi:[]
+    profili_costi:[], enti_pa:[]
   };
   window.__DB=DB;
   let seq=0; const uid=()=>'id'+(++seq);

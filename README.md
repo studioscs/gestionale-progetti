@@ -28,6 +28,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 7. [`sql/008_anagrafica_clienti.sql`](sql/008_anagrafica_clienti.sql) — anagrafica clienti
 8. [`sql/009_costi_personale.sql`](sql/009_costi_personale.sql) — costo orario e costo del lavoro per commessa
 9. [`sql/010_lavori_sisma.sql`](sql/010_lavori_sisma.sql) — contrassegno lavori sisma e IBAN dedicato
+10. [`sql/011_fatturazione_pa.sql`](sql/011_fatturazione_pa.sql) — fatturazione alla PA, registro uffici, CIG/CUP separati
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -277,6 +278,15 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   una volta all'apertura del lavoro, così nessuno deve ricordarsene al momento di
   emettere. L'IBAN in uso è scritto nella scheda *Anagrafica* e in quella
   *Fatturazione*.
+- **Committente pubblico** — spuntando *Il committente è un ente pubblico* nel
+  modulo commessa si compilano Codice Univoco Ufficio, CIG, CUP, atto di
+  affidamento e oggetto del servizio. Digitando un codice ufficio già usato, i
+  dati del committente si ricompilano da soli. La fattura esce in formato FPA12
+  con CIG e CUP al posto giusto e la scissione dei pagamenti.
+- **Ogni fattura si rivede prima di generarla**: il pulsante 📥 apre una finestra
+  dove ogni campo dell'XML è modificabile e i totali si ricalcolano mentre scrivi.
+  Finché manca un dato obbligatorio il pulsante *Genera* resta spento e la
+  finestra dice cosa manca.
 - **Kanban** con drag & drop tra le colonne.
 - **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
 - **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
@@ -372,9 +382,9 @@ un solo handler delegato al posto di centinaia di listener per riga.
 cd test
 npm install          # solo playwright
 node logic.js        # 90 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 120 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 135 test end-to-end in Chromium su un mock di Supabase
 node password.js     # 11 test sul recupero password
-node fattura.js      # XML FatturaPA validato contro l'XSD ufficiale, IBAN e due conti
+node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
 ```
 
 `e2e.js` copre: login, wizard a 3 passi, generazione della struttura, spunta e
@@ -420,9 +430,82 @@ funzione *"Importa e salva fatture"* di
 HTML, che è pubblico per costruzione.
 
 L'XML prodotto è validato contro lo **schema ufficiale dell'Agenzia delle
-Entrate** dalla suite `test/fattura.js` in quattro varianti: con contributo cassa,
-con ritenuta d'acconto, con PEC al posto del codice destinatario, e con l'IBAN
-nei dati di pagamento.
+Entrate** dalla suite `test/fattura.js` in sei varianti: con contributo cassa,
+con ritenuta d'acconto, con PEC al posto del codice destinatario, con l'IBAN nei
+dati di pagamento, verso la Pubblica Amministrazione con CIG/CUP e split payment,
+e con le modifiche fatte a mano in revisione.
+
+### Prima di generare: la finestra di revisione
+
+Il pulsante 📥 non produce più il file di slancio: apre una **finestra di
+revisione** con tutto quello che finirà nell'XML in campi modificabili — numero,
+data, imponibile, oggetto, dati del committente, CIG, CUP, atto di affidamento,
+aliquote, regime IVA, IBAN, giorni di pagamento. Il riepilogo degli importi si
+ricalcola mentre si scrive, e in fondo c'è l'anteprima dell'XML.
+
+Serve perché un dato sbagliato scoperto dopo l'invio allo SdI non si corregge
+più: si emette una nota di credito. Meglio trenta secondi di controllo prima.
+
+Le modifiche valgono **per quel file** e non riscrivono la commessa: il caso
+tipico è l'oggetto adattato a questo stato di avanzamento, che non deve cambiare
+l'incarico. Fanno eccezione numero e data della fattura, che tornano sullo
+scaglione perché è quello che si rilegge poi negli elenchi. Un pulsante
+*Ripristina i dati della commessa* annulla tutte le correzioni.
+
+Finché manca qualcosa di obbligatorio il pulsante *Genera XML* resta disattivato
+e la finestra elenca esattamente cosa manca.
+
+### Fatturare a una stazione appaltante
+
+Nel modulo di creazione commessa la casella **"Il committente è un ente
+pubblico"** apre il blocco dei dati che servono solo alla PA. Cambia parecchio
+rispetto a una fattura fra privati:
+
+| | Privato | Ente pubblico |
+|---|---|---|
+| Formato di trasmissione | FPR12 | **FPA12** |
+| Destinatario | codice SDI, 7 caratteri | **Codice Univoco Ufficio, 6 caratteri** |
+| CIG e CUP | non previsti | **CIG obbligatorio**, CUP se il progetto ne ha uno |
+| IVA | incassata da noi | **scissione dei pagamenti**: la versa l'ente |
+
+**Il Codice Univoco Ufficio è la chiave.** Digitandolo, se quell'ufficio è già
+nel registro, denominazione, codice fiscale, indirizzo, CAP, comune, provincia e
+PEC del committente si ricompilano da soli. Il registro **si popola da sé**: ogni
+commessa pubblica salvata ci lascia dentro il suo ufficio, quindi dalla seconda
+commessa con lo stesso ente non si digita più nulla. Se il codice non è in
+archivio lo si compila una volta e resta.
+
+Il codice identifica l'*ufficio*, non l'ente: lo stesso comune ha spesso più
+uffici con codici diversi, ed è per questo che va chiesto insieme all'incarico.
+Se non lo si conosce si cerca su [indicepa.gov.it](https://indicepa.gov.it).
+
+**CIG e CUP sono ora due campi separati** — prima erano un campo solo. Sono cose
+diverse: il CIG identifica la procedura di affidamento (10 caratteri), il CUP il
+progetto di investimento pubblico (15 caratteri), e in fattura vanno in due
+elementi distinti. La migrazione 011 separa da sola i valori già inseriti
+insieme, ma **solo quando è certa**: interviene se la stringa contiene esattamente
+due gruppi, uno di 10 e uno di 15 caratteri. In ogni altro caso lascia tutto
+com'è, da sistemare a mano — meglio un dato da correggere che un dato spostato
+male.
+
+Serve anche il **riferimento all'atto di affidamento** (determina, contratto o
+ordine, max 20 caratteri): non è un capriccio, è lo schema — CIG e CUP viaggiano
+dentro il blocco del documento correlato, che senza il riferimento al documento
+non è valido. Senza, i codici non si possono proprio trasmettere.
+
+**L'oggetto del servizio** si incolla dal disciplinare d'incarico: è la dicitura
+che l'ente si aspetta di rileggere identica in fattura per liquidarla senza
+chiedere chiarimenti. Finisce nella causale del documento e nella descrizione
+della riga. Se supera i 200 caratteri ammessi da ciascuna causale viene spezzato
+su più elementi invece di essere troncato.
+
+> **Il copia-incolla da Word è gestito.** I campi di testo della FatturaPA
+> accettano solo Latin-1: lettere accentate sì, ma virgolette curve (`’` `“` `”`),
+> trattini lunghi (`—`) e puntini di sospensione (`…`) no — esattamente i
+> caratteri che Word mette al posto di quelli battuti. Vengono convertiti da soli
+> nell'equivalente battibile, e gli a capo appiattiti. Senza questo passaggio una
+> dicitura incollata dall'incarico farebbe scartare la fattura per un motivo
+> incomprensibile a chi la emette.
 
 ### Due conti correnti: ordinario e sisma
 
