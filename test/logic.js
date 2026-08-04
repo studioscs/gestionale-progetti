@@ -436,5 +436,63 @@ t('le ore registrate vincono sulla stima',veroA.ore===3&&veroA.lordo===150,[vero
 t('e non vengono marcate come stimate',veroA.perPersona.u1.stimato===false,null);
 ctx.S.time=[];
 
+console.log('\n— CHI LAVORA E CHI VERIFICA: 70/30 —');
+ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,
+              valido_dal:'2026-01-01',valido_al:null},
+             {id:'c2',profile_id:'u2',costo_orario_lordo:100,costo_orario_netto:60,
+              valido_dal:'2026-01-01',valido_al:null}];
+ctx.S.projects=[{id:'pC',name:'C',amount:30000}];
+
+/* Il caso della schermata: assegnata a u1, verificata da u2, una sola giornata */
+ctx.S.tasks=[{id:'x1',project_id:'pC',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-01T10:00:00Z',completed_by:'u2',
+  assignee_id:'u1',responsabile_id:'u2'}];
+const iC=ctx.impegnoStimato('pC');
+t('chi svolge prende il 70%',iC.u1&&iC.u1.giorni===0.7,iC.u1&&iC.u1.giorni);
+t('chi verifica prende il 30%',iC.u2&&iC.u2.giorni===0.3,iC.u2&&iC.u2.giorni);
+t('le due quote fanno una giornata sola',r2b(iC.u1.giorni+iC.u2.giorni)===1,
+  iC.u1.giorni+iC.u2.giorni);
+t('le ore seguono le quote',iC.u1.ore===5.6&&iC.u2.ore===2.4,[iC.u1.ore,iC.u2.ore]);
+t('il costo usa la tariffa di ciascuno',iC.u1.costo===280&&iC.u2.costo===240,
+  [iC.u1.costo,iC.u2.costo]);
+t('chi ha solo verificato compare nel dettaglio della fase',
+  !!(iC.u2.perFase&&iC.u2.perFase.f1),iC.u2&&Object.keys(iC.u2.perFase||{}));
+
+/* Chi ha spuntato non conta: conta a chi era assegnata */
+ctx.S.tasks=[{id:'x2',project_id:'pC',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-01T10:00:00Z',completed_by:'u2',assignee_id:'u1'}];
+const iD=ctx.impegnoStimato('pC');
+t('senza verifica il lavoro è tutto dell assegnatario',iD.u1&&iD.u1.giorni===1,
+  iD.u1&&iD.u1.giorni);
+t('e chi l ha solo spuntata non prende nulla',!iD.u2,Object.keys(iD));
+
+/* Stessa persona nelle due caselle: non si divide con se stessa */
+ctx.S.tasks=[{id:'x3',project_id:'pC',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u1',responsabile_id:'u1'}];
+t('assegnatario e verificatore coincidenti valgono una giornata intera',
+  ctx.impegnoStimato('pC').u1.giorni===1,ctx.impegnoStimato('pC').u1.giorni);
+
+/* Verificare dieci attività non è tre giornate di lavoro */
+ctx.S.tasks=[1,2,3,4,5].map(n=>({id:'y'+n,project_id:'pC',commessa_fase_id:'f'+n,
+  status:'completato',completed_at:'2026-06-01T10:00:00Z',
+  assignee_id:'u1',responsabile_id:'u2'}));
+const iE=ctx.impegnoStimato('pC');
+t('cinque verifiche in un giorno restano il 30% di una giornata',iE.u2.giorni===0.3,
+  iE.u2.giorni);
+t('e chi le ha svolte resta al 70%',iE.u1.giorni===0.7,iE.u1.giorni);
+t('la quota si spartisce fra le fasi toccate',
+  r2b(Object.keys(iE.u1.perFase).reduce((a,k)=>a+iE.u1.perFase[k].giorni,0))===0.7,
+  iE.u1.perFase);
+
+/* Chi verifica gli altri ma lavora anche in proprio: la sua giornata resta una */
+ctx.S.tasks=[{id:'z1',project_id:'pC',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u1',responsabile_id:'u2'},
+  {id:'z2',project_id:'pC',commessa_fase_id:'f2',status:'completato',
+  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u2'}];
+const iF=ctx.impegnoStimato('pC');
+t('chi verifica e lavora nello stesso giorno non supera la giornata',iF.u2.giorni===1,
+  iF.u2.giorni);
+ctx.S.tasks=[]; ctx.S.projects=[]; ctx.S.costi=[];
+
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

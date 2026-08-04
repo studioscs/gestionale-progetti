@@ -765,6 +765,29 @@ verrebbe contata per intero su ogni commessa toccata, e sommando le commesse
 verrebbero fuori settimane da quaranta giorni: numeri che non reggono il
 confronto con la realtà e che renderebbero inutile l'intera pagina.
 
+### Chi lavora e chi verifica: 70/30
+
+Un'attività ha due caselle: **Assegnata a** — chi la fa — e **Verifica /
+approva**. Quando sono due persone diverse il lavoro non è di una sola:
+
+- **70% a chi la svolge** (l'assegnatario);
+- **30% a chi la verifica**.
+
+Chi verifica ci mette del tempo, ma non la giornata intera di chi ha prodotto
+l'elaborato: attribuire tutto all'uno o all'altro falserebbe entrambi i costi.
+Le due quote sommate fanno **una giornata sola**: il costo della commessa non
+cresce, cambia solo a chi viene imputato. Se la casella della verifica è vuota,
+o è la stessa persona, l'attività vale per intero a chi l'ha portata avanti.
+
+Verificare dieci attività in un giorno resta il 30% di una giornata, non tre:
+di ogni giornata conta il **ruolo più impegnativo** avuto, non la somma delle
+spunte. E chi in un giorno lavora in proprio *e* verifica gli altri non supera
+mai la giornata intera.
+
+Le percentuali sono in `STUDIO.quotaLavoro` e `STUDIO.quotaVerifica`. La modale
+dell'attività dice, sotto le due caselle, come si dividerà il costo — così chi
+assegna vede subito l'effetto sulla Redditività.
+
 La stima resta una stima, e l'interfaccia lo dice sempre: ogni riga indica se le
 ore sono **registrate** o **stimate**, e la pagina spiega in cima da dove
 vengono i numeri.

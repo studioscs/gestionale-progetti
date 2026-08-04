@@ -663,6 +663,9 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Assegnata a</label><select class="fc" id="tt-a"></select></div>
         <div class="fg"><label class="fl">Verifica / approva</label><select class="fc" id="tt-resp"></select></div>
       </div>
+      <!-- Il costo segue le due caselle qui sopra: chi legge la Redditivita' deve
+           sapere perche' l'attivita' e' finita in parte sull'uno e in parte sull'altro. -->
+      <div id="tt-quote" class="hint" style="margin:-4px 0 12px"></div>
       <div class="fg3">
         <div class="fg"><label class="fl">Stato</label>
           <select class="fc" id="tt-s">
@@ -908,12 +911,17 @@ const STUDIO = {
   /* Ore di una giornata piena. Serve a stimare l'impegno dalle attivita'
      completate quando nessuno ha registrato le ore. */
   oreGiorno     : 8,
+  /* Come si divide un'attivita' fra chi la svolge e chi la verifica, quando
+     sono due persone diverse. Le due quote devono fare 1: sono le due parti
+     della stessa giornata, non un supplemento. */
+  quotaLavoro   : 0.7,
+  quotaVerifica : 0.3,
 };
 
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.1';
+const VERSIONE = '2026.08.05.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2601,6 +2609,9 @@ function goProject(pid, tab) {
 }
 
 function render() {
+  /* Le attivita' possono essere cambiate da quando si e' disegnato l'ultima
+     volta: la stima dell'impegno riparte da zero. */
+  scordaGiorni();
   el('ptitle').textContent = TITLES[S.page] || S.page;
   el('crumb').innerHTML = '';
   el('top-act').innerHTML = '';
@@ -5098,6 +5109,19 @@ const costoAttuale = uid => S.costi.find(c => c.profile_id === uid && !c.valido_
    verrebbero fuori settimane da quaranta giorni: numeri che non reggono il
    confronto con la realta' e che renderebbero inutile l'intera pagina.
 
+   E SE UNO LAVORA E UN ALTRO VERIFICA?
+   Un'attivita' ha due caselle: a chi e' assegnata - chi la fa - e chi la
+   verifica o approva. Quando sono due persone diverse il lavoro non e' di uno
+   solo: l'attivita' vale il 70% a chi l'ha svolta e il 30% a chi l'ha
+   verificata. Chi verifica ci mette del tempo, ma non la giornata intera di chi
+   ha prodotto l'elaborato, e attribuire tutto all'uno o all'altro falserebbe
+   entrambi i costi. Le due quote sommate fanno una giornata: il costo della
+   commessa non cresce, cambia solo a chi viene imputato.
+   Se la casella della verifica e' vuota - o se e' la stessa persona - l'attivita'
+   vale per intero a chi l'ha portata avanti.
+
+   Le percentuali stanno in STUDIO.quotaLavoro e STUDIO.quotaVerifica.
+
    La stima resta una stima, e l'interfaccia lo dice sempre. Dove ci sono ore
    registrate, quelle vincono.
    =========================================================================== */
@@ -5109,27 +5133,52 @@ function feriale(iso) {
   return g !== 0 && g !== 6;
 }
 
+/* Chi ha contribuito a un'attività, e per quanta parte.
+   Il lavoro è di chi ha in carico l'attività; se la verifica è affidata a un
+   altro, l'attività si divide fra i due. */
+function contributiTask(t) {
+  const ql = Number(STUDIO.quotaLavoro   != null ? STUDIO.quotaLavoro   : 0.7);
+  const qv = Number(STUDIO.quotaVerifica != null ? STUDIO.quotaVerifica : 0.3);
+  /* Chi lavora è l'assegnatario. Se l'attività non è assegnata a nessuno resta
+     chi l'ha spuntata: è l'unica traccia di chi ci ha messo le mani. */
+  const lavora   = t.assignee_id || t.completed_by || null;
+  const verifica = t.responsabile_id || null;
+  if (lavora && verifica && verifica !== lavora)
+    return [{ chi: lavora, peso: ql }, { chi: verifica, peso: qv }];
+  const solo = lavora || verifica;
+  return solo ? [{ chi: solo, peso: 1 }] : [];
+}
+
 /* Mappa persona → giorno → commesse toccate, su TUTTE le commesse: serve a
-   dividere la giornata, e per farlo bisogna guardare fuori da questa commessa. */
-let _GIORNI = null, _GIORNI_N = -1;
+   dividere la giornata, e per farlo bisogna guardare fuori da questa commessa.
+   Il peso di una commessa (o di una fase) in un giorno è il contributo più alto
+   dato quel giorno, non la somma: chi verifica dieci attività non ha per questo
+   lavorato tre giornate. */
+/* La mappa si calcola una volta per ridisegno e vale per tutte le commesse: la
+   Redditivita' la chiede una volta a commessa, e rifarla ogni volta sarebbe
+   sprecato. Si butta all'inizio di render() e quando l'elenco delle attivita'
+   viene sostituito. Non basta guardare quante sono: spuntando un'attivita' il
+   numero non cambia, e una mappa tenuta per numero non si accorgerebbe di
+   nulla - la Redditivita' resterebbe ferma finche' non si ricarica la pagina. */
+let _GIORNI = null, _GIORNI_SRC = null;
+function scordaGiorni() { _GIORNI = null; _GIORNI_SRC = null; }
 function giorniPersona() {
-  /* Ricalcolata solo quando cambia il numero di attività: attraversarle tutte a
-     ogni ridisegno della pagina sarebbe sprecato. */
-  if (_GIORNI && _GIORNI_N === S.tasks.length) return _GIORNI;
+  if (_GIORNI && _GIORNI_SRC === S.tasks) return _GIORNI;
   const m = {};
   S.tasks.forEach(t => {
     if (t.status !== 'completato' || !t.completed_at) return;
-    const chi = t.completed_by || t.assignee_id;
-    if (!chi) return;
     const g = String(t.completed_at).split('T')[0];
     if (!feriale(g)) return;
-    const perChi = m[chi] = m[chi] || {};
-    const perG = perChi[g] = perChi[g] || {};
-    const perP = perG[t.project_id] = perG[t.project_id] || { fasi: {} };
     const f = t.commessa_fase_id || '-';
-    perP.fasi[f] = (perP.fasi[f] || 0) + 1;
+    contributiTask(t).forEach(c => {
+      const perChi = m[c.chi] = m[c.chi] || {};
+      const perG = perChi[g] = perChi[g] || {};
+      const perP = perG[t.project_id] = perG[t.project_id] || { fasi: {}, peso: 0 };
+      perP.peso = Math.max(perP.peso, c.peso);
+      perP.fasi[f] = Math.max(perP.fasi[f] || 0, c.peso);
+    });
   });
-  _GIORNI = m; _GIORNI_N = S.tasks.length;
+  _GIORNI = m; _GIORNI_SRC = S.tasks;
   return m;
 }
 
@@ -5141,11 +5190,15 @@ function impegnoStimato(pid) {
 
   Object.keys(mappa).forEach(chi => {
     Object.keys(mappa[chi]).forEach(giorno => {
-      const commesseDelGiorno = Object.keys(mappa[chi][giorno]);
+      const perG = mappa[chi][giorno];
+      const commesseDelGiorno = Object.keys(perG);
       if (commesseDelGiorno.indexOf(pid) < 0) return;
 
-      /* La giornata si spartisce fra le commesse toccate in quel giorno */
-      const quotaGiorno = 1 / commesseDelGiorno.length;
+      /* La giornata si spartisce fra le commesse toccate in quel giorno, e su
+         ciascuna vale quanto il ruolo avuto: intera a chi l'ha lavorata da
+         solo, 70/30 quando uno fa e un altro verifica. */
+      const quotaGiorno = perG[pid].peso / commesseDelGiorno.length;
+      if (quotaGiorno <= 0) return;
       const ore = r2(oreG * quotaGiorno);
       const c = costoDi(chi, giorno);
       const costo = r2(ore * Number((c && c.costo_orario_lordo) || 0));
@@ -5158,14 +5211,18 @@ function impegnoStimato(pid) {
       p.netto = r2(p.netto + netto);
       if (!c) p.senzaCosto = true;
 
-      /* Dentro la commessa, la giornata si divide fra le fasi toccate */
+      /* Dentro la commessa, la quota si divide fra le fasi toccate, in
+         proporzione al peso di ciascuna: a parità di ruolo torna la divisione
+         in parti uguali di prima. */
       const fasi = mappa[chi][giorno][pid].fasi;
       const chiavi = Object.keys(fasi);
+      const somma = chiavi.reduce((a, f) => a + fasi[f], 0) || 1;
       chiavi.forEach(f => {
+        const q = fasi[f] / somma;
         p.perFase[f] = p.perFase[f] || { giorni:0, ore:0, costo:0 };
-        p.perFase[f].giorni = r2(p.perFase[f].giorni + quotaGiorno / chiavi.length);
-        p.perFase[f].ore    = r2(p.perFase[f].ore + ore / chiavi.length);
-        p.perFase[f].costo  = r2(p.perFase[f].costo + costo / chiavi.length);
+        p.perFase[f].giorni = r2(p.perFase[f].giorni + quotaGiorno * q);
+        p.perFase[f].ore    = r2(p.perFase[f].ore + ore * q);
+        p.perFase[f].costo  = r2(p.perFase[f].costo + costo * q);
       });
     });
   });
@@ -5319,7 +5376,10 @@ function rRedditivita() {
           + 'valgono quelle. Per gli altri l’impegno è <b>stimato dalle attività completate</b>: ogni '
           + 'giorno feriale in cui una persona ha spuntato almeno un’attività vale una giornata da '
           + STUDIO.oreGiorno + ' ore, e se quel giorno ha toccato più commesse la giornata si divide fra '
-          + 'loro. Sabato e domenica non contano. È una stima: le ore registrate restano più precise.</div>'
+          + 'loro. Sabato e domenica non contano. Quando un’attività è assegnata a una persona e la '
+          + 'verifica a un’altra, vale il <b>' + Math.round(STUDIO.quotaLavoro * 100) + '% a chi la svolge '
+          + 'e il ' + Math.round(STUDIO.quotaVerifica * 100) + '% a chi la verifica</b>; senza verifica '
+          + 'vale per intero a chi la porta avanti. È una stima: le ore registrate restano più precise.</div>'
         : '')
     + (senza ? '<div class="wbox mb16">Alcune persone hanno registrato ore in periodi per cui non è '
       + 'impostato un costo orario: quelle ore contano zero e i numeri qui sotto sono in eccesso. '
@@ -6067,6 +6127,8 @@ function openTask(id, presetPid, presetFase) {
   fillFasiSel(pid, t ? t.commessa_fase_id : (presetFase || ''));
   fillSel('tt-a',    userItems(), t ? t.assignee_id : S.me.id, '- Nessuno -');
   fillSel('tt-resp', userItems(), t ? t.responsabile_id : '', '- Nessuna verifica -');
+  el('tt-a').onchange = el('tt-resp').onchange = quoteAttivita;
+  quoteAttivita();
 
   const T = today();
   el('tt-quick').innerHTML = [['Oggi',0],['Domani',1],['+1 sett',7],['+2 sett',14],['Fine mese', null]]
@@ -6088,6 +6150,23 @@ function openTask(id, presetPid, presetFase) {
   if (id) caricaChatTask(id);
 
   openM('m-task');
+}
+
+/* Come si dividera' il costo dell'attivita' fra le due caselle qui sopra.
+   Il criterio e' quello di impegnoStimato(): scritto qui perche' chi assegna
+   veda subito l'effetto sulla Redditivita'. */
+function quoteAttivita() {
+  const box = el('tt-quote'); if (!box) return;
+  const a = el('tt-a').value, v = el('tt-resp').value;
+  const ql = Math.round(Number(STUDIO.quotaLavoro) * 100);
+  const qv = Math.round(Number(STUDIO.quotaVerifica) * 100);
+  if (a && v && a !== v)
+    box.innerHTML = 'Costo stimato: <b>' + ql + '% a ' + esc(un(a)) + '</b> (svolge) e <b>'
+      + qv + '% a ' + esc(un(v)) + '</b> (verifica).';
+  else if (a || v)
+    box.innerHTML = 'Costo stimato: <b>tutto a ' + esc(un(a || v)) + '</b>.';
+  else
+    box.textContent = 'Senza assegnatario il costo di questa attività non viene attribuito a nessuno.';
 }
 
 /* ===========================================================================

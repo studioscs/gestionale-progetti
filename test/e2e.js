@@ -1135,6 +1135,68 @@ function launchOpts(){
     must(r.stimato===false,'ancora marcato come stimato');
   });
 
+  // --- CHI LAVORA E CHI VERIFICA ---
+  await t('il lavoro va al 70% a chi lo svolge e al 30% a chi lo verifica',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Lavoro e verifica',status:'attivo',
+        amount:10000,start_date:'2026-06-08'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-06-08');
+      await loadAll(true);
+      const a=S.tasks.find(x=>x.project_id===data.id);
+      /* 2026-06-08 è un lunedì: assegnata ad Anna, verificata da me */
+      await SB.from('tasks').update({status:'completato',completed_at:'2026-06-08T10:00:00Z',
+        completed_by:'u-me',assignee_id:'u-due',responsabile_id:'u-me'}).eq('id',a.id);
+      await loadAll(true);
+      const c=costoCommessa(data.id);
+      return {pid:data.id,
+              lavora:c.perPersona['u-due']&&c.perPersona['u-due'].giorni,
+              verifica:c.perPersona['u-me']&&c.perPersona['u-me'].giorni};
+    });
+    must(g.lavora===0.7,'chi svolge non prende il 70%: '+g.lavora);
+    must(g.verifica===0.3,'chi verifica non prende il 30%: '+g.verifica);
+    must(Math.round((g.lavora+g.verifica)*100)===100,
+         'le due quote non fanno una giornata: '+(g.lavora+g.verifica));
+    global.__PID2=g.pid;
+  });
+  await t('la Redditività attribuisce il costo a tutti e due',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('redditivita'); });
+    await p.waitForTimeout(700);
+    const h=await p.textContent('#page');
+    must(/Lavoro e verifica/.test(h),'commessa assente dalla Redditività');
+    const chi=await p.evaluate(pid=>{
+      const r=redditivita(pid);
+      return r.soci.concat(r.interni).map(x=>x.uid);
+    },global.__PID2);
+    must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
+    must(chi.includes('u-me'),'chi ha verificato non compare');
+  });
+  await t('la modale dell attività dice come si dividerà il costo',async()=>{
+    await p.evaluate(pid=>{ const a=S.tasks.find(x=>x.project_id===pid); openTask(a.id); },
+                     global.__PID2);
+    await p.waitForSelector('#m-task.show'); await p.waitForTimeout(400);
+    const q=await p.textContent('#tt-quote');
+    must(/70%/.test(q)&&/30%/.test(q),'non dichiara le quote: '+q);
+    must(/Anna/.test(q)&&/Francesco/.test(q),'non nomina le due persone: '+q);
+    /* togliendo la verifica il costo torna tutto a chi lavora */
+    await p.selectOption('#tt-resp','');
+    await p.waitForTimeout(200);
+    const q2=await p.textContent('#tt-quote');
+    must(/tutto a/.test(q2),'senza verifica non dichiara l attribuzione intera: '+q2);
+    await p.evaluate(()=>closeM('m-task'));
+  });
+  await t('spuntando un attività la Redditività si aggiorna subito',async()=>{
+    /* Il numero delle attività non cambia quando se ne spunta una: se la stima
+       fosse tenuta in memoria per numero, resterebbe ferma. */
+    const g=await p.evaluate(async pid=>{
+      const prima=costoCommessa(pid).lordo;
+      const a=S.tasks.find(x=>x.project_id===pid&&x.status!=='completato');
+      await patchTask(a.id,{status:'completato',completed_at:'2026-06-09T10:00:00Z',
+        completed_by:'u-me',assignee_id:'u-me'},true);
+      return {prima,dopo:costoCommessa(pid).lordo};
+    },global.__PID2);
+    must(g.dopo>g.prima,'il costo non è cambiato dopo la spunta: '+g.prima+' → '+g.dopo);
+  });
+
   // --- CONVERSAZIONE DENTRO L'ATTIVITÀ ---
   await t('la sezione File Commesse non esiste più',async()=>{
     must(await p.locator('.sn[data-page="files"]').count()===0,'voce di menu ancora presente');
