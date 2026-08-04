@@ -934,7 +934,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.4';
+const VERSIONE = '2026.08.05.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2251,15 +2251,36 @@ async function generaStruttura(projectId, tplKey, conds, dataInizio) {
   const mapFase = {};
   (fasi || []).forEach(f => mapFase[f.fase_key] = f.id);
 
+  /* ---------------------------------------------------------------------------
+     TUTTE LE RIGHE CON LE STESSE COLONNE.
+     PostgREST manda un solo INSERT con l'UNIONE delle chiavi di tutte le righe:
+     dove una chiave manca ci mette NULL, non il valore di default della colonna.
+     Bastava quindi una riga costruita a mano - la procura, che non portava
+     is_milestone ne' opzionale - per violare il NOT NULL e far fallire
+     l'inserimento di TUTTE le attivita' insieme: la commessa nasceva con le fasi
+     e la checklist vuota. Di qui una forma sola per ogni riga.
+     --------------------------------------------------------------------------- */
+  const rigaAttivita = r => ({
+    project_id: projectId, commessa_fase_id: r.commessa_fase_id,
+    title: r.title, status: 'da_fare',
+    priority: r.priority || (r.is_milestone ? 'alta' : 'media'),
+    estimated_hours: r.estimated_hours != null ? r.estimated_hours : null,
+    rif_normativo: r.rif_normativo || null,
+    contenuto: r.contenuto || null,
+    ente: r.ente || null,
+    categoria: r.categoria || null,
+    is_milestone: !!r.is_milestone,
+    opzionale: !!r.opzionale,
+    sort_order: r.sort_order || 0,
+    due_date: r.due_date || null,
+    template_key: tplKey, created_by: S.me.id
+  });
+
   const attRows = [];
   plan.fasi.forEach(f => {
     const fid = mapFase[f.fase_key];
     if (!fid) return;
-    f.att.forEach(a => attRows.push(Object.assign({
-      project_id: projectId, commessa_fase_id: fid, status: 'da_fare',
-      priority: a.is_milestone ? 'alta' : 'media',
-      template_key: tplKey, created_by: S.me.id
-    }, a)));
+    f.att.forEach(a => attRows.push(rigaAttivita(Object.assign({ commessa_fase_id: fid }, a))));
   });
 
   /* Una procura speciale per OGNI pratica telematica, tutte nella fase delle
@@ -2270,14 +2291,13 @@ async function generaStruttura(projectId, tplKey, conds, dataInizio) {
   if (faseFirme) {
     const pianoFirme = plan.fasi.find(f => f.fase_key === 'firme');
     const scad = pianoFirme ? pianoFirme.data_fine_prevista : null;
-    plan.pratiche.filter(x => x.proc).forEach((x, i) => attRows.push({
-      project_id: projectId, commessa_fase_id: faseFirme, status: 'da_fare',
+    plan.pratiche.filter(x => x.proc).forEach((x, i) => attRows.push(rigaAttivita({
+      commessa_fase_id: faseFirme,
       title: 'Procura speciale — ' + x.ente + ': ' + x.tipo,
       rif_normativo: 'art. 1392 c.c.', ente: x.ente,
       categoria: 'firma_cliente', priority: 'alta',
-      estimated_hours: 0.5, sort_order: 100 + i, due_date: scad,
-      template_key: tplKey, created_by: S.me.id
-    }));
+      estimated_hours: 0.5, sort_order: 100 + i, due_date: scad
+    })));
   }
 
   let nAtt = 0;
@@ -5212,6 +5232,37 @@ function costoDi(uid, data) {
 }
 const costoAttuale = uid => S.costi.find(c => c.profile_id === uid && !c.valido_al) || null;
 
+/* Da quando esiste un costo per questa persona, comunque sia andata dopo */
+const costoDaQuando = uid => S.costi.filter(c => c.profile_id === uid)
+  .map(c => c.valido_dal).filter(Boolean).sort()[0] || null;
+
+/* Il primo giorno di lavoro attribuito a una persona: ore registrate, fasi a cui
+   partecipa, attivita' chiuse fuori fase. Serve a capire se il costo orario e'
+   stato fatto decorrere abbastanza indietro da coprirlo. */
+function primoLavoroDi(uid) {
+  const date = S.time.filter(e => e.operator_id === uid).map(e => e.entry_date);
+  S.fasi.forEach(f => {
+    const per = periodoFase(f);
+    if (per && partecipantiFase(f)[uid]) date.push(per.inizio);
+  });
+  S.tasks.forEach(t => {
+    if (t.commessa_fase_id || t.status !== 'completato' || !t.completed_at) return;
+    if (contributiTask(t, null).some(c => c.chi === uid))
+      date.push(String(t.completed_at).split('T')[0]);
+  });
+  return date.filter(Boolean).sort()[0] || null;
+}
+
+/* Lavoro scoperto: c'e' del lavoro prima del giorno da cui decorre il costo.
+   Quelle ore valgono zero, ed e' la ragione per cui una commessa puo' risultare
+   piu' redditizia di quanto sia. */
+function costoScoperto(uid) {
+  const dal = costoDaQuando(uid);
+  if (!dal) return null;                       // nessun costo: e' un altro problema
+  const primo = primoLavoroDi(uid);
+  return primo && primo < dal ? { primo, dal } : null;
+}
+
 /* ===========================================================================
    QUANTO E' COSTATA UNA COMMESSA
 
@@ -5670,11 +5721,43 @@ function rRedditivita() {
           + 'divide fra quelle. Se un numero non ti convince, scrivi le <b>ore effettive</b> sulla fase: '
           + 'quelle vincono sul calcolo.</div>'
         : '')
-    + (senza ? '<div class="wbox mb16">Alcune persone hanno registrato ore in periodi per cui non è '
-      + 'impostato un costo orario: quelle ore contano zero e i numeri qui sotto sono in eccesso. '
-      + 'Imposta i costi da <b>Amministrazione → Utenti</b>.</div>' : '')
+    + (senza ? avvisoCostiScoperti(attive) : '')
 
     + attive.map(x => schedaRedditivita(x.p, x.r)).join('');
+}
+
+/* «Ma il costo orario gliel'ho messo.» Quasi sempre è vero, e il messaggio
+   generico non aiutava a capire. Il costo è storicizzato: vale da una data in
+   avanti, e la casella "In vigore dal" propone oggi. Chi imposta i costi adesso
+   li fa quindi decorrere da adesso, mentre il lavoro è di prima - e quelle ore
+   valgono zero. Qui si dice esattamente chi, da quando lavora e da quando è
+   coperto, così la correzione è una sola: spostare indietro la decorrenza. */
+function avvisoCostiScoperti(attive) {
+  const uidi = {};
+  attive.forEach(x => x.r.soci.concat(x.r.interni)
+    .forEach(y => { if (y.senzaCosto) uidi[y.uid] = 1; }));
+
+  const scoperti = [], senzaAffatto = [];
+  Object.keys(uidi).forEach(u => {
+    if (!costoDaQuando(u)) return senzaAffatto.push(u);
+    const s = costoScoperto(u);
+    if (s) scoperti.push({ uid:u, s });
+  });
+
+  let h = '';
+  if (scoperti.length)
+    h += '<div class="wbox mb16"><b>Il costo orario c’è, ma decorre troppo tardi.</b> '
+       + 'Il costo vale <b>da una data in avanti</b>: il lavoro precedente conta zero, quindi '
+       + 'le commesse qui sotto risultano più redditizie di quanto siano.<div style="margin-top:6px">'
+       + scoperti.map(x => '<div>· <b>' + esc(un(x.uid)) + '</b>: lavoro dal '
+           + fdate(x.s.primo) + ', costo impostato solo dal <b>' + fdate(x.s.dal) + '</b></div>').join('')
+       + '</div><div style="margin-top:6px">Apri <b>Amministrazione → Utenti → Modifica</b> e '
+       + 'porta indietro <b>In vigore dal</b>: la scheda propone già la data giusta.</div></div>';
+  if (senzaAffatto.length)
+    h += '<div class="wbox mb16">Nessun costo orario impostato per <b>'
+       + senzaAffatto.map(u => esc(un(u))).join('</b>, <b>') + '</b>: le loro ore contano zero. '
+       + 'Impostalo da <b>Amministrazione → Utenti</b>.</div>';
+  return h;
 }
 
 function schedaRedditivita(p, r) {
@@ -5845,7 +5928,22 @@ function costiUtenteHtml(uid) {
   const attuale = costoAttuale(uid);
   const storico = S.costi.filter(c => c.profile_id === uid && c.valido_al)
     .sort((a, b) => (b.valido_dal || '').localeCompare(a.valido_dal || ''));
+
+  /* La decorrenza e' la casella che si sbaglia sempre, perche' propone oggi e
+     nessuno la guarda. Se la persona ha lavoro piu' vecchio del costo, qui si
+     propone gia' la data giusta: e' l'unico posto in cui si puo' rimediare. */
+  const primo = primoLavoroDi(uid);
+  const scoperto = costoScoperto(uid);
+  const proposta = attuale ? attuale.valido_dal : (primo || todayISO());
+
   return sez('Costo orario', 'visibile ai soli amministratori')
+    + (scoperto
+        ? '<div class="wbox" style="margin-bottom:12px;font-size:12px">Risulta lavoro dal <b>'
+          + fdate(scoperto.primo) + '</b>, ma il costo decorre dal <b>' + fdate(scoperto.dal)
+          + '</b>: le ore precedenti valgono zero e la Redditività ne risente. '
+          + '<button class="btn btn-xs" id="mu-retro" data-retro="' + scoperto.primo + '" '
+          + 'style="margin-top:6px">Fai decorrere dal ' + fdate(scoperto.primo) + '</button></div>'
+        : '')
     + '<div class="fg3">'
       + '<div class="fg"><label class="fl">Costo lordo €/h</label>'
         + '<input type="number" class="fc" id="mu-cl" step="0.01" min="0" value="'
@@ -5854,11 +5952,12 @@ function costiUtenteHtml(uid) {
         + '<input type="number" class="fc" id="mu-cn" step="0.01" min="0" value="'
         + (attuale && attuale.costo_orario_netto !== null ? attuale.costo_orario_netto : '') + '"></div>'
       + '<div class="fg"><label class="fl">In vigore dal</label>'
-        + '<input type="date" class="fc" id="mu-cd" value="' + (attuale ? attuale.valido_dal : todayISO()) + '"></div>'
+        + '<input type="date" class="fc" id="mu-cd" value="' + proposta + '"></div>'
     + '</div>'
     + '<div class="hint">Il costo lordo è quello che la commessa paga: retribuzione più oneri. '
       + 'Cambiandolo si apre un nuovo periodo e il precedente si chiude da solo: le ore già registrate '
-      + 'restano valorizzate alla tariffa di allora.</div>'
+      + 'restano valorizzate alla tariffa di allora. <b>Il lavoro precedente a «In vigore dal» conta '
+      + 'zero</b>: se questa persona lavorava già prima, porta indietro la data.</div>'
     + (storico.length
         ? '<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;'
           + 'letter-spacing:.06em;color:var(--mut);margin-bottom:5px">Periodi precedenti</div>'
@@ -5881,6 +5980,23 @@ async function salvaCosto(uid) {
     && Number(att.costo_orario_netto) === netto
     && att.valido_dal === dal;
   if (uguale || (lordo === null && netto === null && !att)) return;
+
+  /* Decorrenza spostata indietro: non e' un nuovo periodo, e' lo stesso costo
+     che valeva gia' da prima. Va corretto sul posto - un secondo periodo aperto
+     lo rifiuterebbe il database (uq_costi_aperto), ed e' giusto cosi': due costi
+     contemporaneamente in vigore non vogliono dire niente. */
+  if (att && dal < att.valido_dal) {
+    const prima = S.costi.filter(c => c.profile_id === uid && c.valido_al && c.id !== att.id)
+      .sort((a, b) => (b.valido_al || '').localeCompare(a.valido_al || ''))[0];
+    if (prima && prima.valido_al >= dal)
+      return toast('C’è già un periodo di costo fino al ' + fdate(prima.valido_al)
+                 + ': correggi prima quello.', 'error');
+    const { error } = await SB.from('profili_costi')
+      .update({ costo_orario_lordo: lordo, costo_orario_netto: netto, valido_dal: dal })
+      .eq('id', att.id);
+    if (error) sbErr(error, 'costo');
+    return;
+  }
 
   /* Stessa decorrenza: correzione del periodo in corso, non un nuovo periodo */
   if (att && att.valido_dal === dal) {
@@ -6996,6 +7112,13 @@ function openUser(id) {
   el('mu-r').value = u.role || 'viewer';
   el('mu-a').value = u.attivo === false ? '0' : '1';
   el('mu-costi').innerHTML = costiUtenteHtml(id);
+  /* La delega dei clic copre #page e #top, non le modali: qui l'aggancio e'
+     diretto, altrimenti il pulsante c'e' ma non fa niente. */
+  const retro = el('mu-retro');
+  if (retro) retro.onclick = () => {
+    el('mu-cd').value = retro.dataset.retro;
+    toast('Decorrenza portata al ' + fdate(retro.dataset.retro) + ': premi Salva.');
+  };
 
   /* Sulla propria scheda si cambia il nome e si imposta il proprio costo, ma
      ruolo e stato restano bloccati: un amministratore che si declassa o si

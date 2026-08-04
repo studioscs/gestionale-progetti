@@ -858,6 +858,22 @@ Nella scheda di ogni commessa c'è **Dove è andato il tempo**: giorni, ore e co
 fase per fase, con chi ci ha lavorato e per quanti giorni. È lì che si vede se
 una fase è costata più di quanto valeva.
 
+### «Il costo orario gliel'ho messo, ma dice che manca»
+
+Il costo è **storicizzato**: vale da una data in avanti, e la casella *In vigore
+dal* propone oggi. Chi imposta i costi adesso li fa quindi decorrere da adesso —
+e tutto il lavoro precedente conta **zero**, con la Redditività che mostra
+commesse più redditizie di quanto siano.
+
+La Redditività lo dice per nome: chi, da quando lavora, da quando è coperto. La
+scheda utente propone già la data giusta e ha un pulsante che porta indietro la
+decorrenza in un clic. Non crea un secondo periodo — sarebbe un secondo costo
+contemporaneamente in vigore, che il database giustamente rifiuta: **corregge
+l'inizio di quello esistente**.
+
+Regola pratica: quando aggiungi una persona, fai decorrere il suo costo da
+**quando ha cominciato a lavorare**, non da oggi.
+
 ## Redditività: chi fattura allo studio e cosa resta
 
 In uno studio associato la stessa persona può essere due cose insieme: chi

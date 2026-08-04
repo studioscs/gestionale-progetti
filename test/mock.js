@@ -21,6 +21,17 @@
           return {message:"Could not find the '"+k+"' column of 'projects' in the schema cache"};
     return null;
   }
+  /* Colonne NOT NULL, come le dichiarano le migrazioni. Servono a riprodurre il
+     rifiuto del database: senza, un inserimento che in Supabase fallisce qui
+     passava liscio e il guasto si vedeva solo in produzione. */
+  const NOTNULL={
+    tasks:['title','status','is_milestone','opzionale','sort_order'],
+    commessa_fasi:['project_id','fase_key','nome','ordine','stato'],
+    projects:['name','status'],
+    commessa_pratiche:['project_id','ente','tipo','stato'],
+    commessa_fatture:['project_id','descrizione','stato'],
+    profili_costi:['profile_id','valido_dal']
+  };
   let seq=0; const uid=()=>'id'+(++seq);
   const clone=x=>JSON.parse(JSON.stringify(x));
   const giornoPrima=d=>{ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()-1);
@@ -79,7 +90,19 @@
       single(){ single=true; return api; },
       maybeSingle(){ maybe=true; return api; },
       insert(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
-        const arr=Array.isArray(v)?v:[v];
+        let arr=Array.isArray(v)?v:[v];
+        /* PostgREST costruisce UN SOLO insert con l'unione delle chiavi di tutte
+           le righe: dove una chiave manca ci mette NULL, non il default della
+           colonna. Una riga costruita a mano, con meno campi delle altre, fa
+           quindi fallire l'intero blocco. */
+        const chiavi={}; arr.forEach(x=>Object.keys(x||{}).forEach(k=>chiavi[k]=1));
+        arr=arr.map(x=>{ const o={}; Object.keys(chiavi).forEach(k=>o[k]=x[k]===undefined?null:x[k]); return o; });
+        for(const r of arr) for(const k of (NOTNULL[table]||[]))
+          if(k in r && r[k]===null){
+            api._err={message:'null value in column "'+k+'" of relation "'+table
+                      +'" violates not-null constraint'};
+            return api;
+          }
         const made=arr.map(x=>Object.assign({id:uid(),created_at:new Date().toISOString()},x));
         /* Replica il trigger trg_chiudi_costo della migrazione 009: inserendo un
            nuovo costo, il periodo aperto precedente si chiude il giorno prima. */

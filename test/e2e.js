@@ -76,6 +76,31 @@ function launchOpts(){
   const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,prat:__DB.commessa_pratiche.length}));
   console.log('   generati →',JSON.stringify(stats));
   await t('generazione consistente',async()=>{ must(stats.fasi>=10&&stats.att>=100&&stats.prat>=5,JSON.stringify(stats)); });
+  await t('ogni template genera le sue attività, nessuna esclusa',async()=>{
+    /* Le attività si inseriscono tutte insieme: basta una riga con meno colonne
+       delle altre perché il database rifiuti l'intero blocco e la commessa nasca
+       con le fasi e la checklist vuota. È successo con le procure, che vengono
+       costruite a parte e non portavano is_milestone. */
+    const esiti=await p.evaluate(async()=>{
+      const out={};
+      for(const k of Object.keys(TEMPLATES)){
+        const {data}=await SB.from('projects').insert({name:'Gen '+k,status:'attivo'})
+          .select().single();
+        const res=await generaStruttura(data.id,k,CONDIZIONI.map(c=>c.k),'2026-03-02');
+        await loadAll(true);
+        out[k]={res:!!res,att:S.tasks.filter(t=>t.project_id===data.id).length,
+                proc:S.tasks.filter(t=>t.project_id===data.id
+                                    &&/^Procura speciale/.test(t.title)).length};
+      }
+      return out;
+    });
+    for(const k of Object.keys(esiti)){
+      must(esiti[k].res,'il template '+k+' ha fallito la generazione');
+      if(k!=='vuoto') must(esiti[k].att>0,'il template '+k+' non ha generato attività');
+    }
+    must(esiti.privato.att>=130,'il privato ha generato solo '+esiti.privato.att+' attività');
+    must(esiti.privato.proc>0,'nessuna procura generata: era la riga che rompeva tutto');
+  });
 
   // --- CHECKLIST ---
   await t('espande una fase',async()=>{ await p.click('.grp .grp-h'); must(await p.locator('.grp.open .it').count()>0); });
@@ -145,7 +170,11 @@ function launchOpts(){
     must(parseFloat(w)>0&&parseFloat(w)<=100,'larghezza barra: '+w);
   });
   await t('gantt per fasi di una commessa',async()=>{
-    await p.selectOption('#g-p',{index:1}); await p.waitForTimeout(300);
+    /* la commessa con più fasi, non la prima dell'elenco: l'ordine cambia ogni
+       volta che un test ne crea un'altra */
+    const pid=await p.evaluate(()=>S.projects.map(x=>({id:x.id,n:fasiOf(x.id).length}))
+      .sort((a,b)=>b.n-a.n)[0].id);
+    await p.selectOption('#g-p',pid); await p.waitForTimeout(300);
     must(await p.locator('.gbar').count()>=8,'poche fasi nel gantt');
   });
 
@@ -1267,6 +1296,50 @@ function launchOpts(){
     },global.__PID2);
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
+  });
+  await t('il costo che decorre troppo tardi viene detto per nome',async()=>{
+    /* «Ma il costo orario gliel'ho messo»: c'è, ma vale da una data in avanti e
+       il lavoro precedente conta zero. Il messaggio deve dire chi e da quando. */
+    const g=await p.evaluate(async()=>{
+      /* la decorrenza proposta di suo è oggi: è la trappola da riprodurre */
+      await SB.from('profili_costi').update({valido_dal:todayISO()}).eq('profile_id','u-tre');
+      await loadAll(true);
+      const s=costoScoperto('u-tre');
+      go('redditivita');
+      return {scoperto:s,primo:primoLavoroDi('u-tre')};
+    });
+    await p.waitForTimeout(600);
+    must(g.scoperto,'lavoro scoperto non rilevato');
+    must(g.scoperto.primo==='2026-06-01','primo giorno di lavoro sbagliato: '+g.scoperto.primo);
+    const h=await p.textContent('#page');
+    must(/decorre troppo tardi/.test(h),'la Redditività non spiega il motivo');
+    must(/Ester Bianchi/.test(h),'non dice di chi si tratta');
+    must(/01\/06\/2026/.test(h),'non dice da quando lavora');
+  });
+  await t('la scheda utente propone la decorrenza giusta e la applica',async()=>{
+    await p.evaluate(()=>{ go('users'); openUser('u-tre'); });
+    await p.waitForSelector('#m-user.show'); await p.waitForTimeout(400);
+    must(await p.locator('#mu-retro').count()===1,'nessun invito a portare indietro la decorrenza');
+    await p.click('#mu-retro'); await p.waitForTimeout(200);
+    must(await p.inputValue('#mu-cd')==='2026-06-01','la data non è stata proposta');
+    await p.click('#su-btn'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>({scoperto:costoScoperto('u-tre'),
+                                   dal:costoAttuale('u-tre').valido_dal,
+                                   aperti:S.costi.filter(c=>c.profile_id==='u-tre'&&!c.valido_al).length}));
+    must(g.dal==='2026-06-01','la decorrenza non è stata corretta: '+g.dal);
+    must(!g.scoperto,'risulta ancora lavoro scoperto');
+    must(g.aperti===1,'sono rimasti '+g.aperti+' periodi aperti: ne va tenuto uno solo');
+    await p.evaluate(()=>{ closeM('m-user'); S.projId=window.__PID; S.tab='avanzamento';
+                           go('project'); });
+    await p.waitForTimeout(300);
+  });
+  await t('con il costo esteso le ore di prima non valgono più zero',async()=>{
+    const g=await p.evaluate(()=>{
+      const x=costoCommessa(window.__PID).perPersona['u-tre'];
+      return {senzaCosto:x.senzaCosto,lordo:x.lordo};
+    });
+    must(g.senzaCosto===false,'ancora segnalato come costo mancante');
+    must(g.lordo>0,'le ore valgono ancora zero: '+g.lordo);
   });
   await t('ogni amministratore è socio e le sue ore vanno fra quelle da fatturare',async()=>{
     const g=await p.evaluate(async()=>{
