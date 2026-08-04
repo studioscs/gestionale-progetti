@@ -31,7 +31,7 @@ t('ini due iniziali',ctx.ini('Mario Rossi Bianchi')==='MR',ctx.ini('Mario Rossi 
 
 console.log('\n— TEMPLATE —');
 const tk=Object.keys(ctx.TEMPLATES);
-t('7 template',tk.length===7,tk);
+t('8 template',tk.length===8,tk);
 let tot=0,fasiTot=0;
 tk.forEach(k=>{const T=ctx.TEMPLATES[k];fasiTot+=T.fasi.length;T.fasi.forEach(f=>tot+=f.att.length);});
 console.log('   fasi totali:',fasiTot,'| attività totali:',tot);
@@ -66,6 +66,12 @@ t('senza sismica_aut: no art.94, si art.93',
 t('milestone scadono a fine fase',
   p1.fasi.every(f=>f.att.filter(a=>a.is_milestone).every(a=>a.due_date===f.data_fine_prevista)),null);
 t('senza vvf: nessuna pratica VVF',!p2.pratiche.some(x=>/Vigili/.test(x.ente)),null);
+/* Come per le opere pubbliche: ogni elaborato deve dire che cosa contiene,
+   altrimenti la checklist e' un elenco di titoli e non aiuta chi la esegue. */
+t('nel privato ogni attività dice cosa deve contenere',
+  (()=>{const a=p1.fasi.reduce((x,f)=>x.concat(f.att),[]);
+        return a.filter(x=>x.contenuto&&x.contenuto.length>40).length===a.length;})(),
+  p1.fasi.reduce((x,f)=>x.concat(f.att),[]).filter(x=>!x.contenuto).map(x=>x.title));
 const p3=ctx.pianifica('vuoto',[],null);
 t('template vuoto: 1 fase 0 attività',p3.fasi.length===1&&p3.fasi[0].att.length===0,p3.fasi.length);
 const p4=ctx.pianifica('pubblico',full,'2026-02-02');
@@ -74,6 +80,53 @@ const p5=ctx.pianifica('strutture',full,null);
 t('strutture: 8 fasi',p5.fasi.length===8,p5.fasi.length);
 const p6=ctx.pianifica('vincolo',full,null);
 t('vincolo: 6 fasi',p6.fasi.length===6,p6.fasi.length);
+
+console.log('\n— VIOLAZIONI ALLE NORME SISMICHE —');
+const sisTot=ctx.pianifica('sismica',full,'2026-03-02');
+t('con tutti i casi attivi ci sono 10 fasi',sisTot.fasi.length===10,sisTot.fasi.length);
+console.log('   sismica → '+sisTot.fasi.length+' fasi · '
+  +sisTot.fasi.reduce((a,f)=>a+f.att.length,0)+' attivita · '+sisTot.pratiche.length+' pratiche');
+const tutteAtt=p=>p.fasi.reduce((a,f)=>a.concat(f.att),[]);
+
+/* il bivio: ogni caso porta con se' i suoi atti e lascia fuori gli altri */
+const soloToll=ctx.pianifica('sismica',['viol_tolleranze'],'2026-03-02');
+const soloParz=ctx.pianifica('sismica',['viol_parziale'],'2026-03-02');
+const soloTot =ctx.pianifica('sismica',['viol_totale'],'2026-03-02');
+t('le tolleranze portano la dichiarazione asseverata',
+  tutteAtt(soloToll).some(a=>/tolleranza costruttiva/.test(a.title)),null);
+t('e non l accertamento di conformita',
+  !tutteAtt(soloToll).some(a=>/accertamento di conformit/i.test(a.title)),
+  tutteAtt(soloToll).filter(a=>/accertamento/i.test(a.title)).map(a=>a.title));
+t('la parziale difformita porta l autorizzazione sismica postuma',
+  tutteAtt(soloParz).some(a=>/autorizzazione sismica postuma/i.test(a.title)),null);
+t('la totale difformita porta l istanza in assenza di titolo',
+  tutteAtt(soloTot).some(a=>/in assenza di titolo/i.test(a.title)),null);
+t('e avverte che il titolo sismico postumo va verificato',
+  tutteAtt(soloTot).some(a=>/ammissibilit/i.test(a.title)),null);
+t('ogni caso genera la propria pratica',
+  soloToll.pratiche.some(x=>x.k==='tolleranze_sis')
+  &&soloParz.pratiche.some(x=>x.k==='san_36bis')
+  &&soloTot.pratiche.some(x=>x.k==='san_36'),
+  [soloToll.pratiche.map(x=>x.k),soloParz.pratiche.map(x=>x.k),soloTot.pratiche.map(x=>x.k)]);
+t('l accesso agli atti sismici c e sempre',
+  [sisTot,soloToll,soloParz,soloTot].every(x=>x.pratiche.some(y=>y.k==='atti_sismici')),null);
+t('non si porta dietro pratiche estranee',
+  sisTot.pratiche.length<=10&&!sisTot.pratiche.some(x=>/Vigili|paesagg|allacc/i.test(x.ente+x.tipo)),
+  sisTot.pratiche.map(x=>x.k));
+t('la ricostruzione documentale precede il rilievo e la qualificazione',
+  sisTot.fasi.findIndex(f=>f.fase_key==='ricostruzione')
+    <sisTot.fasi.findIndex(f=>f.fase_key==='rilievo'),null);
+t('le indagini precedono le verifiche',
+  sisTot.fasi.findIndex(f=>f.fase_key==='conoscenza')
+    <sisTot.fasi.findIndex(f=>f.fase_key==='verifiche'),null);
+t('la pratica sismica precede quella edilizia',
+  sisTot.fasi.findIndex(f=>f.fase_key==='pratica_sismica')
+    <sisTot.fasi.findIndex(f=>f.fase_key==='pratica_edilizia'),null);
+t('la data di realizzazione si accerta prima delle verifiche',
+  sisTot.fasi.findIndex(f=>f.att.some(a=>/data di realizzazione/i.test(a.title)))
+    <sisTot.fasi.findIndex(f=>f.fase_key==='verifiche'),null);
+t('le norme dell epoca sono richiamate esplicitamente',
+  tutteAtt(sisTot).some(a=>/all.epoca/i.test(a.contenuto||'')),null);
 
 console.log('\n— AVANZAMENTO —');
 ctx.S.tasks=[{id:'a',commessa_fase_id:'F',status:'da_fare',opzionale:false},

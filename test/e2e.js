@@ -76,6 +76,42 @@ function launchOpts(){
   const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,prat:__DB.commessa_pratiche.length}));
   console.log('   generati →',JSON.stringify(stats));
   await t('generazione consistente',async()=>{ must(stats.fasi>=10&&stats.att>=100&&stats.prat>=5,JSON.stringify(stats)); });
+  await t('la commessa per le sole violazioni sismiche si genera e si biforca',async()=>{
+    const g=await p.evaluate(async()=>{
+      const out={};
+      for(const caso of ['viol_tolleranze','viol_parziale','viol_totale']){
+        const {data}=await SB.from('projects').insert({name:'Sismica '+caso,status:'attivo'})
+          .select().single();
+        const res=await generaStruttura(data.id,'sismica',[caso],'2026-03-02');
+        await loadAll(true);
+        out[caso]={res:!!res,
+                   fasi:fasiOf(data.id).map(f=>f.fase_key),
+                   att:S.tasks.filter(t=>t.project_id===data.id).map(t=>t.title),
+                   prat:S.pratiche.filter(x=>x.project_id===data.id).map(x=>x.tipo)};
+      }
+      return out;
+    });
+    for(const caso of Object.keys(g)){
+      must(g[caso].res,'generazione fallita per '+caso);
+      must(g[caso].att.length>30,caso+' ha generato solo '+g[caso].att.length+' attività');
+      must(g[caso].fasi.includes('qualifica'),'manca la fase di qualificazione in '+caso);
+      must(g[caso].fasi.indexOf('pratica_sismica')<g[caso].fasi.indexOf('pratica_edilizia'),
+           'la pratica sismica non precede quella edilizia in '+caso);
+      must(g[caso].att.some(x=>/norme tecniche vigenti all’epoca|all’epoca/.test(x))
+        || g[caso].att.some(x=>/data di realizzazione/i.test(x)),
+        'manca l accertamento della data e delle norme dell epoca in '+caso);
+    }
+    must(g.viol_tolleranze.prat.some(x=>/tolleranza costruttiva/i.test(x)),
+         'le tolleranze non generano la propria pratica');
+    must(g.viol_parziale.prat.some(x=>/parziale difformità/i.test(x)),
+         'la parziale difformità non genera la propria pratica');
+    must(g.viol_totale.prat.some(x=>/assenza di titolo/i.test(x)),
+         'la totale difformità non genera la propria pratica');
+    must(!g.viol_tolleranze.prat.some(x=>/assenza di titolo/i.test(x)),
+         'le tolleranze si portano dietro la pratica di un altro caso');
+    must(!g.viol_totale.prat.some(x=>/Vigili|allacc/i.test(x)),
+         'la commessa sismica si porta dietro pratiche estranee');
+  });
   await t('ogni template genera le sue attività, nessuna esclusa',async()=>{
     /* Le attività si inseriscono tutte insieme: basta una riga con meno colonne
        delle altre perché il database rifiuti l'intero blocco e la commessa nasca
@@ -177,6 +213,43 @@ function launchOpts(){
     await p.selectOption('#g-p',pid); await p.waitForTimeout(300);
     must(await p.locator('.gbar').count()>=8,'poche fasi nel gantt');
   });
+
+  // --- VISTA A ELENCO DELLE COMMESSE ---
+  await t('le commesse si possono vedere a elenco',async()=>{
+    await p.evaluate(()=>go('projects')); await p.waitForTimeout(300);
+    must(await p.locator('#page .g3').count()===1,'non parte dalle schede');
+    await p.click('[data-vista="lista"]'); await p.waitForTimeout(300);
+    must(await p.locator('#page table').count()===1,'nessuna tabella dopo il passaggio a elenco');
+    must(await p.locator('#page tbody tr').count()>0,'elenco vuoto');
+    const h=await p.textContent('#page thead');
+    for(const c of ['Commessa','Cliente','Stato','Responsabile','Importo'])
+      must(h.includes(c),'manca la colonna '+c);
+  });
+  await t('la riga dell elenco apre la commessa',async()=>{
+    await p.locator('#page tbody tr').first().click(); await p.waitForTimeout(400);
+    must(await p.evaluate(()=>S.page)==='project','la riga non ha aperto la commessa');
+    await p.evaluate(()=>go('projects')); await p.waitForTimeout(300);
+  });
+  await t('l elenco si ordina cliccando l intestazione',async()=>{
+    const nomi=()=>p.evaluate(()=>Array.from(document.querySelectorAll('#page tbody tr td:first-child b'))
+                                       .map(e=>e.textContent));
+    await p.click('#page th[data-ord="name"]'); await p.waitForTimeout(250);
+    const asc=await nomi();
+    await p.click('#page th[data-ord="name"]'); await p.waitForTimeout(250);
+    const desc=await nomi();
+    must(asc.length>1,'troppo poche righe per verificare l ordinamento');
+    must(JSON.stringify(asc)===JSON.stringify(desc.slice().reverse()),
+         'il secondo clic non inverte il verso');
+  });
+  await t('la scelta della vista sopravvive al ricaricamento',async()=>{
+    must(await p.evaluate(()=>localStorage.getItem('scs-vista-progetti'))==='lista',
+         'la preferenza non e stata salvata');
+    await p.evaluate(()=>{ go('oggi'); go('projects'); }); await p.waitForTimeout(300);
+    must(await p.locator('#page table').count()===1,'tornando sulla pagina si e persa la vista');
+    await p.click('[data-vista="griglia"]'); await p.waitForTimeout(300);
+    must(await p.locator('#page .g3').count()===1,'non si torna alle schede');
+  });
+
 
   // --- PRATICHE ---
   await t('apre pratica dal catalogo',async()=>{

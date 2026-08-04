@@ -133,20 +133,25 @@ Ruoli: `viewer` (legge) · `collaboratore` (modifica) · `admin` (modifica + eli
 
 ## Percorsi di lavoro precaricati
 
-Sei template, 45 fasi e 330 attività complessive, con riferimenti normativi.
+Otto template, 63 fasi e 482 attività complessive, ciascuna con il riferimento
+normativo e con la nota su **che cosa deve contenere**.
 
 | Template | Fasi | Copre |
 |---|---|---|
 | **Ristrutturazione interna — CILA** | 6 | Verifiche → **firme del cliente** → progetto e asseverazione → presentazione CILA → lavori → fine lavori. Nessun parere di enti terzi |
-| **Edilizia privata** | 15 | Incarico → **ricognizione enti** → **firme del cliente** → preliminare → geologia → definitivo → autorizzazioni → titolo edilizio → strutture → impianti → esecutivo → sicurezza → affidamento → DL → agibilità |
+| **Edilizia privata** | 16 | Incarico → stato legittimo → indagini → preliminare → **firme del cliente** → pareri vincolanti → architettonico → strutture e pratica sismica → impianti → energetica → acustica → sicurezza → titolo edilizio → avvio cantiere → DL → agibilità |
 | **Opera pubblica** (D.Lgs 36/2023) | 10 | Programmazione → **documentazione per i pareri** → PFTE → conferenza di servizi → (definitivo, solo se richiesto) → esecutivo → verifica e validazione → gara → DL → collaudo/CRE |
 | **Incarico strutturale / sismico** | 8 | Dati → **firme del cliente** → indagini → calcolo → elaborati → deposito o autorizzazione sismica → DL strutturale → collaudo statico |
 | **Bene vincolato** | 6 | Ricognizione vincoli → **firme del cliente** → rilievo e degrado → progetto → istanze agli enti → alta sorveglianza |
+| **Sola DL e CSE** (opera pubblica) | 6 | Avvio → consegna → contabilità e SAL → varianti → sicurezza in esecuzione → collaudo/CRE |
+| **Violazioni alle norme sismiche** | 10 | Incarico → ricostruzione documentale → rilievo → **qualificazione della violazione** → conoscenza della struttura → verifiche → pratica sismica postuma → pratica edilizia → eventuali opere → stato legittimo aggiornato |
 | **Commessa libera** | 1 | Nessuna checklist: consulenze, perizie, incarichi non standard |
 
 Le pratiche generate dipendono dal template, non solo dalle condizioni: una CILA
-per opere interne produce **6 fasi, 45 attività e 2 pratiche**, mentre una commessa
-di edilizia privata completa arriva a **15 fasi, 135 attività e 10 pratiche**.
+per opere interne produce **6 fasi, 46 attività e 3 pratiche**, una commessa di
+edilizia privata completa arriva a **16 fasi, 133 attività e 35 pratiche**, e la
+commessa per le sole violazioni sismiche a **10 fasi, 71 attività e 10 pratiche**
+— nessuna estranea al suo scopo, perché quel template dichiara un elenco chiuso.
 
 ---
 
@@ -743,6 +748,16 @@ agibilità e per un'altra ventina di voci.
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
 
+## Vedere le commesse: schede o elenco
+
+In **Progetti** l'interruttore in alto a destra passa fra le due viste. Le
+**schede** vanno bene finché le commesse sono poche; quando crescono serve
+l'**elenco**, con le colonne su cui si ragiona davvero — avanzamento, chi la
+segue, importo, fine prevista, quante cose sono in ritardo — e l'ordinamento
+cliccando l'intestazione (un secondo clic inverte il verso). La scelta resta
+come l'hai lasciata: è una preferenza di chi guarda, non un filtro da rifare
+ogni volta.
+
 ## Da dove vengono le ore
 
 Tre fonti, in ordine di precedenza. Sopra c'è sempre il dato che qualcuno ha
@@ -873,6 +888,48 @@ l'inizio di quello esistente**.
 
 Regola pratica: quando aggiungi una persona, fai decorrere il suo costo da
 **quando ha cominciato a lavorare**, non da oggi.
+
+## Violazioni alle norme sismiche
+
+Template dedicato alla sola regolarizzazione sismica dell'esistente, separato
+dai percorsi di progetto perché ha un'altra logica: non si costruisce, si
+dimostra.
+
+Il percorso si biforca su **tre casi**, che si scelgono fra le condizioni della
+commessa e che hanno presupposti, documenti ed esiti diversi:
+
+| Caso | Riferimenti | In sostanza |
+|---|---|---|
+| **Tolleranze costruttive** | art. 34-bis DPR 380/2001 · art. 12-bis L.R. Marche 1/2018 | Scostamenti entro le soglie. In zona sismica l'ammissibilità richiede anche l'attestazione di conformità alle norme tecniche per le costruzioni |
+| **Parziale difformità o variazione essenziale** | art. 36-bis DPR 380/2001 · art. 12-ter L.R. Marche 1/2018 | Accertamento di conformità con doppia conformità **attenuata**: urbanistica al momento della domanda, edilizia all'epoca |
+| **Assenza di titolo o totale difformità** | art. 36 DPR 380/2001 · art. 12-quater L.R. Marche 1/2018 | Doppia conformità **piena**. Il caso più stretto: l'ammissibilità del titolo sismico postumo va verificata caso per caso |
+
+Le dieci fasi seguono l'ordine in cui il lavoro si fa davvero: incarico e
+inquadramento, ricostruzione documentale, rilievo, **qualificazione della
+violazione** (il bivio), conoscenza della struttura, verifiche e attestazioni,
+pratica sismica postuma, pratica edilizia collegata, eventuali opere di
+adeguamento, chiusura con l'aggiornamento dello stato legittimo.
+
+Tre cose che il template tiene ferme perché sono quelle che si sbagliano:
+
+- **Due archivi, non uno.** Il Comune conserva i titoli edilizi, il Genio Civile
+  le pratiche sismiche. Una pratica edilizia regolare non dice nulla sul
+  deposito sismico, ed è proprio lì che si annidano le violazioni.
+- **La data di realizzazione si accerta prima delle verifiche.** Alla
+  regolarizzazione postuma si guarda alla norma vigente **all'epoca**, non a
+  quella di oggi: verificare con le NTC 2018 un edificio degli anni Settanta
+  significa farlo bocciare senza motivo.
+- **La pratica sismica precede quella edilizia**, mai il contrario.
+
+Riferimenti richiamati: L.R. Marche 1/2018 come aggiornata dalla L.R. Marche
+4/2025, con le linee guida approvate con DGR 976/2025 e modificate dalla DGR
+1396/2025; artt. 32, 34-bis, 36 e 36-bis DPR 380/2001 dopo il Salva Casa
+(L. 105/2024); NTC 2018 e Circolare 7/2019.
+
+> I testi «cosa deve contenere» sono **sintesi operative, non il testo della
+> norma**. Ogni voce porta il riferimento esatto: verificalo sulla norma
+> vigente prima della consegna, e in particolare sulle linee guida regionali,
+> che cambiano più spesso della legge.
 
 ## Redditività: chi fattura allo studio e cosa resta
 
