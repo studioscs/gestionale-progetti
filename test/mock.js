@@ -100,6 +100,18 @@
         api._res=made; return api; },
       update(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
         api._upd=v; return api; },
+      /* Replica il trigger trg_stamp_task_completion della migrazione 001:
+         chiudendo un'attivita' il database segna quando e da chi. Con una
+         differenza voluta: se l'aggiornamento porta gia' una completed_at la si
+         rispetta, mentre Postgres la sovrascriverebbe con now(). Serve ai test
+         per collocare il lavoro in una data precisa. */
+      _stampaChiusura(){
+        if(table!=='tasks'||!api._upd||api._upd.status===undefined) return;
+        if(api._upd.status==='completato'){
+          if(api._upd.completed_at===undefined) api._upd.completed_at=new Date().toISOString();
+          if(api._upd.completed_by===undefined) api._upd.completed_by=UID;
+        }else{ api._upd.completed_at=null; api._upd.completed_by=null; }
+      },
       _dopoUpdate(){
         if(table==='commessa_sal') DB.commessa_sal.filter(r=>flt.every(f=>f(r)))
           .forEach(r=>{ percSal(r); maturaDL(r); });
@@ -110,7 +122,8 @@
       then(res,rej){
         try{
           if(api._err) return res({data:null,error:api._err});
-          if(api._upd){ DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); });
+          if(api._upd){ api._stampaChiusura();
+            DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); });
             api._dopoUpdate(); return res({data:null,error:null}); }
           if(api._del){ DB[table]=DB[table].filter(r=>!flt.every(f=>f(r))); return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }

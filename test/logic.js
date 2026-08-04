@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,impegnoStimato,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -388,45 +388,144 @@ t('senza condizioni restano solo le pratiche di base',
     ==='accesso_atti,cdu,titolo_edilizio',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
 
-console.log('\n— IMPEGNO STIMATO DALLE ATTIVITÀ COMPLETATE —');
+console.log('\n— GIORNI FERIALI —');
 /* 2026-06-01 è un lunedì; 06 e 07 sono sabato e domenica */
 t('lunedì è feriale',ctx.feriale('2026-06-01')===true,null);
 t('venerdì è feriale',ctx.feriale('2026-06-05')===true,null);
 t('sabato non conta',ctx.feriale('2026-06-06')===false,null);
 t('domenica non conta',ctx.feriale('2026-06-07')===false,null);
+t('lun→ven sono 5 giorni',ctx.ferialiTra('2026-06-01','2026-06-05')===5,
+  ctx.ferialiTra('2026-06-01','2026-06-05'));
+t('il fine settimana non allunga la settimana',ctx.ferialiTra('2026-06-01','2026-06-07')===5,
+  ctx.ferialiTra('2026-06-01','2026-06-07'));
+t('due settimane sono 10 giorni',ctx.ferialiTra('2026-06-01','2026-06-12')===10,
+  ctx.ferialiTra('2026-06-01','2026-06-12'));
+t('un solo sabato è zero',ctx.ferialiTra('2026-06-06','2026-06-07')===0,
+  ctx.ferialiTra('2026-06-06','2026-06-07'));
+t('un giorno solo è un giorno',ctx.ferialiTra('2026-06-03','2026-06-03')===1,null);
+t('date invertite non contano',ctx.ferialiTra('2026-06-05','2026-06-01')===0,null);
 
+console.log('\n— PERIODO DI LAVORO DELLA FASE —');
+const FASE=(o)=>Object.assign({id:'f1',project_id:'pA',nome:'Fase',ordine:0,
+  stato:'completata',data_inizio:'2026-06-01',data_completamento:'2026-06-05'},o);
+ctx.S.tasks=[];
+t('una fase mai avviata non ha periodo',
+  ctx.periodoFase(FASE({stato:'non_avviata'}))===null,null);
+t('e nemmeno una non applicabile',
+  ctx.periodoFase(FASE({stato:'non_applicabile'}))===null,null);
+t('una fase conclusa va da inizio a chiusura',
+  (()=>{const p=ctx.periodoFase(FASE({}));return p&&p.inizio==='2026-06-01'&&p.fine==='2026-06-05'&&p.giorni===5;})(),
+  ctx.periodoFase(FASE({})));
+t('senza data di inizio si parte dalla prima spunta',(()=>{
+  ctx.S.tasks=[{id:'t0',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+    completed_at:'2026-06-02T09:00:00Z'}];
+  const p=ctx.periodoFase(FASE({data_inizio:null}));
+  ctx.S.tasks=[];
+  return p&&p.inizio==='2026-06-02';})(),null);
+t('una fase che parte in futuro non conta ancora',
+  ctx.periodoFase(FASE({data_inizio:'2099-01-01',data_completamento:null,stato:'in_corso'}))===null,null);
+
+console.log('\n— ORE RICAVATE DAL PERIODO DELLA FASE —');
 ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,
-  valido_dal:'2026-01-01',valido_al:null}];
+              valido_dal:'2026-01-01',valido_al:null},
+             {id:'c2',profile_id:'u2',costo_orario_lordo:100,costo_orario_netto:60,
+              valido_dal:'2026-01-01',valido_al:null}];
 ctx.S.projects=[{id:'pA',name:'A',amount:20000},{id:'pB',name:'B',amount:9000}];
 ctx.S.time=[];
-const T=(id,pid,fase,giorno)=>({id,project_id:pid,commessa_fase_id:fase,status:'completato',
-  completed_at:giorno+'T10:00:00Z',completed_by:'u1'});
-/* lun 1: solo pA · mar 2: pA e pB · sab 6: solo pA (non deve contare) */
-ctx.S.tasks=[T('t1','pA','f1','2026-06-01'),T('t2','pA','f1','2026-06-02'),
-             T('t3','pB','f9','2026-06-02'),T('t4','pA','f2','2026-06-06')];
-
+/* lun 1 → ven 5 giugno: una settimana piena, una persona sola */
+ctx.S.fasi=[FASE({})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-05T10:00:00Z',assignee_id:'u1'}];
 const iA=ctx.impegnoStimato('pA');
 t('la persona compare nella stima',!!iA.u1,Object.keys(iA));
-/* lunedì intero + martedì diviso a metà = 1,5 giorni. Sabato escluso. */
-t('giorni contati con il sabato escluso e la giornata divisa',iA.u1.giorni===1.5,iA.u1.giorni);
-t('ore coerenti con 8 ore al giorno',iA.u1.ore===12,iA.u1.ore);
-t('costo = ore per tariffa',iA.u1.costo===600,iA.u1.costo);
+t('cinque giorni feriali',iA.u1.giorni===5,iA.u1.giorni);
+t('quaranta ore',iA.u1.ore===40,iA.u1.ore);
+t('costo = ore per tariffa',iA.u1.costo===2000,iA.u1.costo);
+t('il dettaglio è per fase',!!iA.u1.perFase.f1,Object.keys(iA.u1.perFase));
 
-const iB=ctx.impegnoStimato('pB');
-t('l altra commessa prende la mezza giornata',iB.u1.giorni===0.5,iB.u1.giorni);
-t('la stessa giornata non è contata due volte per intero',
-  r2b(iA.u1.giorni+iB.u1.giorni)===2, iA.u1.giorni+iB.u1.giorni);
+console.log('\n— NESSUNO LAVORA PIÙ DI UNA GIORNATA AL GIORNO —');
+/* la stessa settimana su due commesse: la giornata si divide */
+ctx.S.fasi=[FASE({}),FASE({id:'f2',project_id:'pB'})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+                completed_at:'2026-06-05T10:00:00Z',assignee_id:'u1'},
+             {id:'t2',project_id:'pB',commessa_fase_id:'f2',status:'da_fare',assignee_id:'u1'}];
+const dA=ctx.impegnoStimato('pA'), dB=ctx.impegnoStimato('pB');
+t('metà settimana sulla prima commessa',dA.u1.giorni===2.5,dA.u1.giorni);
+t('metà sulla seconda',dB.u1.giorni===2.5,dB.u1.giorni);
+t('la settimana resta di cinque giorni',r2b(dA.u1.giorni+dB.u1.giorni)===5,
+  dA.u1.giorni+dB.u1.giorni);
+t('conta anche chi ha attività ancora aperte',!!dB.u1,Object.keys(dB));
 
-t('il dettaglio per fase c è',!!iA.u1.perFase.f1,Object.keys(iA.u1.perFase));
-t('la fase del sabato non compare',!iA.u1.perFase.f2,Object.keys(iA.u1.perFase));
+console.log('\n— CHI LAVORA E CHI VERIFICA: 70/30 —');
+ctx.S.fasi=[FASE({})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-05T10:00:00Z',completed_by:'u2',
+  assignee_id:'u1',responsabile_id:'u2'}];
+const iC=ctx.impegnoStimato('pA');
+t('chi svolge prende il 70%',iC.u1&&iC.u1.giorni===3.5,iC.u1&&iC.u1.giorni);
+t('chi verifica prende il 30%',iC.u2&&iC.u2.giorni===1.5,iC.u2&&iC.u2.giorni);
+t('le due quote fanno la settimana',r2b(iC.u1.giorni+iC.u2.giorni)===5,
+  iC.u1.giorni+iC.u2.giorni);
+t('il costo usa la tariffa di ciascuno',iC.u1.costo===1400&&iC.u2.costo===1200,
+  [iC.u1.costo,iC.u2.costo]);
+
+console.log('\n— IL COSTO NON FINISCE TUTTO SU CHI SPUNTA —');
+/* Il caso vero: attività non assegnate, spuntate dall'amministratore.
+   Senza il ripiego sul responsabile di fase il costo era tutto suo. */
+ctx.S.fasi=[FASE({responsabile_id:'u1'})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-05T10:00:00Z',completed_by:'u2'}];
+const iD=ctx.impegnoStimato('pA');
+t('il lavoro è di chi ha in carico la fase',!!iD.u1&&iD.u1.giorni===5,iD.u1&&iD.u1.giorni);
+t('e non di chi ha passato la checklist',!iD.u2,Object.keys(iD));
+/* senza responsabile di fase resta l'unica traccia: chi ha spuntato */
+ctx.S.fasi=[FASE({responsabile_id:null})];
+t('senza responsabile resta chi ha spuntato',(()=>{const x=ctx.impegnoStimato('pA');
+  return !!x.u2&&!x.u1;})(),Object.keys(ctx.impegnoStimato('pA')));
+/* fase senza attività: la segue il suo responsabile */
+ctx.S.fasi=[FASE({responsabile_id:'u2'})]; ctx.S.tasks=[];
+t('una fase senza attività è di chi la segue',(()=>{const x=ctx.impegnoStimato('pA');
+  return !!x.u2&&x.u2.giorni===5;})(),ctx.impegnoStimato('pA'));
+
+console.log('\n— ORE EFFETTIVE SCRITTE A MANO —');
+ctx.S.fasi=[FASE({ore_effettive:10})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-05T10:00:00Z',assignee_id:'u1',responsabile_id:'u2'}];
+const iE=ctx.impegnoStimato('pA');
+t('valgono le ore scritte, non i giorni della fase',
+  r2b(iE.u1.ore+iE.u2.ore)===10,[iE.u1.ore,iE.u2.ore]);
+t('si dividono 70/30 come il lavoro',iE.u1.ore===7&&iE.u2.ore===3,[iE.u1.ore,iE.u2.ore]);
+t('sono marcate come forzate',iE.u1.forzato===true,iE.u1.forzato);
+t('il costo segue le ore forzate',iE.u1.costo===350&&iE.u2.costo===300,[iE.u1.costo,iE.u2.costo]);
+t('le ore forzate valgono anche a fase non avviata',(()=>{
+  ctx.S.fasi=[FASE({ore_effettive:8,stato:'non_avviata',data_completamento:null})];
+  const x=ctx.impegnoStimato('pA');
+  return !!x.u1&&r2b(x.u1.ore+x.u2.ore)===8;})(),null);
+t('uno zero equivale a nessuna forzatura',(()=>{
+  ctx.S.fasi=[FASE({ore_effettive:0})];
+  return ctx.impegnoStimato('pA').u1.giorni===3.5;})(),null);
+t('le ore stimate non entrano nel costo',(()=>{
+  ctx.S.fasi=[FASE({ore_stimate:999})];
+  return ctx.impegnoStimato('pA').u1.giorni===3.5;})(),null);
+
+console.log('\n— RIEPILOGO DELLA FASE —');
+ctx.S.fasi=[FASE({ore_stimate:20})];
+const of_=ctx.oreFase(ctx.S.fasi[0]);
+t('riporta le ore previste',of_.stimate===20,of_.stimate);
+t('riporta il periodo',of_.periodo&&of_.periodo.giorni===5,of_.periodo);
+t('riporta chi ci ha lavorato',Object.keys(of_.chi).sort().join(',')==='u1,u2',Object.keys(of_.chi));
+t('le ore della fase sono la giornata intera',of_.ore===40,of_.ore);
 
 console.log('\n— IL COSTO COMPARE ANCHE SENZA ORE REGISTRATE —');
+ctx.S.fasi=[FASE({})];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
+  completed_at:'2026-06-05T10:00:00Z',assignee_id:'u1'}];
 const stimA=ctx.costoCommessa('pA');
-t('la commessa non risulta più a costo zero',stimA.lordo===600,stimA.lordo);
+t('la commessa non risulta più a costo zero',stimA.lordo===2000,stimA.lordo);
 t('è dichiarato come stima',stimA.haStime===true,stimA.haStime);
 t('la persona è marcata stimata',stimA.perPersona.u1.stimato===true,null);
-t('il margine tiene conto del costo stimato',stimA.margine===19400,stimA.margine);
-t('il periodo di lavoro non è più vuoto',stimA.prima==='2026-06-01'&&stimA.ultima==='2026-06-06',
+t('il margine tiene conto del costo stimato',stimA.margine===18000,stimA.margine);
+t('il periodo di lavoro non è più vuoto',stimA.prima==='2026-06-01'&&stimA.ultima==='2026-06-05',
   [stimA.prima,stimA.ultima]);
 
 /* Le ore registrate restano il dato buono e non si sommano alla stima */
@@ -434,65 +533,7 @@ ctx.S.time=[{project_id:'pA',operator_id:'u1',entry_date:'2026-06-01',hours:3}];
 const veroA=ctx.costoCommessa('pA');
 t('le ore registrate vincono sulla stima',veroA.ore===3&&veroA.lordo===150,[veroA.ore,veroA.lordo]);
 t('e non vengono marcate come stimate',veroA.perPersona.u1.stimato===false,null);
-ctx.S.time=[];
-
-console.log('\n— CHI LAVORA E CHI VERIFICA: 70/30 —');
-ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,
-              valido_dal:'2026-01-01',valido_al:null},
-             {id:'c2',profile_id:'u2',costo_orario_lordo:100,costo_orario_netto:60,
-              valido_dal:'2026-01-01',valido_al:null}];
-ctx.S.projects=[{id:'pC',name:'C',amount:30000}];
-
-/* Il caso della schermata: assegnata a u1, verificata da u2, una sola giornata */
-ctx.S.tasks=[{id:'x1',project_id:'pC',commessa_fase_id:'f1',status:'completato',
-  completed_at:'2026-06-01T10:00:00Z',completed_by:'u2',
-  assignee_id:'u1',responsabile_id:'u2'}];
-const iC=ctx.impegnoStimato('pC');
-t('chi svolge prende il 70%',iC.u1&&iC.u1.giorni===0.7,iC.u1&&iC.u1.giorni);
-t('chi verifica prende il 30%',iC.u2&&iC.u2.giorni===0.3,iC.u2&&iC.u2.giorni);
-t('le due quote fanno una giornata sola',r2b(iC.u1.giorni+iC.u2.giorni)===1,
-  iC.u1.giorni+iC.u2.giorni);
-t('le ore seguono le quote',iC.u1.ore===5.6&&iC.u2.ore===2.4,[iC.u1.ore,iC.u2.ore]);
-t('il costo usa la tariffa di ciascuno',iC.u1.costo===280&&iC.u2.costo===240,
-  [iC.u1.costo,iC.u2.costo]);
-t('chi ha solo verificato compare nel dettaglio della fase',
-  !!(iC.u2.perFase&&iC.u2.perFase.f1),iC.u2&&Object.keys(iC.u2.perFase||{}));
-
-/* Chi ha spuntato non conta: conta a chi era assegnata */
-ctx.S.tasks=[{id:'x2',project_id:'pC',commessa_fase_id:'f1',status:'completato',
-  completed_at:'2026-06-01T10:00:00Z',completed_by:'u2',assignee_id:'u1'}];
-const iD=ctx.impegnoStimato('pC');
-t('senza verifica il lavoro è tutto dell assegnatario',iD.u1&&iD.u1.giorni===1,
-  iD.u1&&iD.u1.giorni);
-t('e chi l ha solo spuntata non prende nulla',!iD.u2,Object.keys(iD));
-
-/* Stessa persona nelle due caselle: non si divide con se stessa */
-ctx.S.tasks=[{id:'x3',project_id:'pC',commessa_fase_id:'f1',status:'completato',
-  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u1',responsabile_id:'u1'}];
-t('assegnatario e verificatore coincidenti valgono una giornata intera',
-  ctx.impegnoStimato('pC').u1.giorni===1,ctx.impegnoStimato('pC').u1.giorni);
-
-/* Verificare dieci attività non è tre giornate di lavoro */
-ctx.S.tasks=[1,2,3,4,5].map(n=>({id:'y'+n,project_id:'pC',commessa_fase_id:'f'+n,
-  status:'completato',completed_at:'2026-06-01T10:00:00Z',
-  assignee_id:'u1',responsabile_id:'u2'}));
-const iE=ctx.impegnoStimato('pC');
-t('cinque verifiche in un giorno restano il 30% di una giornata',iE.u2.giorni===0.3,
-  iE.u2.giorni);
-t('e chi le ha svolte resta al 70%',iE.u1.giorni===0.7,iE.u1.giorni);
-t('la quota si spartisce fra le fasi toccate',
-  r2b(Object.keys(iE.u1.perFase).reduce((a,k)=>a+iE.u1.perFase[k].giorni,0))===0.7,
-  iE.u1.perFase);
-
-/* Chi verifica gli altri ma lavora anche in proprio: la sua giornata resta una */
-ctx.S.tasks=[{id:'z1',project_id:'pC',commessa_fase_id:'f1',status:'completato',
-  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u1',responsabile_id:'u2'},
-  {id:'z2',project_id:'pC',commessa_fase_id:'f2',status:'completato',
-  completed_at:'2026-06-01T10:00:00Z',assignee_id:'u2'}];
-const iF=ctx.impegnoStimato('pC');
-t('chi verifica e lavora nello stesso giorno non supera la giornata',iF.u2.giorni===1,
-  iF.u2.giorni);
-ctx.S.tasks=[]; ctx.S.projects=[]; ctx.S.costi=[];
+ctx.S.time=[]; ctx.S.tasks=[]; ctx.S.fasi=[]; ctx.S.projects=[]; ctx.S.costi=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

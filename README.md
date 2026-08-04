@@ -34,6 +34,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 13. [`sql/014_chat_attivita.sql`](sql/014_chat_attivita.sql) — conversazione dentro ogni attività
 14. [`sql/015_blocco_autopromozione.sql`](sql/015_blocco_autopromozione.sql) — **falla di sicurezza: da eseguire**
 15. [`sql/016_progressivo_invio.sql`](sql/016_progressivo_invio.sql) — progressivo di invio persistente
+16. [`sql/017_ore_fase.sql`](sql/017_ore_fase.sql) — ore stimate ed effettive della fase
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -744,26 +745,52 @@ norma perché il riscontro sia immediato.
 
 ## Da dove vengono le ore
 
-Il costo di una commessa si può conoscere in due modi, e il gestionale li usa
-entrambi con una precedenza chiara.
+Tre fonti, in ordine di precedenza. Sopra c'è sempre il dato che qualcuno ha
+scritto a mano, sotto quello che si ricava da solo.
 
-**1. Le ore registrate.** Se qualcuno le registra, valgono quelle: è il dato
-vero e batte sempre la stima.
+**1. Le ore registrate** sulla commessa. Se qualcuno le registra valgono quelle:
+è il dato vero e batte tutto.
 
-**2. La stima dalle attività completate.** Nessuno registra le ore tutti i
+**2. Le ore effettive scritte sulla fase**, in *Avanzamento*. Chi le compila sta
+dicendo «questa fase è costata tanto», e il calcolo automatico si fa da parte per
+quella fase. È la via d'uscita quando il calcolo non somiglia a com'è andata
+davvero, e non costringe a registrare le ore una per una — che è esattamente ciò
+che nessuno fa.
+
+**3. Il calcolo automatico**, per tutto il resto. Nessuno registra le ore tutti i
 giorni, e se il conto dipendesse solo da quelle una commessa lavorata per mesi
-risulterebbe costata zero. Allora l'impegno si ricava da ciò che c'è già: chi ha
-spuntato un'attività e quando.
+risulterebbe costata zero.
 
-- ogni **giorno feriale** in cui una persona ha chiuso almeno un'attività vale
-  una giornata di lavoro, da 8 ore (configurabile in `STUDIO.oreGiorno`);
-- **sabato e domenica non contano**;
-- se quel giorno ha toccato **più commesse, la giornata si divide fra loro**.
+### Come lavora il calcolo automatico
 
-Quest'ultimo punto non è un dettaglio. Senza la divisione la stessa giornata
-verrebbe contata per intero su ogni commessa toccata, e sommando le commesse
-verrebbero fuori settimane da quaranta giorni: numeri che non reggono il
-confronto con la realtà e che renderebbero inutile l'intera pagina.
+L'unità di misura è la **fase**, non la singola spunta. Una fase ha un periodo:
+
+- dalla **data di inizio** — quella che si scrive in *Avanzamento* quando la fase
+  viene assegnata — al giorno in cui viene **chiusa**;
+- se è ancora aperta, il periodo arriva **a oggi**: il lavoro in corso sta
+  costando adesso;
+- si contano i **giorni feriali** di quel periodo, da 8 ore l'uno (configurabile
+  in `STUDIO.oreGiorno`). **Sabato e domenica non contano.**
+
+Contano solo le fasi **avviate o concluse**. Le date che il template scrive alla
+generazione sono un piano, non un consuntivo: se bastassero quelle, una commessa
+appena creata risulterebbe subito costata mesi di lavoro. Lo stato della fase si
+aggiorna da solo quando si spuntano le attività, quindi è un fatto e non una
+previsione.
+
+### A chi va quel tempo
+
+A chi ha in carico le attività della fase — **tutte**, non solo quelle già
+spuntate: chi ha in mano un elaborato ci sta lavorando anche prima di poterlo
+dichiarare finito. L'ordine è:
+
+1. l'**assegnatario** dell'attività;
+2. se l'attività non è assegnata, il **responsabile della fase**;
+3. solo in ultima istanza, chi l'ha **spuntata**.
+
+Il terzo gradino è l'ultimo apposta. Chi spunta è spesso soltanto chi passa la
+checklist — tipicamente sempre la stessa persona — ed è il motivo per cui prima
+il costo di tutte le commesse finiva addosso a lei sola.
 
 ### Chi lavora e chi verifica: 70/30
 
@@ -779,18 +806,41 @@ Le due quote sommate fanno **una giornata sola**: il costo della commessa non
 cresce, cambia solo a chi viene imputato. Se la casella della verifica è vuota,
 o è la stessa persona, l'attività vale per intero a chi l'ha portata avanti.
 
-Verificare dieci attività in un giorno resta il 30% di una giornata, non tre:
-di ogni giornata conta il **ruolo più impegnativo** avuto, non la somma delle
-spunte. E chi in un giorno lavora in proprio *e* verifica gli altri non supera
-mai la giornata intera.
-
 Le percentuali sono in `STUDIO.quotaLavoro` e `STUDIO.quotaVerifica`. La modale
 dell'attività dice, sotto le due caselle, come si dividerà il costo — così chi
 assegna vede subito l'effetto sulla Redditività.
 
+### Nessuno lavora più di una giornata al giorno
+
+È la regola che tiene in piedi tutti i numeri. In un giorno una persona può avere
+aperte più fasi, anche di commesse diverse: **la sua giornata si divide fra
+quelle**. Se i pesi sommano meno di uno ognuno prende il suo; se sommano più di
+uno si riducono in proporzione.
+
+Senza questa divisione la stessa giornata verrebbe contata per intero su ogni
+commessa, e sommando le commesse verrebbero fuori settimane da quaranta giorni:
+numeri che non reggono il confronto con la realtà e che renderebbero inutile
+l'intera pagina.
+
+### Le quattro caselle in Avanzamento
+
+Dentro ogni fase, sopra l'elenco delle attività:
+
+| Casella | A cosa serve |
+|---|---|
+| **Data inizio** | da qui parte il conteggio dei giorni feriali |
+| **Fine prevista** | la scadenza pianificata della fase |
+| **Ore stimate** | il preventivo interno. **Non entra nel costo**: serve a vedere lo scostamento fra quanto si era previsto e quanto è venuto fuori |
+| **Ore effettive** | quante ore la fase è costata davvero. Se c'è, **vince sul calcolo automatico** e si divide fra chi ha partecipato secondo gli stessi pesi 70/30 |
+
+Sotto le caselle il riquadro dice sempre da dove escono le ore — periodo, giorni
+feriali, totale — e **a chi vanno**, persona per persona. Se non va a nessuno lo
+dice in rosso: vuol dire che le attività non sono assegnate e la fase non ha un
+responsabile.
+
 La stima resta una stima, e l'interfaccia lo dice sempre: ogni riga indica se le
-ore sono **registrate** o **stimate**, e la pagina spiega in cima da dove
-vengono i numeri.
+ore sono **registrate**, **stimate** o **forzate sulla fase**, e la pagina spiega
+in cima da dove vengono i numeri.
 
 Nella scheda di ogni commessa c'è **Dove è andato il tempo**: giorni, ore e costo
 fase per fase, con chi ci ha lavorato e per quanti giorni. È lì che si vede se
@@ -812,8 +862,11 @@ ogni commessa:
 | − **Costo interno** | le ore di chi socio non è: stipendi e oneri |
 | = **Residuo** | quello che gli altri soci possono ancora fatturare |
 
-Un **socio** è un utente con ruolo *admin*: è lui che fattura allo studio invece
-di essere pagato in busta.
+**Socio = amministratore.** Tutti gli utenti con ruolo *admin* sono soci, senza
+eccezioni e senza un elenco a parte da tenere aggiornato: nominare un socio è una
+cosa sola — gli si dà il ruolo *amministratore* da **Utenti** — e da quel momento
+le sue ore finiscono automaticamente fra quelle da fatturare allo studio invece
+che nel costo del personale.
 
 Il residuo è **una cosa sola vista da due lati**, non due voci diverse: è
 capienza finché qualcuno la usa, ed è **guadagno extra dello studio** se a

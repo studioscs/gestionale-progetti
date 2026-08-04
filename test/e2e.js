@@ -1052,30 +1052,49 @@ function launchOpts(){
     must(/Capienza superata|più di quanto la commessa incassa/.test(h),'nessun avviso di sforamento');
   });
 
-  // --- SPUNTANDO LE ATTIVITÀ IL COSTO COMPARE ---
+  // --- LE ORE ESCONO DAL PERIODO DELLA FASE ---
   await t('una commessa lavorata ma senza ore registrate non è più a costo zero',async()=>{
     await p.evaluate(async()=>{
+      /* Una persona che non compare in nessun'altra commessa: così i suoi
+         numeri si possono verificare esattamente anche con un database pieno,
+         senza che il lavoro altrove le divida la giornata. */
+      await SB.from('profiles').insert({id:'u-tre',full_name:'Ester Bianchi',
+        email:'e@scs.it',role:'collaboratore',attivo:true});
+      await SB.from('profili_costi').insert({profile_id:'u-tre',costo_orario_lordo:40,
+        costo_orario_netto:24,valido_dal:'2026-01-01'});
       const {data}=await SB.from('projects').insert({name:'Lavorata senza ore',status:'attivo',
         amount:20000,start_date:'2026-06-01'}).select().single();
       await generaStruttura(data.id,'interno',['catasto','sicurezza'],'2026-06-01');
       await loadAll(true);
-      /* Come fa l'utente: spunta le attività. Il completamento porta con sé
-         data e autore, ed è da lì che si ricava l'impegno. */
-      const att=S.tasks.filter(x=>x.project_id===data.id).slice(0,6);
-      for(let i=0;i<att.length;i++){
-        const g=['2026-06-01','2026-06-02','2026-06-03'][i%3];
-        await SB.from('tasks').update({status:'completato',
-          completed_at:g+'T10:00:00Z',completed_by:'u-me'}).eq('id',att[i].id);
-      }
+      /* Come fa l'utente: apre la fase, dice quando è partita, e spunta le
+         attività. Il resto - stato della fase, data di chiusura - lo mette a
+         posto l'applicazione da sola. */
+      const f=fasiOf(data.id)[0];
+      await SB.from('commessa_fasi').update({data_inizio:'2026-06-01',
+        data_completamento:'2026-06-05',stato:'completata'}).eq('id',f.id);
+      const att=S.tasks.filter(x=>x.commessa_fase_id===f.id).slice(0,3);
+      for(let i=0;i<att.length;i++)
+        await SB.from('tasks').update({assignee_id:'u-tre',status:'completato',
+          completed_at:'2026-06-0'+(i+1)+'T10:00:00Z'}).eq('id',att[i].id);
       await loadAll(true);
-      window.__PID=data.id;
+      window.__PID=data.id; window.__FID=f.id;
     });
     await p.waitForTimeout(700);
     const c=await p.evaluate(()=>costoCommessa(window.__PID));
-    must(c.ore>0,'ore ancora a zero dopo aver spuntato le attività');
+    must(c.ore>0,'ore ancora a zero dopo aver aperto la fase');
     must(c.lordo>0,'costo ancora a zero: '+c.lordo);
     must(c.haStime,'non è dichiarato come stima');
-    must(c.perPersona['u-me'].giorni===3,'giorni contati: '+c.perPersona['u-me'].giorni);
+    /* lun 1 → ven 5 giugno: cinque giorni feriali */
+    must(c.perPersona['u-tre'].giorni===5,'giorni contati: '+c.perPersona['u-tre'].giorni);
+    must(c.perPersona['u-tre'].ore===40,'ore contate: '+c.perPersona['u-tre'].ore);
+  });
+  await t('una fase mai avviata non costa niente',async()=>{
+    const g=await p.evaluate(()=>{
+      const f=fasiOf(window.__PID).find(x=>x.id!==window.__FID&&x.stato==='non_avviata');
+      return {c:f?impegnoPerFase():null,
+              nessuna:!f||!Object.keys(impegnoPerFase()).some(u=>impegnoPerFase()[u][f.id])};
+    });
+    must(g.nessuna,'una fase non avviata ha prodotto ore');
   });
   await t('la Redditività mostra il costo e lo dichiara stimato',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; go('redditivita'); });
@@ -1084,78 +1103,141 @@ function launchOpts(){
     must(/Lavorata senza ore/.test(h),'commessa assente dalla Redditività');
     must(/stimat/i.test(h),'non dichiara che le ore sono stimate');
     must(/Da dove vengono le ore/.test(h),'manca la spiegazione del criterio');
+    must(/giorni feriali/.test(h),'non dice che si contano i giorni feriali della fase');
   });
   await t('il dettaglio dice dove è andato il tempo, fase per fase',async()=>{
     const h=await p.textContent('#page');
     must(/Dove è andato il tempo/.test(h),'manca il dettaglio per fase');
     const r=await p.evaluate(()=>redditivita(window.__PID));
-    const x=r.soci.concat(r.interni).find(y=>y.uid==='u-me');
+    const x=r.soci.concat(r.interni).find(y=>y.uid==='u-tre');
     must(x&&x.perFase&&Object.keys(x.perFase).length>=1,'nessuna fase nel dettaglio');
   });
   await t('sabato e domenica non vengono contati',async()=>{
-    const prima=await p.evaluate(()=>costoCommessa(window.__PID).perPersona['u-me'].giorni);
-    await p.evaluate(async()=>{
-      /* 2026-06-06 è sabato, 2026-06-07 domenica */
-      const att=S.tasks.filter(x=>x.project_id===window.__PID&&x.status!=='completato').slice(0,2);
-      for(let i=0;i<att.length;i++)
-        await SB.from('tasks').update({status:'completato',
-          completed_at:(i?'2026-06-07':'2026-06-06')+'T10:00:00Z',completed_by:'u-me'}).eq('id',att[i].id);
+    const g=await p.evaluate(async()=>{
+      const prima=costoCommessa(window.__PID).perPersona['u-tre'].giorni;
+      /* 6 e 7 giugno sono sabato e domenica: allungare fin lì non aggiunge nulla */
+      await SB.from('commessa_fasi').update({data_completamento:'2026-06-07'}).eq('id',window.__FID);
       await loadAll(true);
+      return {prima,dopo:costoCommessa(window.__PID).perPersona['u-tre'].giorni};
     });
-    await p.waitForTimeout(500);
-    const dopo=await p.evaluate(()=>costoCommessa(window.__PID).perPersona['u-me'].giorni);
-    must(prima===dopo,'un fine settimana è stato contato: '+prima+' → '+dopo);
+    must(g.prima===g.dopo,'un fine settimana è stato contato: '+g.prima+' → '+g.dopo);
   });
   await t('la stessa giornata su due commesse non si conta due volte',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Seconda dello stesso giorno',
+      const {data}=await SB.from('projects').insert({name:'Seconda dello stesso periodo',
         status:'attivo',amount:5000,start_date:'2026-06-01'}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-06-01');
       await loadAll(true);
-      const a=S.tasks.find(x=>x.project_id===data.id);
-      await SB.from('tasks').update({status:'completato',
-        completed_at:'2026-06-01T15:00:00Z',completed_by:'u-me'}).eq('id',a.id);
+      const f=fasiOf(data.id)[0];
+      await SB.from('commessa_fasi').update({data_inizio:'2026-06-01',
+        data_completamento:'2026-06-05',stato:'completata'}).eq('id',f.id);
+      const a=S.tasks.find(x=>x.commessa_fase_id===f.id);
+      await SB.from('tasks').update({assignee_id:'u-tre',status:'completato',
+        completed_at:'2026-06-03T15:00:00Z'}).eq('id',a.id);
       await loadAll(true);
-      return {uno:costoCommessa(window.__PID).perPersona['u-me'].giorni,
-              due:costoCommessa(data.id).perPersona['u-me'].giorni};
+      return {uno:costoCommessa(window.__PID).perPersona['u-tre'].giorni,
+              due:costoCommessa(data.id).perPersona['u-tre'].giorni};
     });
-    /* il lunedì ora è diviso fra le due commesse: 0,5 ciascuna */
-    must(g.due===0.5,'la seconda commessa non prende mezza giornata: '+g.due);
-    must(g.uno===2.5,'la prima non è scesa a 2,5 giorni: '+g.uno);
+    /* la stessa settimana su due commesse: 2,5 giorni ciascuna, non 5 e 5 */
+    must(g.due===2.5,'la seconda commessa non prende metà settimana: '+g.due);
+    must(g.uno===2.5,'la prima non è scesa a metà settimana: '+g.uno);
   });
   await t('registrando le ore vere, quelle sostituiscono la stima',async()=>{
     const r=await p.evaluate(async()=>{
-      await SB.from('time_entries').insert({project_id:window.__PID,operator_id:'u-me',
+      await SB.from('time_entries').insert({project_id:window.__PID,operator_id:'u-tre',
         entry_date:'2026-06-02',hours:4});
       await loadAll(true);
-      const c=costoCommessa(window.__PID);
-      return {ore:c.ore,stimato:c.perPersona['u-me'].stimato};
+      const x=costoCommessa(window.__PID).perPersona['u-tre'];
+      return {ore:x.ore,stimato:x.stimato};
     });
     must(r.ore===4,'le ore registrate non hanno sostituito la stima: '+r.ore);
     must(r.stimato===false,'ancora marcato come stimato');
+    await p.evaluate(async()=>{
+      await SB.from('time_entries').delete().eq('project_id',window.__PID);
+      await loadAll(true);
+    });
+  });
+
+  // --- ORE STIMATE E ORE EFFETTIVE DENTRO L'AVANZAMENTO ---
+  await t('l Avanzamento ha le caselle di pianificazione e ore della fase',async()=>{
+    await p.evaluate(()=>{ S.projId=window.__PID; S.tab='avanzamento'; go('project');
+                           S.openGrp.add(window.__FID); render(); });
+    await p.waitForTimeout(500);
+    const box='[data-piano="'+await p.evaluate(()=>window.__FID)+'"]';
+    must(await p.locator(box).count()===1,'riquadro della fase assente');
+    for(const k of ['di','df','os','oe'])
+      must(await p.locator(box+' [data-pf="'+k+'"]').count()===1,'manca la casella '+k);
+    const txt=await p.textContent(box);
+    must(/giorni feriali/.test(txt),'non spiega da dove escono le ore: '+txt);
+    must(/Ore attribuite a/.test(txt),'non dice a chi vanno le ore');
+  });
+  await t('le ore effettive scritte sulla fase sostituiscono il calcolo',async()=>{
+    const fid=await p.evaluate(()=>window.__FID);
+    const box='[data-piano="'+fid+'"]';
+    await p.fill(box+' [data-pf="oe"]','12');
+    await p.click('[data-psave="'+fid+'"]');
+    await p.waitForTimeout(600);
+    const g=await p.evaluate(()=>({f:oreFase(byId(S.fasi,window.__FID)),
+                                   c:costoCommessa(window.__PID)}));
+    must(g.f.ore===12,'le ore forzate non hanno sostituito il calcolo: '+g.f.ore);
+    must(g.f.forzato===true,'la fase non è marcata forzata');
+    must(g.c.haForzate,'la commessa non dichiara ore forzate');
+    must(g.c.perPersona['u-tre'].forzato===true,'la persona non è marcata forzata');
+  });
+  await t('le ore stimate restano un confronto e non entrano nel costo',async()=>{
+    const fid=await p.evaluate(()=>window.__FID);
+    const box='[data-piano="'+fid+'"]';
+    await p.fill(box+' [data-pf="oe"]','');
+    await p.click('[data-psave="'+fid+'"]');
+    await p.waitForTimeout(600);
+    const prima=await p.evaluate(()=>oreFase(byId(S.fasi,window.__FID)).ore);
+    await p.fill(box+' [data-pf="os"]','8');
+    await p.click('[data-psave="'+fid+'"]');
+    await p.waitForTimeout(600);
+    const g=await p.evaluate(()=>oreFase(byId(S.fasi,window.__FID)));
+    must(g.stimate===8,'le ore stimate non sono state salvate: '+g.stimate);
+    must(g.forzato===false,'le ore stimate sono state prese per forzature');
+    must(g.ore>0&&g.ore===prima,'le ore stimate hanno alterato il calcolo: '+prima+' → '+g.ore);
+    const txt=await p.textContent(box);
+    must(/sul previsto/.test(txt),'non mostra lo scostamento dal previsto: '+txt);
+  });
+  await t('la fine prevista prima dell inizio viene rifiutata',async()=>{
+    const fid=await p.evaluate(()=>window.__FID);
+    const box='[data-piano="'+fid+'"]';
+    await p.fill(box+' [data-pf="df"]','2026-05-01');
+    await p.click('[data-psave="'+fid+'"]');
+    await p.waitForTimeout(400);
+    const f=await p.evaluate(fid=>byId(S.fasi,fid).data_fine_prevista,fid);
+    must(f!=='2026-05-01','una fine prima dell inizio è stata salvata');
   });
 
   // --- CHI LAVORA E CHI VERIFICA ---
   await t('il lavoro va al 70% a chi lo svolge e al 30% a chi lo verifica',async()=>{
     const g=await p.evaluate(async()=>{
       const {data}=await SB.from('projects').insert({name:'Lavoro e verifica',status:'attivo',
-        amount:10000,start_date:'2026-06-08'}).select().single();
-      await generaStruttura(data.id,'interno',['catasto'],'2026-06-08');
+        amount:10000,start_date:'2026-07-06'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-07-06');
       await loadAll(true);
-      const a=S.tasks.find(x=>x.project_id===data.id);
-      /* 2026-06-08 è un lunedì: assegnata ad Anna, verificata da me */
-      await SB.from('tasks').update({status:'completato',completed_at:'2026-06-08T10:00:00Z',
+      const f=fasiOf(data.id)[0];
+      /* lun 6 → ven 10 luglio 2026: una settimana piena */
+      await SB.from('commessa_fasi').update({data_inizio:'2026-07-06',
+        data_completamento:'2026-07-10',stato:'completata'}).eq('id',f.id);
+      const a=S.tasks.find(x=>x.commessa_fase_id===f.id);
+      await SB.from('tasks').update({status:'completato',completed_at:'2026-07-10T10:00:00Z',
         completed_by:'u-me',assignee_id:'u-due',responsabile_id:'u-me'}).eq('id',a.id);
       await loadAll(true);
       const c=costoCommessa(data.id);
-      return {pid:data.id,
+      return {pid:data.id,pesi:partecipantiFase(f),
               lavora:c.perPersona['u-due']&&c.perPersona['u-due'].giorni,
               verifica:c.perPersona['u-me']&&c.perPersona['u-me'].giorni};
     });
-    must(g.lavora===0.7,'chi svolge non prende il 70%: '+g.lavora);
-    must(g.verifica===0.3,'chi verifica non prende il 30%: '+g.verifica);
-    must(Math.round((g.lavora+g.verifica)*100)===100,
-         'le due quote non fanno una giornata: '+(g.lavora+g.verifica));
+    /* Le quote esatte le verifica logic.js su dati isolati: qui interessa che la
+       regola arrivi fino in fondo con un database pieno di altre commesse. */
+    must(g.pesi['u-due']===0.7,'chi svolge non pesa il 70%: '+g.pesi['u-due']);
+    must(g.pesi['u-me']===0.3,'chi verifica non pesa il 30%: '+g.pesi['u-me']);
+    must(g.lavora>0,'chi ha svolto il lavoro non ha ricevuto giorni');
+    must(g.verifica>0,'chi ha verificato non ha ricevuto giorni');
+    must(g.lavora>g.verifica,'la verifica pesa quanto il lavoro: '+g.lavora+' / '+g.verifica);
     global.__PID2=g.pid;
   });
   await t('la Redditività attribuisce il costo a tutti e due',async()=>{
@@ -1170,8 +1252,46 @@ function launchOpts(){
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
   });
+  await t('ogni amministratore è socio e le sue ore vanno fra quelle da fatturare',async()=>{
+    const g=await p.evaluate(async()=>{
+      const prima=redditivita(window.__PID);
+      const era={soci:prima.soci.map(x=>x.uid),daSoci:prima.daSoci};
+      await SB.from('profiles').update({role:'admin'}).eq('id','u-tre');
+      await loadAll(true);
+      const dopo=redditivita(window.__PID);
+      const out={era,soci:dopo.soci.map(x=>x.uid),interni:dopo.interni.map(x=>x.uid),
+                 daSoci:dopo.daSoci,daInterni:dopo.daInterni};
+      await SB.from('profiles').update({role:'collaboratore'}).eq('id','u-tre');
+      await loadAll(true);
+      return out;
+    });
+    must(!g.era.soci.includes('u-tre'),'era già socio da collaboratore');
+    must(g.soci.includes('u-tre'),'un amministratore non è finito fra i soci: '+g.soci);
+    must(!g.interni.includes('u-tre'),'è rimasto anche nel costo interno: '+g.interni);
+    must(g.daSoci>g.era.daSoci,'le sue ore non sono passate alla quota dei soci');
+  });
+  await t('il costo non finisce tutto su chi passa la checklist',async()=>{
+    /* Attività non assegnate a nessuno, spuntate dall'amministratore: il lavoro
+       è di chi ha in carico la fase, non di chi ha messo la spunta. */
+    const chi=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Fase di Anna',status:'attivo',
+        amount:8000,start_date:'2026-07-06'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-07-06');
+      await loadAll(true);
+      const f=fasiOf(data.id)[0];
+      await SB.from('commessa_fasi').update({data_inizio:'2026-07-06',
+        data_completamento:'2026-07-10',stato:'completata',responsabile_id:'u-due'}).eq('id',f.id);
+      const a=S.tasks.find(x=>x.commessa_fase_id===f.id);
+      await SB.from('tasks').update({status:'completato',completed_at:'2026-07-10T10:00:00Z',
+        completed_by:'u-me'}).eq('id',a.id);
+      await loadAll(true);
+      return Object.keys(costoCommessa(data.id).perPersona);
+    });
+    must(chi.includes('u-due'),'il responsabile di fase non ha ricevuto il lavoro: '+chi);
+    must(!chi.includes('u-me'),'il costo è finito su chi ha solo spuntato: '+chi);
+  });
   await t('la modale dell attività dice come si dividerà il costo',async()=>{
-    await p.evaluate(pid=>{ const a=S.tasks.find(x=>x.project_id===pid); openTask(a.id); },
+    await p.evaluate(pid=>{ const a=S.tasks.find(x=>x.project_id===pid&&x.responsabile_id); openTask(a.id); },
                      global.__PID2);
     await p.waitForSelector('#m-task.show'); await p.waitForTimeout(400);
     const q=await p.textContent('#tt-quote');
@@ -1184,18 +1304,25 @@ function launchOpts(){
     must(/tutto a/.test(q2),'senza verifica non dichiara l attribuzione intera: '+q2);
     await p.evaluate(()=>closeM('m-task'));
   });
-  await t('spuntando un attività la Redditività si aggiorna subito',async()=>{
-    /* Il numero delle attività non cambia quando se ne spunta una: se la stima
-       fosse tenuta in memoria per numero, resterebbe ferma. */
+  await t('spuntando un attività la fase parte e il costo compare subito',async()=>{
+    /* Spuntando la prima attività di una fase, syncFase la porta su "in corso"
+       e da lì nasce il periodo su cui si calcola il costo. Il numero delle
+       attività però non cambia: se la stima fosse tenuta in memoria per numero,
+       la Redditività resterebbe ferma fino al ricaricamento della pagina. */
     const g=await p.evaluate(async pid=>{
       const prima=costoCommessa(pid).lordo;
-      const a=S.tasks.find(x=>x.project_id===pid&&x.status!=='completato');
-      await patchTask(a.id,{status:'completato',completed_at:'2026-06-09T10:00:00Z',
-        completed_by:'u-me',assignee_id:'u-me'},true);
-      return {prima,dopo:costoCommessa(pid).lordo};
+      const f=fasiOf(pid).find(x=>x.stato==='non_avviata'&&tasksFase(x.id).length
+                                  &&x.data_inizio&&x.data_inizio<=todayISO());
+      const a=tasksFase(f.id).find(x=>x.status!=='completato');
+      const oreP=oreFase(f).ore;
+      await patchTask(a.id,{status:'completato'},true);
+      return {prima,oreP,oreD:oreFase(byId(S.fasi,f.id)).ore,stato:byId(S.fasi,f.id).stato};
     },global.__PID2);
-    must(g.dopo>g.prima,'il costo non è cambiato dopo la spunta: '+g.prima+' → '+g.dopo);
+    must(g.stato==='in_corso','la fase non è partita da sola: '+g.stato);
+    must(g.oreP===0,'una fase non avviata aveva già delle ore: '+g.oreP);
+    must(g.oreD>0,'la fase appena partita non ha ore: '+g.oreD);
   });
+
 
   // --- CONVERSAZIONE DENTRO L'ATTIVITÀ ---
   await t('la sezione File Commesse non esiste più',async()=>{
