@@ -1171,6 +1171,22 @@ function launchOpts(){
     must(/giorni feriali/.test(txt),'non spiega da dove escono le ore: '+txt);
     must(/Ore attribuite a/.test(txt),'non dice a chi vanno le ore');
   });
+  await t('quando le ore sono meno dei giorni il riquadro dice perché',async()=>{
+    /* La domanda arrivata dall'uso: due giorni feriali che non fanno sedici ore.
+       La risposta - giornate divise con altre fasi aperte - deve stare lì. */
+    const g=await p.evaluate(()=>{
+      const f=byId(S.fasi,window.__FID);
+      const x=oreFase(f);
+      return {ore:x.ore,piene:x.piene,altre:x.altre};
+    });
+    must(g.piene>0,'le ore piene non sono calcolate');
+    must(g.ore<g.piene,'in questo scenario la fase non risulta condivisa');
+    must(g.altre>0,'non risulta nessuna fase concorrente');
+    const box='[data-piano="'+await p.evaluate(()=>window.__FID)+'"]';
+    const txt=await p.textContent(box);
+    must(/altre \d+ fasi/.test(txt),'non spiega la divisione della giornata: '+txt);
+    must(txt.includes(String(g.piene)),'non dice quanto varrebbe da sola: '+txt);
+  });
   await t('le ore effettive scritte sulla fase sostituiscono il calcolo',async()=>{
     const fid=await p.evaluate(()=>window.__FID);
     const box='[data-piano="'+fid+'"]';

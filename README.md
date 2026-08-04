@@ -822,6 +822,18 @@ commessa, e sommando le commesse verrebbero fuori settimane da quaranta giorni:
 numeri che non reggono il confronto con la realtà e che renderebbero inutile
 l'intera pagina.
 
+**È il motivo per cui due giorni feriali possono non fare sedici ore.** Se in
+quei due giorni chi ci lavora aveva aperte altre fasi, la giornata si è divisa
+fra tutte. Il riquadro in *Avanzamento* lo dice per esteso: quanto varrebbe la
+fase se fosse l'unica, con quante altre fasi ha condiviso le giornate, e che
+scrivere le **ore effettive** è la via per imporre il numero giusto.
+
+Da qui una cosa a cui fare attenzione: **una fase lasciata aperta continua ad
+accumulare giornate**, e le toglie a tutte le altre. Se una fase supera la sua
+fine prevista il riquadro lo segnala e invita a chiuderla. Le fasi di una
+commessa **archiviata o completata** smettono da sole di maturare: si fermano
+alla data di fine della commessa.
+
 ### Le quattro caselle in Avanzamento
 
 Dentro ogni fase, sopra l'elenco delle attività:

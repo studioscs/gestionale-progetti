@@ -934,7 +934,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.3';
+const VERSIONE = '2026.08.05.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2851,10 +2851,17 @@ function pianoFase(f) {
   else if (!x.periodo)
     riep = 'Nessun calcolo: la fase non risulta ancora avviata. Parte da sola quando '
          + 'si spunta la prima attività, oppure mettila tu su <b>In corso</b> dal ⚙.';
-  else
+  else {
     riep = 'Dal ' + fdate(x.periodo.inizio) + ' al ' + fdate(x.periodo.fine)
          + ' · <b>' + x.periodo.giorni + '</b> giorni feriali → <b>' + r2(x.ore) + ' h</b>'
          + (x.costo ? ' · ' + feuro(x.costo) : '');
+    /* La domanda che la riga sollevava e non risolveva: perche' due giorni non
+       fanno sedici ore. Perche' quelle giornate erano divise con altre fasi. */
+    if (x.altre > 0 && x.piene - x.ore > 0.05)
+      riep += '<div style="margin-top:3px">Meno di ' + r2(x.piene) + ' h perché in quei giorni '
+            + 'chi ci lavora aveva aperte <b>altre ' + x.altre + ' fasi</b>: la giornata si '
+            + 'divide fra quelle. Se non è andata così, scrivi le <b>ore effettive</b>.</div>';
+  }
 
   const chi = Object.keys(x.chi);
   const dettaglio = chi.length
@@ -2866,6 +2873,18 @@ function pianoFase(f) {
     ? (() => { const d = r2(x.ore - x.stimate);
         return '<span class="chip ' + (d > 0 ? 'chip-a' : 'chip-n') + '">'
              + (d > 0 ? '+' : '') + d + ' h sul previsto</span>'; })()
+    : '';
+
+  /* Una fase rimasta aperta oltre il previsto continua a maturare giornate e
+     le toglie a tutte le altre. E' la causa piu' comune di numeri che non
+     tornano, e da sola non si vede: va detta. */
+  const sforata = f.stato === 'in_corso' && f.data_fine_prevista
+                && f.data_fine_prevista < todayISO() && !x.forzato;
+  const avviso = sforata
+    ? '<div class="wbox" style="margin-top:8px;font-size:11.5px">Questa fase è aperta da '
+      + diffD(todayISO(), x.periodo ? x.periodo.inizio : f.data_fine_prevista) + ' giorni e la '
+      + 'fine prevista era il ' + fdate(f.data_fine_prevista) + '. Finché resta aperta continua ad '
+      + 'accumulare giornate, che vengono tolte alle altre fasi. Chiudila o scrivi le ore effettive.</div>'
     : '';
 
   return '<div class="pfase" data-piano="' + f.id + '">'
@@ -2887,6 +2906,7 @@ function pianoFase(f) {
       + (canW() ? '<button class="btn btn-xs btn-p" data-psave="' + f.id + '">Salva fase</button>' : '')
     + '</div>'
     + '<div class="pfase-r" style="margin-top:4px">Ore attribuite a: ' + dettaglio + '</div>'
+    + avviso
     + '</div>';
 }
 
@@ -5299,10 +5319,24 @@ function periodoFase(f) {
     .map(t => String(t.completed_at).split('T')[0]).sort();
   const inizio = f.data_inizio || chiuse[0] || null;
   if (!inizio || inizio > oggi) return null;
+
+  /* Una fase rimasta aperta continua a maturare giorni finche' non la si
+     chiude. Su una commessa archiviata o gia' completata quel lavoro non c'e'
+     piu': senza questo limite una fase dimenticata aperta si mangerebbe per
+     sempre le giornate di chi ci figura, sottraendole alle commesse vive. */
+  const proj = byId(S.projects, f.project_id) || {};
+  const ferma = !!proj.archiviato || proj.status === 'completato';
+  let ultimo = oggi;
+  if (ferma && f.stato !== 'completata') {
+    ultimo = proj.end_date || chiuse[chiuse.length - 1] || null;
+    if (!ultimo) return null;
+    if (ultimo > oggi) ultimo = oggi;
+  }
+
   let fine = f.stato === 'completata'
     ? (f.data_completamento || chiuse[chiuse.length - 1] || oggi)
-    : oggi;
-  if (fine > oggi) fine = oggi;      // il futuro non e' ancora costato niente
+    : ultimo;
+  if (fine > ultimo) fine = ultimo;   // il futuro non e' ancora costato niente
   if (fine < inizio) fine = inizio;
   return { inizio, fine, giorni: ferialiTra(inizio, fine) };
 }
@@ -5343,11 +5377,12 @@ function impegnoPerFase() {
   if (_IMP && _IMP_T === S.tasks && _IMP_F === S.fasi) return _IMP;
   const oreG = Number(STUDIO.oreGiorno || 8);
   const out = {};
-  const dai = (chi, pid, fase, giorni, ore, data, forzato) => {
+  const dai = (chi, pid, fase, giorni, ore, data, forzato, altre) => {
     const k = fase === '-' ? '-' + pid : fase;
     const p = out[chi] = out[chi] || {};
     const x = p[k] = p[k] || { pid, fase, giorni:0, ore:0, costo:0, netto:0,
-                               senzaCosto:false, forzato:false };
+                               senzaCosto:false, forzato:false, altre:0 };
+    if (altre) x.altre = Math.max(x.altre, altre);
     const c = costoDi(chi, data);
     x.giorni = r2(x.giorni + giorni);
     x.ore    = r2(x.ore + ore);
@@ -5411,7 +5446,7 @@ function impegnoPerFase() {
       const div = Math.max(1, attivi.reduce((a, b) => a + b.peso, 0));
       attivi.forEach(b => {
         const giorni = gg * b.peso / div;
-        dai(chi, b.pid, b.fase, giorni, giorni * oreG, dal, false);
+        dai(chi, b.pid, b.fase, giorni, giorni * oreG, dal, false, attivi.length - 1);
       });
     }
   });
@@ -5447,16 +5482,25 @@ function impegnoStimato(pid) {
 function oreFase(f) {
   const tutto = impegnoPerFase();
   const chi = {};
-  let ore = 0, costo = 0, giorni = 0, forzato = false;
+  let ore = 0, costo = 0, giorni = 0, forzato = false, altre = 0;
   Object.keys(tutto).forEach(u => {
     const x = tutto[u][f.id];
     if (!x) return;
     chi[u] = { ore:x.ore, giorni:x.giorni, costo:x.costo };
     ore = r2(ore + x.ore); costo = r2(costo + x.costo); giorni = r2(giorni + x.giorni);
     if (x.forzato) forzato = true;
+    altre = Math.max(altre, x.altre || 0);
   });
   const per = periodoFase(f);
-  return { ore, costo, giorni, forzato, chi, periodo: per,
+
+  /* Quanto varrebbe la fase se fosse l'unica cosa aperta di chi ci lavora.
+     Serve a spiegare la differenza: quando le due cifre non coincidono, non e'
+     un errore di conto - sono giornate divise con altre fasi. */
+  const pesi = partecipantiFase(f);
+  const somma = Object.keys(pesi).reduce((a, u) => a + pesi[u], 0);
+  const piene = per ? r2(per.giorni * Number(STUDIO.oreGiorno || 8) * Math.min(1, somma)) : 0;
+
+  return { ore, costo, giorni, forzato, chi, periodo: per, piene, altre,
            stimate: f.ore_stimate != null ? Number(f.ore_stimate) : null };
 }
 

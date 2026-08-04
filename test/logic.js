@@ -516,6 +516,51 @@ t('riporta il periodo',of_.periodo&&of_.periodo.giorni===5,of_.periodo);
 t('riporta chi ci ha lavorato',Object.keys(of_.chi).sort().join(',')==='u1,u2',Object.keys(of_.chi));
 t('le ore della fase sono la giornata intera',of_.ore===40,of_.ore);
 
+console.log('\n— PERCHE\' DUE GIORNI NON FANNO SEDICI ORE —');
+/* Il caso segnalato: una fase di due giorni che non vale 16 h. Non e' un errore
+   di conto: quelle giornate erano divise con un'altra fase aperta. */
+ctx.S.projects=[{id:'pA',name:'A',amount:20000},{id:'pB',name:'B',amount:9000}];
+ctx.S.fasi=[{id:'f1',project_id:'pA',nome:'Corta',ordine:0,stato:'completata',
+             data_inizio:'2026-06-01',data_completamento:'2026-06-02'},
+            {id:'f2',project_id:'pB',nome:'Lunga',ordine:0,stato:'completata',
+             data_inizio:'2026-06-01',data_completamento:'2026-06-05'}];
+ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'da_fare',assignee_id:'u1'},
+             {id:'t2',project_id:'pB',commessa_fase_id:'f2',status:'da_fare',assignee_id:'u1'}];
+const corta=ctx.oreFase(ctx.S.fasi[0]);
+t('il periodo resta di due giorni',corta.periodo.giorni===2,corta.periodo.giorni);
+t('da sola varrebbe sedici ore',corta.piene===16,corta.piene);
+t('divisa con l altra fase ne vale otto',corta.ore===8,corta.ore);
+t('e lo dichiara: una fase concorrente',corta.altre===1,corta.altre);
+t('senza concorrenza le ore piene si ottengono davvero',(()=>{
+  ctx.S.fasi=[ctx.S.fasi[0]]; ctx.S.tasks=[ctx.S.tasks[0]];
+  const x=ctx.oreFase(ctx.S.fasi[0]);
+  return x.ore===16&&x.piene===16&&x.altre===0;})(),null);
+
+console.log('\n— UNA COMMESSA FERMA NON MATURA PIU\' GIORNATE —');
+/* Una fase dimenticata aperta su una commessa chiusa continuava a mangiarsi le
+   giornate di chi ci figurava, sottraendole alle commesse vive. */
+const apertaDaSempre={id:'f9',project_id:'pZ',nome:'Dimenticata',ordine:0,
+  stato:'in_corso',data_inizio:'2026-01-05'};
+ctx.S.fasi=[apertaDaSempre];
+ctx.S.tasks=[{id:'t9',project_id:'pZ',commessa_fase_id:'f9',status:'da_fare',assignee_id:'u1'}];
+ctx.S.projects=[{id:'pZ',name:'Z',amount:1000,status:'attivo',end_date:'2026-02-27'}];
+const viva=ctx.periodoFase(apertaDaSempre);
+t('su una commessa attiva la fase aperta arriva a oggi',viva.fine===ctx.todayISO(),viva.fine);
+ctx.S.projects=[{id:'pZ',name:'Z',amount:1000,status:'completato',end_date:'2026-02-27'}];
+ctx.S.fasi=[apertaDaSempre];
+const chiusa=ctx.periodoFase(apertaDaSempre);
+t('su una commessa completata si ferma alla fine della commessa',
+  chiusa&&chiusa.fine==='2026-02-27',chiusa);
+ctx.S.projects=[{id:'pZ',name:'Z',amount:1000,status:'attivo',archiviato:true,end_date:'2026-02-27'}];
+ctx.S.fasi=[apertaDaSempre];
+t('su una commessa archiviata si ferma anche lei',
+  (()=>{const p=ctx.periodoFase(apertaDaSempre);return p&&p.fine==='2026-02-27';})(),null);
+ctx.S.projects=[{id:'pZ',name:'Z',amount:1000,status:'completato'}];
+ctx.S.fasi=[apertaDaSempre];
+t('senza una data a cui fermarsi non matura niente',
+  ctx.periodoFase(apertaDaSempre)===null,ctx.periodoFase(apertaDaSempre));
+ctx.S.projects=[{id:'pA',name:'A',amount:20000},{id:'pB',name:'B',amount:9000}];
+
 console.log('\n— IL COSTO COMPARE ANCHE SENZA ORE REGISTRATE —');
 ctx.S.fasi=[FASE({})];
 ctx.S.tasks=[{id:'t1',project_id:'pA',commessa_fase_id:'f1',status:'completato',
