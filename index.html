@@ -902,13 +902,15 @@ const STUDIO = {
   pagamento     : { condizioni:'TP02', modalita:'MP05', giorni:30,
                     iban      : 'IT31D0306969132100000006546',   // lavori ordinari
                     ibanSisma : 'IT69Z0306969132100000047119' },  // ricostruzione post-sisma
-  progressivo   : 1              // contatore locale del nome file
+  /* Il progressivo del nome file lo assegna il database (migrazione 016):
+     qui resta solo il ripiego per l'anteprima di una fattura mai generata. */
+  progressivo   : 1,
 };
 
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.04.2';
+const VERSIONE = '2026.08.04.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1065,7 +1067,8 @@ const MIGRAZIONI = {
   '012_dl_sal_varianti':  ['importo_lavori','compenso_dl','contenuto','sal_id',
                            'commessa_sal','commessa_varianti'],
   '013_ordine_pratiche':  ['ordine'],
-  '014_chat_attivita':    ['task_messaggi','testo']
+  '014_chat_attivita':    ['task_messaggi','testo'],
+  '016_progressivo_invio':['progressivo_invio']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -3053,6 +3056,8 @@ function datiFattura(f) {
   return {
     projectId : p.id,
     fattId    : f.id,
+    /* Assegnato dal database alla prima generazione; nullo finche' non si genera */
+    progressivo: f.progressivo_invio || null,
 
     /* Trasmissione */
     pa          : pa,
@@ -3195,8 +3200,12 @@ function xmlDaDati(d) {
     + (pr ? el2('Provincia', String(pr).toUpperCase()) : '')
     + '<Nazione>IT</Nazione>';
 
-  /* Numerazione del file: progressivo alfanumerico su base 36 */
-  const prog = (STUDIO.progressivo || 1).toString(36).toUpperCase().padStart(5, '0').slice(-5);
+  /* Numerazione del file. Il progressivo lo assegna il database e resta scritto
+     sulla fattura: nome file e ProgressivoInvio devono essere irripetibili per
+     chi trasmette, e un contatore tenuto in memoria dal browser si azzera a ogni
+     ricaricamento, facendo uscire due fatture diverse con lo stesso nome. */
+  const prog = String(d.progressivo || STUDIO.progressivo || 1)
+    .replace(/\D/g, '').padStart(5, '0').slice(-5);
 
   const head =
       '<FatturaElettronicaHeader>'
@@ -3950,6 +3959,10 @@ function aggiornaTotali() {
     + (c.ritenuta ? riga('Ritenuta d’acconto', -c.ritenuta) : '')
     + riga('Totale documento', c.totale, true)
     + riga(d.split ? 'Da incassare (IVA versata dall’ente)' : 'Da incassare', c.netto, true)
+    + '<div class="hint" style="margin-top:8px">Nome del file: <code>IT' + esc(STUDIO.piva) + '_'
+      + (d.progressivo ? String(d.progressivo).padStart(5, '0').slice(-5)
+         : '<i>assegnato alla generazione</i>') + '.xml</code>'
+      + (d.progressivo ? ' — già generato in precedenza, verrà riusato lo stesso numero.' : '') + '</div>'
     + (d.split
         ? '<div class="hint" style="margin-top:8px">In scissione dei pagamenti l’ente versa '
           + feuro(c.iva) + ' di IVA direttamente all’erario: a noi arriva ' + feuro(c.netto) + '.</div>' : '')
@@ -3969,10 +3982,17 @@ function revCambia(k, v) {
 }
 
 async function generaDaRevisione() {
+  /* Il progressivo di invio lo assegna il database, una volta sola per fattura:
+     rigenerando lo stesso documento si riusa il suo numero, una fattura nuova ne
+     prende uno mai usato. E' quello che rende il nome file irripetibile. */
+  if (!REV.progressivo) {
+    const { data, error } = await SB.rpc('assegna_progressivo', { fattura: REV.fattId });
+    if (error) return sbErr(error, 'progressivo di invio');
+    REV.progressivo = data;
+  }
   const r = xmlDaDati(REV);
   if (r.errori) return alert('Non posso generare l’XML:\n\n• ' + r.errori.join('\n• '));
   scaricaFile(r.nome, r.xml);
-  STUDIO.progressivo = (STUDIO.progressivo || 1) + 1;
 
   /* Numero e data digitati in revisione tornano sullo scaglione: e' quello che
      poi si rilegge nell'elenco e nella pagina "Da fatturare". */

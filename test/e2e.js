@@ -869,6 +869,72 @@ function launchOpts(){
     must(f.xml_generato_at,'generazione non registrata');
   });
 
+  // --- PROGRESSIVO DI INVIO: IL NOME FILE NON SI RIPETE ---
+  await t('due fatture diverse producono nomi file diversi',async()=>{
+    const nomi=await p.evaluate(async()=>{
+      const pid=__DB.projects.find(x=>!x.archiviato).id;
+      /* I dati vanno scritti nel database, non sull'oggetto in memoria: il
+         primo loadAll() successivo lo rimpiazzerebbe e i test seguenti
+         troverebbero la commessa senza committente. */
+      await SB.from('projects').update({client:'Cliente Progressivi',cliente_piva:'02345670541',
+        cliente_indirizzo:'Via A 1',cliente_cap:'62019',cliente_comune:'Recanati',
+        cliente_prov:'MC',cliente_sdi:'ABCDEF1',ente_pubblico:false}).eq('id',pid);
+      await loadAll(true);
+      const out=[];
+      for(const d of ['Prima fattura','Seconda fattura']){
+        const {data}=await SB.from('commessa_fatture').insert({project_id:pid,
+          descrizione:d,imponibile:1000,stato:'pronta',ordine:90}).select().single();
+        await loadAll(true);
+        openRevisione(data.id);
+        REV.numero='2026/'+d.length; REV.data='2026-08-05';
+        await generaDaRevisione();
+        const f=__DB.commessa_fatture.find(x=>x.id===data.id);
+        out.push(f.progressivo_invio);
+      }
+      return out;
+    });
+    must(nomi[0]&&nomi[1],'progressivo non assegnato: '+JSON.stringify(nomi));
+    must(nomi[0]!==nomi[1],'due fatture con lo stesso progressivo: '+nomi.join(' e '));
+    await p.waitForTimeout(500);
+  });
+  await t('rigenerando la stessa fattura il numero non cambia',async()=>{
+    const r=await p.evaluate(async()=>{
+      const f=__DB.commessa_fatture.find(x=>x.descrizione==='Prima fattura');
+      const prima=f.progressivo_invio;
+      openRevisione(f.id);
+      await generaDaRevisione();
+      const dopo=__DB.commessa_fatture.find(x=>x.id===f.id).progressivo_invio;
+      return {prima,dopo};
+    });
+    must(r.prima===r.dopo,'il progressivo è cambiato: '+r.prima+' → '+r.dopo);
+    await p.waitForTimeout(500);
+  });
+  await t('il progressivo finisce nel nome file e nell XML',async()=>{
+    const v=await p.evaluate(()=>{
+      const f=__DB.commessa_fatture.find(x=>x.descrizione==='Prima fattura');
+      const d=datiFattura(f);
+      const r=xmlDaDati(d);
+      if(r.errori) return {prog:f.progressivo_invio,errori:r.errori};
+      return {prog:f.progressivo_invio,nome:r.nome,
+              inXml:(r.xml.match(/<ProgressivoInvio>([^<]*)/)||[])[1]};
+    });
+    must(!v.errori,'XML non generabile: '+(v.errori||[]).join(' · '));
+    const atteso=String(v.prog).padStart(5,'0').slice(-5);
+    must(v.nome.indexOf(atteso)>=0,'nome file senza il progressivo: '+v.nome);
+    must(v.inXml===atteso,'ProgressivoInvio nell XML: '+v.inXml+' invece di '+atteso);
+  });
+  await t('la revisione annuncia il nome del file',async()=>{
+    await p.evaluate(()=>{
+      const f=__DB.commessa_fatture.find(x=>x.descrizione==='Prima fattura');
+      openRevisione(f.id);
+    });
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#rev-tot');
+    must(/Nome del file/.test(h),'il nome file non è mostrato');
+    must(/riusato lo stesso numero/.test(h),'non avverte che il numero verrà riusato');
+    await p.evaluate(()=>closeM('m-rev'));
+  });
+
   // --- IL PROPRIO COSTO ORARIO ---
   await t('l amministratore può aprire la propria scheda',async()=>{
     await p.click('.sn[data-page="users"]'); await p.waitForTimeout(500);

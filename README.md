@@ -33,6 +33,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 12. [`sql/013_ordine_pratiche.sql`](sql/013_ordine_pratiche.sql) — ordine di esecuzione delle pratiche
 13. [`sql/014_chat_attivita.sql`](sql/014_chat_attivita.sql) — conversazione dentro ogni attività
 14. [`sql/015_blocco_autopromozione.sql`](sql/015_blocco_autopromozione.sql) — **falla di sicurezza: da eseguire**
+15. [`sql/016_progressivo_invio.sql`](sql/016_progressivo_invio.sql) — progressivo di invio persistente
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -441,7 +442,7 @@ cd test
 npm install          # solo playwright
 node audit.js        # audit statico: funzioni, id, stato, migrazioni, cataloghi
 node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 191 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 195 test end-to-end in Chromium su un mock di Supabase
 node walk.js         # giro completo dell'interfaccia a caccia di errori a runtime
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
@@ -521,6 +522,41 @@ Entrate** dalla suite `test/fattura.js` in sei varianti: con contributo cassa,
 con ritenuta d'acconto, con PEC al posto del codice destinatario, con l'IBAN nei
 dati di pagamento, verso la Pubblica Amministrazione con CIG/CUP e split payment,
 e con le modifiche fatte a mano in revisione.
+
+### Il gestionale non trasmette allo SdI
+
+Il pulsante 📥 **scarica un file**, e finisce lì. Non c'è nessuna chiamata di
+rete verso l'esterno: la trasmissione al Sistema di Interscambio la fa
+FatturaElettronica APP dopo l'importazione, ed è lei a gestire firma, ricevute e
+conservazione sostitutiva.
+
+È una scelta, non un pezzo mancante: trasmettere allo SdI richiede credenziali, e
+questo gestionale è un unico file HTML pubblico con la chiave Supabase in chiaro
+dentro. Metterci credenziali fiscali significherebbe regalarle a chiunque apra il
+sorgente.
+
+> Alla generazione dell'XML lo scaglione passa a **emessa**. In quel momento hai
+> però soltanto scaricato un file: se lo SdI dovesse scartare la fattura, il
+> gestionale non lo verrebbe a sapere. Qui "emessa" significa *XML prodotto e
+> passato al software di fatturazione*, non *accettata dallo SdI*.
+
+### Il nome del file non si ripete mai
+
+Nome file e `ProgressivoInvio` devono essere **unici per chi trasmette**: è così
+che lo SdI riconosce un invio già fatto, e i software di fatturazione fanno lo
+stesso in importazione.
+
+Il progressivo lo assegna il database (migrazione 016), una volta sola per
+fattura, e resta scritto sulla riga. Rigenerando l'XML dello stesso documento si
+riusa il suo numero — è la stessa fattura — mentre una fattura nuova ne prende
+uno mai usato. La finestra di revisione mostra il nome del file prima di
+generarlo.
+
+> Prima della 016 il progressivo era una variabile tenuta in memoria dal browser,
+> **azzerata a ogni ricaricamento della pagina**. Due fatture generate in due
+> momenti diversi uscivano quindi con lo stesso nome file: il software di
+> fatturazione le leggeva come un documento già importato e non proponeva più
+> l'invio. Se hai file già prodotti con quel difetto, rigenerali dopo la 016.
 
 ### Prima di generare: la finestra di revisione
 

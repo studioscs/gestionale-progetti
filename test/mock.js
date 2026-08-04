@@ -126,8 +126,24 @@
     };
     return api;
   }
+  /* Funzione della migrazione 016: assegna il progressivo di invio una volta
+     sola per fattura, come fa il database. */
+  let seqProg=1000;
+  function assegnaProgressivo(fid){
+    const f=DB.commessa_fatture.find(x=>x.id===fid);
+    if(!f) return null;
+    if(f.progressivo_invio!=null) return f.progressivo_invio;
+    f.progressivo_invio=seqProg++;
+    return f.progressivo_invio;
+  }
+
   window.supabase={createClient:()=>({
     from:t=>Q(t),
+    rpc:(nome,args)=>{
+      if(nome==='assegna_progressivo')
+        return Promise.resolve({data:assegnaProgressivo(args&&args.fattura),error:null});
+      return Promise.resolve({data:null,error:{message:'rpc sconosciuta: '+nome}});
+    },
     auth:{
       getSession:()=>Promise.resolve({data:{session:window.__NOSESSION?null:{user:{id:UID,email:'f@scs.it'}}}}),
       getUser:()=>Promise.resolve({data:{user:{id:UID,email:'f@scs.it'}}}),
