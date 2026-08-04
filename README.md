@@ -442,7 +442,7 @@ cd test
 npm install          # solo playwright
 node audit.js        # audit statico: funzioni, id, stato, migrazioni, cataloghi
 node logic.js        # 194 asserzioni su date, template, pianificazione, avanzamento, costi
-node e2e.js          # 195 test end-to-end in Chromium su un mock di Supabase
+node e2e.js          # 201 test end-to-end in Chromium su un mock di Supabase
 node walk.js         # giro completo dell'interfaccia a caccia di errori a runtime
 node password.js     # 11 test sul recupero password
 node fattura.js      # 87 controlli su FatturaPA privati e PA, validati contro l'XSD ufficiale
@@ -741,6 +741,37 @@ agibilità e per un'altra ventina di voci.
 
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
+
+## Da dove vengono le ore
+
+Il costo di una commessa si può conoscere in due modi, e il gestionale li usa
+entrambi con una precedenza chiara.
+
+**1. Le ore registrate.** Se qualcuno le registra, valgono quelle: è il dato
+vero e batte sempre la stima.
+
+**2. La stima dalle attività completate.** Nessuno registra le ore tutti i
+giorni, e se il conto dipendesse solo da quelle una commessa lavorata per mesi
+risulterebbe costata zero. Allora l'impegno si ricava da ciò che c'è già: chi ha
+spuntato un'attività e quando.
+
+- ogni **giorno feriale** in cui una persona ha chiuso almeno un'attività vale
+  una giornata di lavoro, da 8 ore (configurabile in `STUDIO.oreGiorno`);
+- **sabato e domenica non contano**;
+- se quel giorno ha toccato **più commesse, la giornata si divide fra loro**.
+
+Quest'ultimo punto non è un dettaglio. Senza la divisione la stessa giornata
+verrebbe contata per intero su ogni commessa toccata, e sommando le commesse
+verrebbero fuori settimane da quaranta giorni: numeri che non reggono il
+confronto con la realtà e che renderebbero inutile l'intera pagina.
+
+La stima resta una stima, e l'interfaccia lo dice sempre: ogni riga indica se le
+ore sono **registrate** o **stimate**, e la pagina spiega in cima da dove
+vengono i numeri.
+
+Nella scheda di ogni commessa c'è **Dove è andato il tempo**: giorni, ore e costo
+fase per fase, con chi ci ha lavorato e per quanti giorni. È lì che si vede se
+una fase è costata più di quanto valeva.
 
 ## Redditività: chi fattura allo studio e cosa resta
 

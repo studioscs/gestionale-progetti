@@ -10,9 +10,10 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,impegnoStimato,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
+const r2b=n=>Math.round(n*100)/100;
 const t=(name,cond,got)=>{ if(!cond){fail++;console.log('  ✗',name,'→',JSON.stringify(got));} else console.log('  ✓',name); };
 
 console.log('\n— DATE —');
@@ -386,6 +387,54 @@ t('senza condizioni restano solo le pratiche di base',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k).sort().join(',')
     ==='accesso_atti,cdu,titolo_edilizio',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
+
+console.log('\n— IMPEGNO STIMATO DALLE ATTIVITÀ COMPLETATE —');
+/* 2026-06-01 è un lunedì; 06 e 07 sono sabato e domenica */
+t('lunedì è feriale',ctx.feriale('2026-06-01')===true,null);
+t('venerdì è feriale',ctx.feriale('2026-06-05')===true,null);
+t('sabato non conta',ctx.feriale('2026-06-06')===false,null);
+t('domenica non conta',ctx.feriale('2026-06-07')===false,null);
+
+ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,
+  valido_dal:'2026-01-01',valido_al:null}];
+ctx.S.projects=[{id:'pA',name:'A',amount:20000},{id:'pB',name:'B',amount:9000}];
+ctx.S.time=[];
+const T=(id,pid,fase,giorno)=>({id,project_id:pid,commessa_fase_id:fase,status:'completato',
+  completed_at:giorno+'T10:00:00Z',completed_by:'u1'});
+/* lun 1: solo pA · mar 2: pA e pB · sab 6: solo pA (non deve contare) */
+ctx.S.tasks=[T('t1','pA','f1','2026-06-01'),T('t2','pA','f1','2026-06-02'),
+             T('t3','pB','f9','2026-06-02'),T('t4','pA','f2','2026-06-06')];
+
+const iA=ctx.impegnoStimato('pA');
+t('la persona compare nella stima',!!iA.u1,Object.keys(iA));
+/* lunedì intero + martedì diviso a metà = 1,5 giorni. Sabato escluso. */
+t('giorni contati con il sabato escluso e la giornata divisa',iA.u1.giorni===1.5,iA.u1.giorni);
+t('ore coerenti con 8 ore al giorno',iA.u1.ore===12,iA.u1.ore);
+t('costo = ore per tariffa',iA.u1.costo===600,iA.u1.costo);
+
+const iB=ctx.impegnoStimato('pB');
+t('l altra commessa prende la mezza giornata',iB.u1.giorni===0.5,iB.u1.giorni);
+t('la stessa giornata non è contata due volte per intero',
+  r2b(iA.u1.giorni+iB.u1.giorni)===2, iA.u1.giorni+iB.u1.giorni);
+
+t('il dettaglio per fase c è',!!iA.u1.perFase.f1,Object.keys(iA.u1.perFase));
+t('la fase del sabato non compare',!iA.u1.perFase.f2,Object.keys(iA.u1.perFase));
+
+console.log('\n— IL COSTO COMPARE ANCHE SENZA ORE REGISTRATE —');
+const stimA=ctx.costoCommessa('pA');
+t('la commessa non risulta più a costo zero',stimA.lordo===600,stimA.lordo);
+t('è dichiarato come stima',stimA.haStime===true,stimA.haStime);
+t('la persona è marcata stimata',stimA.perPersona.u1.stimato===true,null);
+t('il margine tiene conto del costo stimato',stimA.margine===19400,stimA.margine);
+t('il periodo di lavoro non è più vuoto',stimA.prima==='2026-06-01'&&stimA.ultima==='2026-06-06',
+  [stimA.prima,stimA.ultima]);
+
+/* Le ore registrate restano il dato buono e non si sommano alla stima */
+ctx.S.time=[{project_id:'pA',operator_id:'u1',entry_date:'2026-06-01',hours:3}];
+const veroA=ctx.costoCommessa('pA');
+t('le ore registrate vincono sulla stima',veroA.ore===3&&veroA.lordo===150,[veroA.ore,veroA.lordo]);
+t('e non vengono marcate come stimate',veroA.perPersona.u1.stimato===false,null);
+ctx.S.time=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

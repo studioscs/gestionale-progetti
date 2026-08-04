@@ -905,12 +905,15 @@ const STUDIO = {
   /* Il progressivo del nome file lo assegna il database (migrazione 016):
      qui resta solo il ripiego per l'anteprima di una fattura mai generata. */
   progressivo   : 1,
+  /* Ore di una giornata piena. Serve a stimare l'impegno dalle attivita'
+     completate quando nessuno ha registrato le ore. */
+  oreGiorno     : 8,
 };
 
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.04.3';
+const VERSIONE = '2026.08.05.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5077,6 +5080,98 @@ function costoDi(uid, data) {
 }
 const costoAttuale = uid => S.costi.find(c => c.profile_id === uid && !c.valido_al) || null;
 
+/* ===========================================================================
+   IMPEGNO STIMATO DALLE ATTIVITÀ COMPLETATE
+
+   Le ore registrate a mano sono il dato vero, ma nessuno le registra sempre: se
+   il conto dipendesse solo da quelle, una commessa lavorata per mesi
+   risulterebbe costata zero. Da qui una stima ricavata da cio' che gia' c'e':
+   chi ha spuntato un'attivita' e quando.
+
+   COME SI CONTA UN GIORNO
+   Un giorno lavorativo in cui una persona ha chiuso almeno un'attivita' vale
+   una giornata di lavoro. Sabato e domenica non si contano.
+
+   E SE QUEL GIORNO HA TOCCATO PIÙ COMMESSE?
+   La giornata si divide fra le commesse toccate. Senza questa divisione la
+   stessa giornata verrebbe contata per intero su ognuna, e sommando le commesse
+   verrebbero fuori settimane da quaranta giorni: numeri che non reggono il
+   confronto con la realta' e che renderebbero inutile l'intera pagina.
+
+   La stima resta una stima, e l'interfaccia lo dice sempre. Dove ci sono ore
+   registrate, quelle vincono.
+   =========================================================================== */
+
+/* Giorno feriale: sabato e domenica non contano */
+function feriale(iso) {
+  const d = pd(iso); if (!d) return false;
+  const g = d.getDay();
+  return g !== 0 && g !== 6;
+}
+
+/* Mappa persona → giorno → commesse toccate, su TUTTE le commesse: serve a
+   dividere la giornata, e per farlo bisogna guardare fuori da questa commessa. */
+let _GIORNI = null, _GIORNI_N = -1;
+function giorniPersona() {
+  /* Ricalcolata solo quando cambia il numero di attività: attraversarle tutte a
+     ogni ridisegno della pagina sarebbe sprecato. */
+  if (_GIORNI && _GIORNI_N === S.tasks.length) return _GIORNI;
+  const m = {};
+  S.tasks.forEach(t => {
+    if (t.status !== 'completato' || !t.completed_at) return;
+    const chi = t.completed_by || t.assignee_id;
+    if (!chi) return;
+    const g = String(t.completed_at).split('T')[0];
+    if (!feriale(g)) return;
+    const perChi = m[chi] = m[chi] || {};
+    const perG = perChi[g] = perChi[g] || {};
+    const perP = perG[t.project_id] = perG[t.project_id] || { fasi: {} };
+    const f = t.commessa_fase_id || '-';
+    perP.fasi[f] = (perP.fasi[f] || 0) + 1;
+  });
+  _GIORNI = m; _GIORNI_N = S.tasks.length;
+  return m;
+}
+
+/* Impegno stimato su una commessa: giorni, ore e costo, per persona e per fase */
+function impegnoStimato(pid) {
+  const mappa = giorniPersona();
+  const oreG = Number(STUDIO.oreGiorno || 8);
+  const out = {};
+
+  Object.keys(mappa).forEach(chi => {
+    Object.keys(mappa[chi]).forEach(giorno => {
+      const commesseDelGiorno = Object.keys(mappa[chi][giorno]);
+      if (commesseDelGiorno.indexOf(pid) < 0) return;
+
+      /* La giornata si spartisce fra le commesse toccate in quel giorno */
+      const quotaGiorno = 1 / commesseDelGiorno.length;
+      const ore = r2(oreG * quotaGiorno);
+      const c = costoDi(chi, giorno);
+      const costo = r2(ore * Number((c && c.costo_orario_lordo) || 0));
+      const netto = r2(ore * Number((c && c.costo_orario_netto) || 0));
+
+      const p = out[chi] = out[chi] || { giorni:0, ore:0, costo:0, netto:0, perFase:{}, senzaCosto:false };
+      p.giorni = r2(p.giorni + quotaGiorno);
+      p.ore   = r2(p.ore + ore);
+      p.costo = r2(p.costo + costo);
+      p.netto = r2(p.netto + netto);
+      if (!c) p.senzaCosto = true;
+
+      /* Dentro la commessa, la giornata si divide fra le fasi toccate */
+      const fasi = mappa[chi][giorno][pid].fasi;
+      const chiavi = Object.keys(fasi);
+      chiavi.forEach(f => {
+        p.perFase[f] = p.perFase[f] || { giorni:0, ore:0, costo:0 };
+        p.perFase[f].giorni = r2(p.perFase[f].giorni + quotaGiorno / chiavi.length);
+        p.perFase[f].ore    = r2(p.perFase[f].ore + ore / chiavi.length);
+        p.perFase[f].costo  = r2(p.perFase[f].costo + costo / chiavi.length);
+      });
+    });
+  });
+  return out;
+}
+
 /* Valorizzazione delle ore di una commessa, con lo stesso criterio del database */
 function costoCommessa(pid) {
   const ore = S.time.filter(e => e.project_id === pid);
@@ -5088,17 +5183,38 @@ function costoCommessa(pid) {
     const l = ore_ * Number((c && c.costo_orario_lordo) || 0);
     const n = ore_ * Number((c && c.costo_orario_netto) || 0);
     h += ore_; lordo += l; netto += n;
-    const p = perPersona[e.operator_id] = perPersona[e.operator_id] || { ore:0, lordo:0, netto:0, senzaCosto:false };
+    const p = perPersona[e.operator_id] = perPersona[e.operator_id] || { ore:0, lordo:0, netto:0, senzaCosto:false, stimato:false };
     p.ore += ore_; p.lordo += l; p.netto += n;
     if (!c) p.senzaCosto = true;
   });
-  const date = ore.map(e => e.entry_date).filter(Boolean).sort();
+
+  /* Chi non ha registrato ore non lavora gratis: per lui si usa la stima
+     ricavata dalle attivita' che ha completato. Chi le ha registrate tiene le
+     sue, perche' il dato vero batte sempre la stima. */
+  const stima = impegnoStimato(pid);
+  Object.keys(stima).forEach(chi => {
+    if (perPersona[chi]) return;
+    const x = stima[chi];
+    h += x.ore; lordo += x.costo; netto += x.netto;
+    perPersona[chi] = { ore:x.ore, lordo:x.costo, netto:x.netto,
+                        senzaCosto:x.senzaCosto, stimato:true,
+                        giorni:x.giorni, perFase:x.perFase };
+  });
+
+  /* Il periodo di lavoro tiene conto anche delle attivita' completate: se le ore
+     non sono registrate, la commessa risulterebbe altrimenti senza inizio ne'
+     fine, e la durata sparirebbe insieme al costo. */
+  const date = ore.map(e => e.entry_date)
+    .concat(S.tasks.filter(t => t.project_id === pid && t.status === 'completato' && t.completed_at)
+                   .map(t => String(t.completed_at).split('T')[0]))
+    .filter(Boolean).sort();
   const proj = byId(S.projects, pid) || {};
   return {
     ore: h, lordo: r2(lordo), netto: r2(netto),
     medio: h ? r2(lordo / h) : 0,
     persone: Object.keys(perPersona).length,
     perPersona,
+    haStime: Object.keys(perPersona).some(k => perPersona[k].stimato),
     prima: date[0] || null, ultima: date[date.length - 1] || null,
     giorni: date.length ? diffD(date[date.length - 1], date[0]) + 1 : 0,
     margine: proj.amount ? r2(Number(proj.amount) - lordo) : null,
@@ -5137,7 +5253,8 @@ function redditivita(pid) {
   Object.keys(c.perPersona).forEach(uid => {
     const x = c.perPersona[uid];
     (eSocio(uid) ? soci : interni).push({
-      uid, ore: x.ore, importo: r2(x.lordo), netto: r2(x.netto), senzaCosto: x.senzaCosto
+      uid, ore: x.ore, importo: r2(x.lordo), netto: r2(x.netto), senzaCosto: x.senzaCosto,
+      stimato: !!x.stimato, giorni: x.giorni || 0, perFase: x.perFase || null
     });
   });
   soci.sort((a, b) => b.importo - a.importo);
@@ -5149,7 +5266,7 @@ function redditivita(pid) {
 
   return {
     importo, soci, interni, daSoci, daInterni, residuo,
-    ore: c.ore,
+    ore: c.ore, haStime: c.haStime,
     senzaCosto: soci.concat(interni).some(x => x.senzaCosto),
     /* Capienza esaurita: le ore valgono piu' di quanto la commessa incassa */
     sforato: residuo !== null && residuo < 0
@@ -5197,6 +5314,13 @@ function rRedditivita() {
       + 'ancora fatturato possono ancora prendersi su quella commessa. Se resta lì, a commessa chiusa '
       + 'diventa <b>guadagno extra dello studio</b>: è la stessa cifra vista da due lati, non due voci diverse.</div>'
 
+    + (attive.some(x => x.r.haStime)
+        ? '<div class="ibox mb16"><b>Da dove vengono le ore.</b> Dove qualcuno ha registrato le ore, '
+          + 'valgono quelle. Per gli altri l’impegno è <b>stimato dalle attività completate</b>: ogni '
+          + 'giorno feriale in cui una persona ha spuntato almeno un’attività vale una giornata da '
+          + STUDIO.oreGiorno + ' ore, e se quel giorno ha toccato più commesse la giornata si divide fra '
+          + 'loro. Sabato e domenica non contano. È una stima: le ore registrate restano più precise.</div>'
+        : '')
     + (senza ? '<div class="wbox mb16">Alcune persone hanno registrato ore in periodi per cui non è '
       + 'impostato un costo orario: quelle ore contano zero e i numeri qui sotto sono in eccesso. '
       + 'Imposta i costi da <b>Amministrazione → Utenti</b>.</div>' : '')
@@ -5208,7 +5332,10 @@ function schedaRedditivita(p, r) {
   const riga = (x, socio) =>
       '<tr><td><span class="row">' + av(x.uid, 24) + esc(un(x.uid))
         + (socio ? ' <span class="chip chip-a">socio</span>' : '') + '</span></td>'
-    + '<td style="text-align:right">' + x.ore.toFixed(1) + '</td>'
+    + '<td style="text-align:right">' + (x.giorni ? x.giorni.toFixed(1) : '—') + '</td>'
+    + '<td style="text-align:right">' + x.ore.toFixed(1)
+      + (x.stimato ? '<div style="font-size:11px;color:var(--mut)">stimate</div>'
+                   : '<div style="font-size:11px;color:var(--grn)">registrate</div>') + '</td>'
     + '<td style="text-align:right"><b>' + feuro(x.importo) + '</b>'
       + (x.senzaCosto ? '<div style="font-size:11px;color:var(--ora)">costo orario mancante</div>' : '') + '</td>'
     + '<td style="font-size:12px;color:var(--mut)">'
@@ -5246,14 +5373,60 @@ function schedaRedditivita(p, r) {
       + '<div>'
         + (r.soci.length || r.interni.length
           ? '<div class="tw"><table class="tsm"><thead><tr><th>Chi ha lavorato</th>'
-            + '<th style="text-align:right">Ore</th><th style="text-align:right">Importo</th>'
-            + '<th></th></tr></thead><tbody>'
+            + '<th style="text-align:right">Giorni</th><th style="text-align:right">Ore</th>'
+            + '<th style="text-align:right">Importo</th><th></th></tr></thead><tbody>'
             + r.soci.map(x => riga(x, true)).join('')
             + r.interni.map(x => riga(x, false)).join('')
             + '</tbody></table></div>'
-          : '<div class="empty" style="padding:20px"><p>Nessuna ora registrata su questa commessa.</p></div>')
+          : '<div class="empty" style="padding:20px"><p>Nessuna attività completata né ora registrata '
+            + 'su questa commessa.</p></div>')
       + '</div>'
-    + '</div></div>';
+    + '</div>'
+    + fasiRedditivita(p, r)
+    + '</div>';
+}
+
+/* Dettaglio per fase: e' li' che si vede dove il tempo se n'e' andato.
+   Compare solo quando l'impegno e' stimato dalle attivita' completate, perche'
+   le ore registrate a mano non dicono a quale fase appartengono. */
+function fasiRedditivita(p, r) {
+  const tutte = r.soci.concat(r.interni).filter(x => x.stimato && x.perFase);
+  if (!tutte.length) return '';
+
+  /* fase → { giorni, ore, costo, chi: {uid: giorni} } */
+  const perFase = {};
+  tutte.forEach(x => Object.keys(x.perFase).forEach(fid => {
+    const v = x.perFase[fid];
+    const f = perFase[fid] = perFase[fid] || { giorni:0, ore:0, costo:0, chi:{} };
+    f.giorni = r2(f.giorni + v.giorni);
+    f.ore    = r2(f.ore + v.ore);
+    f.costo  = r2(f.costo + v.costo);
+    f.chi[x.uid] = r2((f.chi[x.uid] || 0) + v.giorni);
+  }));
+
+  const fasi = fasiOf(p.id);
+  const righe = Object.keys(perFase)
+    .map(fid => ({ fid, f: byId(fasi, fid), v: perFase[fid] }))
+    .sort((a, b) => ((a.f && a.f.ordine) || 99) - ((b.f && b.f.ordine) || 99))
+    .map(x => '<tr><td>' + (x.f
+          ? esc(x.f.nome) + (x.f.stato === 'completata'
+              ? ' <span class="chip chip-n">completata</span>'
+              : x.f.stato === 'in_corso' ? ' <span class="chip chip-c">in corso</span>' : '')
+          : '<span style="color:var(--mut)">fuori fase</span>') + '</td>'
+      + '<td style="text-align:right">' + x.v.giorni.toFixed(1) + '</td>'
+      + '<td style="text-align:right">' + x.v.ore.toFixed(1) + '</td>'
+      + '<td style="text-align:right"><b>' + feuro(x.v.costo) + '</b></td>'
+      + '<td style="font-size:12px;color:var(--mut)">'
+        + Object.keys(x.v.chi).map(u => esc(un(u)) + ' ' + x.v.chi[u].toFixed(1) + 'g').join(' · ')
+      + '</td></tr>').join('');
+
+  return '<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;'
+    + 'text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:6px">'
+    + 'Dove è andato il tempo</div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Fase</th>'
+    + '<th style="text-align:right">Giorni</th><th style="text-align:right">Ore</th>'
+    + '<th style="text-align:right">Costo</th><th>Chi</th></tr></thead><tbody>'
+    + righe + '</tbody></table></div></div>';
 }
 
 /* Pannello economico dentro la scheda Ore della commessa */

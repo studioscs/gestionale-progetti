@@ -1052,6 +1052,89 @@ function launchOpts(){
     must(/Capienza superata|più di quanto la commessa incassa/.test(h),'nessun avviso di sforamento');
   });
 
+  // --- SPUNTANDO LE ATTIVITÀ IL COSTO COMPARE ---
+  await t('una commessa lavorata ma senza ore registrate non è più a costo zero',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Lavorata senza ore',status:'attivo',
+        amount:20000,start_date:'2026-06-01'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto','sicurezza'],'2026-06-01');
+      await loadAll(true);
+      /* Come fa l'utente: spunta le attività. Il completamento porta con sé
+         data e autore, ed è da lì che si ricava l'impegno. */
+      const att=S.tasks.filter(x=>x.project_id===data.id).slice(0,6);
+      for(let i=0;i<att.length;i++){
+        const g=['2026-06-01','2026-06-02','2026-06-03'][i%3];
+        await SB.from('tasks').update({status:'completato',
+          completed_at:g+'T10:00:00Z',completed_by:'u-me'}).eq('id',att[i].id);
+      }
+      await loadAll(true);
+      window.__PID=data.id;
+    });
+    await p.waitForTimeout(700);
+    const c=await p.evaluate(()=>costoCommessa(window.__PID));
+    must(c.ore>0,'ore ancora a zero dopo aver spuntato le attività');
+    must(c.lordo>0,'costo ancora a zero: '+c.lordo);
+    must(c.haStime,'non è dichiarato come stima');
+    must(c.perPersona['u-me'].giorni===3,'giorni contati: '+c.perPersona['u-me'].giorni);
+  });
+  await t('la Redditività mostra il costo e lo dichiara stimato',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('redditivita'); });
+    await p.waitForTimeout(700);
+    const h=await p.textContent('#page');
+    must(/Lavorata senza ore/.test(h),'commessa assente dalla Redditività');
+    must(/stimat/i.test(h),'non dichiara che le ore sono stimate');
+    must(/Da dove vengono le ore/.test(h),'manca la spiegazione del criterio');
+  });
+  await t('il dettaglio dice dove è andato il tempo, fase per fase',async()=>{
+    const h=await p.textContent('#page');
+    must(/Dove è andato il tempo/.test(h),'manca il dettaglio per fase');
+    const r=await p.evaluate(()=>redditivita(window.__PID));
+    const x=r.soci.concat(r.interni).find(y=>y.uid==='u-me');
+    must(x&&x.perFase&&Object.keys(x.perFase).length>=1,'nessuna fase nel dettaglio');
+  });
+  await t('sabato e domenica non vengono contati',async()=>{
+    const prima=await p.evaluate(()=>costoCommessa(window.__PID).perPersona['u-me'].giorni);
+    await p.evaluate(async()=>{
+      /* 2026-06-06 è sabato, 2026-06-07 domenica */
+      const att=S.tasks.filter(x=>x.project_id===window.__PID&&x.status!=='completato').slice(0,2);
+      for(let i=0;i<att.length;i++)
+        await SB.from('tasks').update({status:'completato',
+          completed_at:(i?'2026-06-07':'2026-06-06')+'T10:00:00Z',completed_by:'u-me'}).eq('id',att[i].id);
+      await loadAll(true);
+    });
+    await p.waitForTimeout(500);
+    const dopo=await p.evaluate(()=>costoCommessa(window.__PID).perPersona['u-me'].giorni);
+    must(prima===dopo,'un fine settimana è stato contato: '+prima+' → '+dopo);
+  });
+  await t('la stessa giornata su due commesse non si conta due volte',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Seconda dello stesso giorno',
+        status:'attivo',amount:5000,start_date:'2026-06-01'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-06-01');
+      await loadAll(true);
+      const a=S.tasks.find(x=>x.project_id===data.id);
+      await SB.from('tasks').update({status:'completato',
+        completed_at:'2026-06-01T15:00:00Z',completed_by:'u-me'}).eq('id',a.id);
+      await loadAll(true);
+      return {uno:costoCommessa(window.__PID).perPersona['u-me'].giorni,
+              due:costoCommessa(data.id).perPersona['u-me'].giorni};
+    });
+    /* il lunedì ora è diviso fra le due commesse: 0,5 ciascuna */
+    must(g.due===0.5,'la seconda commessa non prende mezza giornata: '+g.due);
+    must(g.uno===2.5,'la prima non è scesa a 2,5 giorni: '+g.uno);
+  });
+  await t('registrando le ore vere, quelle sostituiscono la stima',async()=>{
+    const r=await p.evaluate(async()=>{
+      await SB.from('time_entries').insert({project_id:window.__PID,operator_id:'u-me',
+        entry_date:'2026-06-02',hours:4});
+      await loadAll(true);
+      const c=costoCommessa(window.__PID);
+      return {ore:c.ore,stimato:c.perPersona['u-me'].stimato};
+    });
+    must(r.ore===4,'le ore registrate non hanno sostituito la stima: '+r.ore);
+    must(r.stimato===false,'ancora marcato come stimato');
+  });
+
   // --- CONVERSAZIONE DENTRO L'ATTIVITÀ ---
   await t('la sezione File Commesse non esiste più',async()=>{
     must(await p.locator('.sn[data-page="files"]').count()===0,'voce di menu ancora presente');
