@@ -748,6 +748,44 @@ agibilità e per un'altra ventina di voci.
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
 
+## Modificare una commessa già avviata
+
+Il modulo della commessa ha **tre passi anche in modifica**: dati, percorso di
+lavoro, condizioni. Il percorso non si sceglie una volta per sempre — a metà
+commessa ci si accorge che serve la pratica sismica, o che il vincolo
+paesaggistico non c'era.
+
+Il pulsante **Salva Modifiche** è disponibile da subito: per correggere un nome
+non si deve attraversare tutto il modulo.
+
+### Cosa succede a fasi e attività
+
+Al passo 3, invece del totale, si vede la **differenza**:
+
+- **Verrà aggiunto** — fasi, attività e pratiche che il nuovo percorso prevede e
+  che non ci sono. Le aggiunte partono sempre: aggiungere è sicuro.
+- **Non è più previsto** — voci generate dal template che il nuovo percorso non
+  contempla più, **mai avviate e senza conversazioni**. Restano dove sono a meno
+  che tu non spunti *«Rimuovi anche queste voci»*, e in quel caso viene chiesta
+  conferma.
+- **Resta comunque** — quello che non si tocca nemmeno chiedendolo.
+
+Quattro cose sono **intoccabili**, sempre:
+
+| | Perché |
+|---|---|
+| Le attività aggiunte a mano | Non le ha scritte un generatore, le ha scritte una persona |
+| Quelle già avviate o chiuse | C'è del lavoro dentro |
+| Quelle con una conversazione | Qualcuno ci ha ragionato sopra |
+| Le pratiche già inviate o protocollate | Esistono fuori dal gestionale |
+
+Salvare due volte non crea doppioni: il confronto è per titolo dentro la fase,
+quindi ciò che c'è già viene riconosciuto.
+
+Se una commessa vecchia non ha il percorso registrato, viene **riconosciuto
+dalle fasi che ha**: senza, il passo 3 mostrerebbe l'intera checklist come «non
+più prevista», che è il modo peggiore di aprire un modulo.
+
 ## Vedere le commesse: schede o elenco
 
 In **Progetti** l'interruttore in alto a destra passa fra le due viste. Le

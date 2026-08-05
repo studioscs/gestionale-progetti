@@ -76,6 +76,163 @@ function launchOpts(){
   const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,prat:__DB.commessa_pratiche.length}));
   console.log('   generati →',JSON.stringify(stats));
   await t('generazione consistente',async()=>{ must(stats.fasi>=10&&stats.att>=100&&stats.prat>=5,JSON.stringify(stats)); });
+  // --- LA COMMESSA SI MODIFICA IN TUTTI E TRE I PASSAGGI ---
+  await t('in modifica ci sono tutti e tre i passi',async()=>{
+    await p.evaluate(()=>openEditProj(S.projects.find(x=>x.template_key==='privato').id));
+    await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(400);
+    must(/Passo 1 di 3/.test(await p.textContent('#mp-step')),'non dichiara i passi');
+    must(await p.isVisible('#mp-next'),'manca il pulsante Avanti in modifica');
+    must(await p.isVisible('#mp-save'),'il salvataggio non è disponibile subito');
+    await p.click('#mp-next'); await p.waitForTimeout(300);
+    must(await p.locator('#mp-body .tpl').count()>0,'il passo 2 non mostra i percorsi');
+    must(await p.locator('#mp-body .tpl.on').count()===1,'il percorso attuale non è evidenziato');
+    await p.click('#mp-next'); await p.waitForTimeout(400);
+    must(await p.locator('#mp-body .cond').count()>0,'il passo 3 non mostra le condizioni');
+    must(await p.locator('#mp-body .cond.on').count()>0,'le condizioni attuali non sono spuntate');
+    await p.click('#mp-back'); await p.waitForTimeout(200);
+    must(await p.locator('#mp-body .tpl').count()>0,'Indietro non torna al passo 2');
+    await p.evaluate(()=>closeM('m-proj'));
+  });
+  await t('su una commessa senza percorso registrato lo riconosce dalle fasi',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Senza percorso',status:'attivo',
+        start_date:'2026-03-02'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-03-02');
+      await loadAll(true);
+      openEditProj(data.id);
+      const tpl=WZ.tpl; closeM('m-proj');
+      return {tpl,indovinato:templateProbabile(data.id)};
+    });
+    must(g.tpl==='interno','ha ripiegato su '+g.tpl+' invece di riconoscere il percorso');
+    must(g.indovinato==='interno','il riconoscimento non funziona');
+  });
+  await t('senza cambiare nulla non propone modifiche alla struttura',async()=>{
+    const txt=await p.evaluate(async()=>{
+      const pid=S.projects.find(x=>x.template_key==='privato').id;
+      openEditProj(pid); WZ.step=3; drawWizard();
+      return el('mp-body').textContent;
+    });
+    must(/Nessuna modifica alla struttura/.test(txt),'propone modifiche a parità di scelte: '+txt.slice(0,200));
+    await p.evaluate(()=>closeM('m-proj'));
+  });
+  await t('spuntando una condizione nuova mostra cosa verrebbe aggiunto',async()=>{
+    const g=await p.evaluate(()=>{
+      const pid=S.projects.find(x=>x.template_key==='privato').id;
+      openEditProj(pid);
+      const nuova=CONDIZIONI.map(c=>c.k).find(k=>!WZ.conds.includes(k)&&k!=='esproprio');
+      WZ.conds.push(nuova); WZ.step=3; drawWizard();
+      const d=differenzaStruttura(pid,WZ.tpl,WZ.conds,WZ.d.start_date);
+      return {nuova,txt:el('mp-body').textContent,att:d.attNuove.length,obs:d.attObsolete.length};
+    });
+    must(/Verrà aggiunto/.test(g.txt),'non mostra le aggiunte per '+g.nuova);
+    must(g.att>0,'nessuna attività nuova per '+g.nuova);
+    must(g.obs===0,'aggiungere una condizione non deve rendere obsoleto nulla');
+    await p.evaluate(()=>closeM('m-proj'));
+  });
+  await t('salvando dal passo 3 le attività nuove compaiono davvero',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Da ampliare',status:'attivo',
+        start_date:'2026-03-02',template_key:'interno',condizioni:['catasto']}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-03-02');
+      await loadAll(true);
+      /* si sceglie una condizione che sull'interno porta davvero altro lavoro:
+         quale sia non è il punto del test */
+      const cand=CONDIZIONI.map(c=>c.k).filter(k=>k!=='catasto')
+        .find(k=>differenzaStruttura(data.id,'interno',['catasto',k],'2026-03-02').attNuove.length>0);
+      const prima=S.tasks.filter(t=>t.project_id===data.id).length;
+      openEditProj(data.id);
+      WZ.conds=['catasto',cand]; WZ.step=3; drawWizard();
+      const txt=el('mp-body').textContent;
+      await wzSave();
+      await loadAll(true);
+      return {pid:data.id,cand,prima,txt,dopo:S.tasks.filter(t=>t.project_id===data.id).length};
+    });
+    await p.waitForTimeout(700);
+    must(g.cand,'nessuna condizione aggiunge lavoro all interno: test da rivedere');
+    must(/Verrà aggiunto/.test(g.txt),'il passo 3 non annuncia le aggiunte');
+    must(g.dopo>g.prima,'nessuna attività aggiunta con '+g.cand+': '+g.prima+' → '+g.dopo);
+    global.__PIDMOD=g.pid; global.__CAND=g.cand;
+  });
+  await t('risalvando due volte non si creano doppioni',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const prima=S.tasks.filter(t=>t.project_id===pid).length;
+      openEditProj(pid); WZ.step=3; drawWizard();
+      const txt=el('mp-body').textContent;
+      await wzSave();
+      await loadAll(true);
+      return {prima,txt,dopo:S.tasks.filter(t=>t.project_id===pid).length};
+    },global.__PIDMOD);
+    await p.waitForTimeout(700);
+    must(/Nessuna modifica alla struttura/.test(g.txt),'non riconosce che è già tutto allineato');
+    must(g.prima===g.dopo,'salvare due volte ha duplicato le attività: '+g.prima+' → '+g.dopo);
+  });
+  await t('togliendo una condizione le voci non piu previste restano se non si chiede altro',async()=>{
+    const g=await p.evaluate(async([pid,cand])=>{
+      const prima=S.tasks.filter(t=>t.project_id===pid).length;
+      openEditProj(pid);
+      WZ.conds=['catasto']; WZ.step=3; drawWizard();
+      const txt=el('mp-body').textContent;
+      const d=differenzaStruttura(pid,WZ.tpl,WZ.conds,WZ.d.start_date);
+      WZ.rimuovi=false;
+      await wzSave();
+      await loadAll(true);
+      return {prima,dopo:S.tasks.filter(t=>t.project_id===pid).length,txt,obs:d.attObsolete.length};
+    },[global.__PIDMOD,global.__CAND]);
+    await p.waitForTimeout(700);
+    must(g.obs>0,'togliere la condizione non ha reso obsoleto niente');
+    must(/Non è più previsto/.test(g.txt),'non avvisa di cosa non è più previsto');
+    must(g.prima===g.dopo,'ha rimosso senza che glielo si chiedesse: '+g.prima+' → '+g.dopo);
+  });
+  await t('chiedendolo, le voci non piu previste vengono rimosse',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const prima=S.tasks.filter(t=>t.project_id===pid).length;
+      openEditProj(pid);
+      WZ.conds=['catasto']; WZ.step=3; drawWizard();
+      /* si spunta la casella come farebbe l'utente: è il modulo a decidere,
+         non la variabile in memoria */
+      el('w-rimuovi').checked=true;
+      await wzSave();
+      await loadAll(true);
+      return {prima,dopo:S.tasks.filter(t=>t.project_id===pid).length};
+    },global.__PIDMOD);
+    await p.waitForTimeout(800);
+    must(g.dopo<g.prima,'non ha rimosso nulla: '+g.prima+' → '+g.dopo);
+  });
+  await t('non tocca mai il lavoro gia avviato o aggiunto a mano',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Da sfoltire',status:'attivo',
+        start_date:'2026-03-02',template_key:'interno',
+        condizioni:['catasto','sicurezza','impianti','acustica']}).select().single();
+      await generaStruttura(data.id,'interno',['catasto','sicurezza','impianti','acustica'],'2026-03-02');
+      await loadAll(true);
+      /* si prende una che diventerebbe obsoleta azzerando le condizioni, e la si
+         porta avanti: da quel momento non deve più essere toccabile */
+      const primaDiff=differenzaStruttura(data.id,'interno',[],'2026-03-02');
+      const gen=primaDiff.attObsolete[0].t;
+      await SB.from('tasks').update({status:'in_corso'}).eq('id',gen.id);
+      const {data:mano}=await SB.from('tasks').insert({project_id:data.id,
+        commessa_fase_id:gen.commessa_fase_id,title:'Aggiunta a mano',status:'da_fare',
+        is_milestone:false,opzionale:false,sort_order:0}).select().single();
+      await loadAll(true);
+      const d=differenzaStruttura(data.id,'interno',[],'2026-03-02');
+      openEditProj(data.id); WZ.conds=[]; WZ.step=3; WZ.rimuovi=true; drawWizard();
+      const txt=el('mp-body').textContent;
+      await wzSave();
+      await loadAll(true);
+      const resta=S.tasks.filter(t=>t.project_id===data.id).map(t=>t.id);
+      return {gen:gen.id,mano:mano.id,resta,txt,
+              protette:d.attProtette.map(x=>x.t.id),
+              obsolete:d.attObsolete.map(x=>x.t.id)};
+    });
+    await p.waitForTimeout(800);
+    must(g.protette.includes(g.gen),'l attività avviata non è stata dichiarata protetta');
+    must(!g.obsolete.includes(g.gen),'un attività avviata è stata data per obsoleta');
+    must(!g.obsolete.includes(g.mano),'un attività aggiunta a mano è stata data per obsoleta');
+    must(/Resta comunque/.test(g.txt),'non dichiara cosa resta comunque');
+    must(g.resta.includes(g.gen),'ha rimosso un attività già avviata');
+    must(g.resta.includes(g.mano),'ha rimosso un attività aggiunta a mano');
+  });
+
   await t('la commessa per le sole violazioni sismiche si genera e si biforca',async()=>{
     const g=await p.evaluate(async()=>{
       const out={};

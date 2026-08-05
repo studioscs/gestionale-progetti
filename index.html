@@ -942,7 +942,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.6';
+const VERSIONE = '2026.08.05.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2578,38 +2578,46 @@ function pianifica(tplKey, conds, dataInizio) {
   return { fasi: out, pratiche: prat, tpl };
 }
 
-async function generaStruttura(projectId, tplKey, conds, dataInizio) {
-  const plan = pianifica(tplKey, conds, dataInizio);
+/* ---------------------------------------------------------------------------
+   LE RIGHE DI ATTIVITA' CHE UN PIANO COMPORTA
+   Calcolate in un posto solo, perche' la generazione iniziale e l'aggiornamento
+   di una commessa gia' avviata devono produrre esattamente le stesse: se le due
+   strade divergessero, riaprire il percorso di una commessa aggiungerebbe
+   doppioni di cio' che c'e' gia'.
+   --------------------------------------------------------------------------- */
+function righeDaPiano(plan) {
+  const out = [];
+  plan.fasi.forEach(f => f.att.forEach(a => out.push({ fase_key: f.fase_key, r: a })));
 
-  const fasiRows = plan.fasi.map(f => ({
-    project_id: projectId, fase_key: f.fase_key, nome: f.nome, icona: f.icona,
-    descrizione: f.desc, ordine: f.ordine,
-    data_inizio: f.data_inizio, data_fine_prevista: f.data_fine_prevista,
-    stato: 'non_avviata'
-  }));
-  if (!fasiRows.length) return { fasi:0, att:0, prat:0 };
+  /* Una procura speciale per OGNI pratica telematica, tutte nella fase delle
+     firme: e' il motivo per cui quella fase sta all'inizio e non alla fine.
+     La procura vale per una sola pratica (art. 1392 c.c.), quindi vanno
+     generate e fatte firmare tutte nella stessa seduta. */
+  const pianoFirme = plan.fasi.find(f => f.fase_key === 'firme');
+  if (pianoFirme) {
+    const scad = pianoFirme.data_fine_prevista;
+    plan.pratiche.filter(x => x.proc).forEach((x, i) => out.push({
+      fase_key: 'firme',
+      r: { title: 'Procura speciale — ' + x.ente + ': ' + x.tipo,
+           rif_normativo: 'art. 1392 c.c.', ente: x.ente,
+           categoria: 'firma_cliente', priority: 'alta',
+           estimated_hours: 0.5, sort_order: 100 + i, due_date: scad } }));
+  }
+  return out;
+}
 
-  /* ignoreDuplicates: le fasi già esistenti non vengono toccate né riportate,
-     così rilanciare la generazione aggiunge solo ciò che manca. */
-  const { data: fasi, error: e1 } = await SB.from('commessa_fasi')
-    .upsert(fasiRows, { onConflict:'project_id,fase_key', ignoreDuplicates:true })
-    .select();
-  if (e1) { sbErr(e1, 'genera fasi'); return null; }
-
-  const mapFase = {};
-  (fasi || []).forEach(f => mapFase[f.fase_key] = f.id);
-
-  /* ---------------------------------------------------------------------------
-     TUTTE LE RIGHE CON LE STESSE COLONNE.
-     PostgREST manda un solo INSERT con l'UNIONE delle chiavi di tutte le righe:
-     dove una chiave manca ci mette NULL, non il valore di default della colonna.
-     Bastava quindi una riga costruita a mano - la procura, che non portava
-     is_milestone ne' opzionale - per violare il NOT NULL e far fallire
-     l'inserimento di TUTTE le attivita' insieme: la commessa nasceva con le fasi
-     e la checklist vuota. Di qui una forma sola per ogni riga.
-     --------------------------------------------------------------------------- */
-  const rigaAttivita = r => ({
-    project_id: projectId, commessa_fase_id: r.commessa_fase_id,
+/* ---------------------------------------------------------------------------
+   TUTTE LE RIGHE CON LE STESSE COLONNE.
+   PostgREST manda un solo INSERT con l'UNIONE delle chiavi di tutte le righe:
+   dove una chiave manca ci mette NULL, non il valore di default della colonna.
+   Bastava quindi una riga costruita a mano - la procura, che non portava
+   is_milestone ne' opzionale - per violare il NOT NULL e far fallire
+   l'inserimento di TUTTE le attivita' insieme: la commessa nasceva con le fasi
+   e la checklist vuota. Di qui una forma sola per ogni riga.
+   --------------------------------------------------------------------------- */
+function rigaAttivita(projectId, tplKey, fid, r) {
+  return {
+    project_id: projectId, commessa_fase_id: fid,
     title: r.title, status: 'da_fare',
     priority: r.priority || (r.is_milestone ? 'alta' : 'media'),
     estimated_hours: r.estimated_hours != null ? r.estimated_hours : null,
@@ -2622,55 +2630,167 @@ async function generaStruttura(projectId, tplKey, conds, dataInizio) {
     sort_order: r.sort_order || 0,
     due_date: r.due_date || null,
     template_key: tplKey, created_by: S.me.id
+  };
+}
+
+/* ===========================================================================
+   DIFFERENZA FRA IL PIANO E QUELLO CHE C'E'
+
+   Serve a riaprire il percorso di una commessa gia' avviata: cambiare template
+   o condizioni non puo' voler dire ricominciare da capo, ne' ritrovarsi il
+   doppio delle attivita'. Si calcola cosa manca e cosa non e' piu' previsto, e
+   lo si mostra prima di toccare qualsiasi cosa.
+
+   Cosa NON si tocca mai, nemmeno chiedendolo:
+   - quello che qualcuno ha aggiunto a mano (non ha template_key): e' lavoro di
+     una persona, non di un generatore;
+   - quello che e' gia' stato avviato o chiuso;
+   - quello su cui si e' scritto in conversazione;
+   - le pratiche gia' inviate o protocollate.
+   Il resto e' una checklist non ancora toccata, e toglierla non perde niente.
+   =========================================================================== */
+function differenzaStruttura(pid, tplKey, conds, dataInizio) {
+  const plan  = pianifica(tplKey, conds, dataInizio);
+  const righe = righeDaPiano(plan);
+
+  const perKey = {};
+  fasiOf(pid).forEach(f => perKey[f.fase_key] = f);
+
+  /* fase_key -> titoli previsti dal piano */
+  const previsti = {};
+  righe.forEach(x => (previsti[x.fase_key] = previsti[x.fase_key] || {})[x.r.title] = 1);
+
+  const fasiNuove = plan.fasi.filter(f => !perKey[f.fase_key]);
+  const attNuove  = righe.filter(x => {
+    const f = perKey[x.fase_key];
+    if (!f) return true;                       // fase nuova: tutte le sue attivita'
+    return !tasksFase(f.id).some(t => t.title === x.r.title);
   });
 
-  const attRows = [];
-  plan.fasi.forEach(f => {
-    const fid = mapFase[f.fase_key];
-    if (!fid) return;
-    f.att.forEach(a => attRows.push(rigaAttivita(Object.assign({ commessa_fase_id: fid }, a))));
+  /* Quello che c'e' e il piano non prevede piu' */
+  const attObsolete = [], attProtette = [];
+  fasiOf(pid).forEach(f => {
+    const attesi = previsti[f.fase_key];
+    tasksFase(f.id).forEach(t => {
+      if (attesi && attesi[t.title]) return;   // ancora prevista
+      if (!t.template_key) return;             // aggiunta a mano: non e' roba nostra
+      const bloccata = t.status !== 'da_fare' ? 'già avviata o chiusa'
+                     : (S.chatTask[t.id] ? 'ha una conversazione' : null);
+      (bloccata ? attProtette : attObsolete).push({ t, fase: f, perche: bloccata });
+    });
   });
 
-  /* Una procura speciale per OGNI pratica telematica, tutte nella fase delle
-     firme: e' il motivo per cui quella fase sta all'inizio e non alla fine.
-     La procura vale per una sola pratica (art. 1392 c.c.), quindi vanno
-     generate e fatte firmare tutte nella stessa seduta. */
-  const faseFirme = mapFase['firme'];
-  if (faseFirme) {
-    const pianoFirme = plan.fasi.find(f => f.fase_key === 'firme');
-    const scad = pianoFirme ? pianoFirme.data_fine_prevista : null;
-    plan.pratiche.filter(x => x.proc).forEach((x, i) => attRows.push(rigaAttivita({
-      commessa_fase_id: faseFirme,
-      title: 'Procura speciale — ' + x.ente + ': ' + x.tipo,
-      rif_normativo: 'art. 1392 c.c.', ente: x.ente,
-      categoria: 'firma_cliente', priority: 'alta',
-      estimated_hours: 0.5, sort_order: 100 + i, due_date: scad
-    })));
+  const chiaviPiano = plan.pratiche.map(x => x.k);
+  const esistenti   = praticheOf(pid);
+  const pratNuove   = plan.pratiche.filter(x => !esistenti.some(e => e.pratica_key === x.k));
+  const pratObsolete = [], pratProtette = [];
+  esistenti.forEach(e => {
+    if (!e.pratica_key || chiaviPiano.indexOf(e.pratica_key) >= 0) return;
+    const bloccata = e.stato !== 'da_preparare' ? 'non è più da preparare'
+                   : (e.protocollo || e.data_invio) ? 'già inviata' : null;
+    (bloccata ? pratProtette : pratObsolete).push({ p: e, perche: bloccata });
+  });
+
+  /* Una fase si toglie solo se resta davvero vuota */
+  const fasiObsolete = fasiOf(pid).filter(f => {
+    if (previsti[f.fase_key]) return false;
+    const restano = tasksFase(f.id).filter(t => !attObsolete.some(x => x.t.id === t.id));
+    return !restano.length && !esistenti.some(e => e.fase_id === f.id);
+  });
+
+  return { plan, fasiNuove, attNuove, attObsolete, attProtette,
+           pratNuove, pratObsolete, pratProtette, fasiObsolete,
+           nulla: !fasiNuove.length && !attNuove.length && !pratNuove.length
+                  && !attObsolete.length && !pratObsolete.length };
+}
+
+/* ===========================================================================
+   GENERAZIONE E AGGIORNAMENTO DELLA STRUTTURA
+   Una strada sola: su una commessa nuova non c'e' niente e viene creato tutto,
+   su una gia' avviata viene aggiunto solo cio' che manca. La rimozione la si
+   chiede esplicitamente e non avviene mai da sola.
+   =========================================================================== */
+async function applicaStruttura(projectId, tplKey, conds, dataInizio, rimuovi) {
+  const diff = differenzaStruttura(projectId, tplKey, conds, dataInizio);
+  const plan = diff.plan;
+
+  /* --- fasi mancanti --- */
+  const fasiRows = plan.fasi.map(f => ({
+    project_id: projectId, fase_key: f.fase_key, nome: f.nome, icona: f.icona,
+    descrizione: f.desc, ordine: f.ordine,
+    data_inizio: f.data_inizio, data_fine_prevista: f.data_fine_prevista,
+    stato: 'non_avviata'
+  }));
+  if (!fasiRows.length && !rimuovi) return { fasi:0, att:0, prat:0, tolte:0 };
+
+  /* ignoreDuplicates: le fasi già esistenti non vengono toccate né riportate,
+     così rilanciare la generazione aggiunge solo ciò che manca. */
+  let nuoveFasi = [];
+  if (fasiRows.length) {
+    const { data, error } = await SB.from('commessa_fasi')
+      .upsert(fasiRows, { onConflict:'project_id,fase_key', ignoreDuplicates:true })
+      .select();
+    if (error) { sbErr(error, 'genera fasi'); return null; }
+    nuoveFasi = data || [];
   }
 
+  /* mappa completa: le fasi appena create più quelle che c'erano già */
+  const mapFase = {};
+  fasiOf(projectId).forEach(f => mapFase[f.fase_key] = f.id);
+  nuoveFasi.forEach(f => mapFase[f.fase_key] = f.id);
+
+  /* --- attività mancanti --- */
+  const attRows = diff.attNuove
+    .filter(x => mapFase[x.fase_key])
+    .map(x => rigaAttivita(projectId, tplKey, mapFase[x.fase_key], x.r));
   let nAtt = 0;
   if (attRows.length) {
-    const { error: e2 } = await SB.from('tasks').insert(attRows);
-    if (e2) { sbErr(e2, 'genera attività'); return null; }
+    const { error } = await SB.from('tasks').insert(attRows);
+    if (error) { sbErr(error, 'genera attività'); return null; }
     nAtt = attRows.length;
   }
 
-  /* Le pratiche già presenti (stessa chiave) non vengono ricreate */
-  const esistenti = praticheOf(projectId).map(p => p.pratica_key);
-  plan.pratiche = plan.pratiche.filter(p => esistenti.indexOf(p.k) < 0);
-
+  /* --- pratiche mancanti --- */
   let nPrat = 0;
-  if (plan.pratiche.length) {
-    const pratRows = plan.pratiche.map(p => ({
+  if (diff.pratNuove.length) {
+    const pratRows = diff.pratNuove.map(p => ({
       project_id: projectId, pratica_key: p.k, ente: p.ente || 'Da definire',
       tipo: p.tipo, rif_normativo: p.rif || null, termine_giorni: p.gg,
       ordine: p.ord || 50,
       note: p.note || null, stato: 'da_preparare', created_by: S.me.id
     }));
-    const { error: e3 } = await SB.from('commessa_pratiche').insert(pratRows);
-    if (e3) sbErr(e3, 'genera pratiche'); else nPrat = pratRows.length;
+    const { error } = await SB.from('commessa_pratiche').insert(pratRows);
+    if (error) sbErr(error, 'genera pratiche'); else nPrat = pratRows.length;
   }
-  return { fasi: (fasi || []).length, att: nAtt, prat: nPrat };
+
+  /* --- e solo se richiesto, quello che non è più previsto --- */
+  let tolte = 0;
+  if (rimuovi) {
+    if (diff.attObsolete.length) {
+      const ids = diff.attObsolete.map(x => x.t.id);
+      const { error } = await SB.from('tasks').delete().in('id', ids);
+      if (error) sbErr(error, 'rimuovi attività'); else tolte += ids.length;
+    }
+    if (diff.pratObsolete.length) {
+      const ids = diff.pratObsolete.map(x => x.p.id);
+      const { error } = await SB.from('commessa_pratiche').delete().in('id', ids);
+      if (error) sbErr(error, 'rimuovi pratiche'); else tolte += ids.length;
+    }
+    /* le fasi rimaste vuote se ne vanno per ultime, quando i figli non ci sono più */
+    if (diff.fasiObsolete.length) {
+      const ids = diff.fasiObsolete.map(f => f.id);
+      const { error } = await SB.from('commessa_fasi').delete().in('id', ids);
+      if (error) sbErr(error, 'rimuovi fasi');
+    }
+  }
+
+  return { fasi: nuoveFasi.length, att: nAtt, prat: nPrat, tolte };
+}
+
+/* Generazione iniziale: è l'aggiornamento di una commessa che non ha ancora
+   nulla, quindi passa dalla stessa strada. */
+async function generaStruttura(projectId, tplKey, conds, dataInizio) {
+  return applicaStruttura(projectId, tplKey, conds, dataInizio, false);
 }
 
 /* ===========================================================================
@@ -6473,22 +6593,47 @@ function rUsers() {
 let WZ = null;
 
 function openNewProj() {
-  WZ = { step:1, edit:null, tpl:'privato', conds:['strutture','geologia','impianti','energetico','sicurezza','dl','catasto','agibilita'], d:{} };
+  WZ = { step:1, edit:null, rimuovi:false, tpl:'privato',
+         conds:['strutture','geologia','impianti','energetico','sicurezza','dl','catasto','agibilita'], d:{} };
   el('mp-t').textContent = 'Nuova Commessa';
   drawWizard(); openM('m-proj');
 }
+/* Il percorso di una commessa vecchia puo' non essere registrato. Invece di
+   ripiegare sulla commessa libera - che al passo 3 farebbe apparire l'intera
+   checklist come "non piu' prevista" - lo si riconosce dalle fasi che ci sono:
+   e' un confronto di chiavi, e sbagliarlo non costa niente perche' il percorso
+   resta comunque modificabile a mano. */
+function templateProbabile(pid) {
+  const chiavi = fasiOf(pid).map(f => f.fase_key);
+  if (!chiavi.length) return null;
+  let vincitore = null, meglio = 0;
+  Object.keys(TEMPLATES).forEach(k => {
+    if (k === 'vuoto') return;
+    const sue = TEMPLATES[k].fasi.map(f => f.k);
+    const n = chiavi.filter(c => sue.indexOf(c) >= 0).length;
+    if (n > meglio) { meglio = n; vincitore = k; }
+  });
+  /* almeno la meta' delle fasi deve corrispondere, altrimenti e' un indovinello */
+  return meglio >= Math.ceil(chiavi.length / 2) ? vincitore : null;
+}
+
 function openEditProj(pid) {
   const p = byId(S.projects, pid); if (!p) return;
-  WZ = { step:1, edit:pid, tpl:p.template_key || 'vuoto', conds:(p.condizioni || []).slice(), d:Object.assign({}, p) };
+  WZ = { step:1, edit:pid, rimuovi:false,
+         tpl: p.template_key || templateProbabile(pid) || 'vuoto',
+         conds:(p.condizioni || []).slice(), d:Object.assign({}, p) };
   el('mp-t').textContent = 'Modifica Commessa';
   drawWizard(); openM('m-proj');
 }
 
 function drawWizard() {
-  const d = WZ.d, last = WZ.edit ? 1 : 3;
-  el('mp-step').textContent = WZ.edit ? '' : 'Passo ' + WZ.step + ' di 3';
-  el('mp-back').style.display = (!WZ.edit && WZ.step > 1) ? 'inline-flex' : 'none';
-  el('mp-next').style.display = (!WZ.edit && WZ.step < last) ? 'inline-flex' : 'none';
+  const d = WZ.d, last = 3;
+  /* In modifica i tre passi ci sono tutti: il percorso di lavoro non si sceglie
+     una volta per sempre. Cambia solo il pulsante di chiusura, che resta sempre
+     disponibile - per correggere un nome non si deve attraversare il modulo. */
+  el('mp-step').textContent = 'Passo ' + WZ.step + ' di 3';
+  el('mp-back').style.display = WZ.step > 1 ? 'inline-flex' : 'none';
+  el('mp-next').style.display = WZ.step < last ? 'inline-flex' : 'none';
   el('mp-save').style.display = (WZ.edit || WZ.step === last) ? 'inline-flex' : 'none';
   el('mp-save').textContent = WZ.edit ? 'Salva Modifiche' : 'Crea Commessa e Genera Struttura';
 
@@ -6571,8 +6716,12 @@ function drawWizard() {
       + '<div class="fg"><label class="fl">Descrizione</label><textarea class="fc" id="w-desc" rows="2">' + esc(d.description || '') + '</textarea></div>';
   }
   else if (WZ.step === 2) {
-    h = '<div class="ibox mb16">Scegli il percorso di lavoro: il gestionale creerà da solo fasi, attività e pratiche. '
-      + 'Potrai comunque aggiungere o togliere qualsiasi voce in seguito.</div>'
+    h = (WZ.edit
+        ? '<div class="ibox mb16">Puoi cambiare percorso anche a commessa avviata. '
+          + 'Quello che c’è già <b>non viene toccato</b>: al passo 3 vedrai esattamente '
+          + 'che cosa verrebbe aggiunto e che cosa non sarebbe più previsto, prima di salvare.</div>'
+        : '<div class="ibox mb16">Scegli il percorso di lavoro: il gestionale creerà da solo fasi, attività e pratiche. '
+          + 'Potrai comunque aggiungere o togliere qualsiasi voce in seguito.</div>')
       + Object.keys(TEMPLATES).map(k => '<div class="tpl ' + (WZ.tpl === k ? 'on' : '') + '" data-tpl="' + k + '">'
         + '<div class="tt">' + esc(TEMPLATES[k].label) + '</div>'
         + '<div class="td">' + esc(TEMPLATES[k].desc) + '</div>'
@@ -6580,27 +6729,95 @@ function drawWizard() {
         + TEMPLATES[k].fasi.reduce((a, f) => a + f.att.length, 0) + ' attività previste</div></div>').join('');
   }
   else {
-    const plan = pianifica(WZ.tpl, WZ.conds, el('w-di') ? el('w-di').value : WZ.d.start_date);
-    const nAtt = plan.fasi.reduce((a, f) => a + f.att.length, 0);
+    const dataI = el('w-di') ? el('w-di').value : WZ.d.start_date;
     h = '<div class="ibox mb16">Spunta cosa riguarda questa commessa. Ogni voce accende le attività e le pratiche '
       + 'corrispondenti: <b>ciò che non serve non viene nemmeno creato</b>.</div>'
       + '<div class="g2">' + CONDIZIONI.map(c => '<div class="cond ' + (WZ.conds.includes(c.k) ? 'on' : '') + '" data-cond="' + c.k + '">'
         + '<input type="checkbox" tabindex="-1" ' + (WZ.conds.includes(c.k) ? 'checked' : '') + '>'
         + '<span><span class="ct">' + esc(c.l) + '</span><span class="cd">' + esc(c.d) + '</span></span></div>').join('') + '</div>'
-      + '<div class="card mb16" style="margin-top:16px;background:var(--bluelt);border-color:#B5D4F4">'
-        + '<b style="font-size:13px">Riepilogo di quello che verrà creato</b>'
-        + '<div style="font-size:13px;margin-top:8px">'
-        + '<b>' + plan.fasi.length + '</b> fasi · <b>' + nAtt + '</b> attività · <b>' + plan.pratiche.length + '</b> pratiche verso gli enti</div>'
-        + '<div style="font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.7">'
-        + plan.fasi.map(f => '• ' + esc(f.nome) + ' <span style="color:var(--mut2)">(' + f.att.length + ')</span>').join('<br>') + '</div>'
-        + (plan.pratiche.length ? '<div style="font-size:11.5px;margin-top:10px"><b>Pratiche:</b> '
-            + plan.pratiche.map(p => esc(p.ente + ' — ' + p.tipo)).join('; ') + '</div>' : '')
-      + '</div>'
+      + (WZ.edit ? anteprimaModifica(WZ.edit, WZ.tpl, WZ.conds, dataI)
+                 : anteprimaNuova(WZ.tpl, WZ.conds, dataI))
       + '<div class="wbox">Le scadenze vengono precalcolate dalla data di inizio e dalle durate stimate di ciascuna fase: '
       + 'sono un punto di partenza da tarare, non un impegno contrattuale.</div>';
   }
   el('mp-body').innerHTML = h;
 }
+/* Commessa nuova: si elenca semplicemente quello che verrà creato. */
+function anteprimaNuova(tpl, conds, dataI) {
+  const plan = pianifica(tpl, conds, dataI);
+  const nAtt = plan.fasi.reduce((a, f) => a + f.att.length, 0);
+  return '<div class="card mb16" style="margin-top:16px;background:var(--bluelt);border-color:#B5D4F4">'
+    + '<b style="font-size:13px">Riepilogo di quello che verrà creato</b>'
+    + '<div style="font-size:13px;margin-top:8px">'
+    + '<b>' + plan.fasi.length + '</b> fasi · <b>' + nAtt + '</b> attività · <b>'
+    + plan.pratiche.length + '</b> pratiche verso gli enti</div>'
+    + '<div style="font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.7">'
+    + plan.fasi.map(f => '• ' + esc(f.nome) + ' <span style="color:var(--mut2)">(' + f.att.length + ')</span>').join('<br>')
+    + '</div>'
+    + (plan.pratiche.length ? '<div style="font-size:11.5px;margin-top:10px"><b>Pratiche:</b> '
+        + plan.pratiche.map(p => esc(p.ente + ' — ' + p.tipo)).join('; ') + '</div>' : '')
+    + '</div>';
+}
+
+/* ---------------------------------------------------------------------------
+   COMMESSA GIA' AVVIATA: SI MOSTRA LA DIFFERENZA, NON IL TOTALE
+   Su una commessa in corso il totale non dice niente: quello che conta è che
+   cosa cambierebbe. Le aggiunte sono sempre sicure; le rimozioni si chiedono
+   una per una e non toccano mai ciò che qualcuno ha già preso in mano.
+   --------------------------------------------------------------------------- */
+function anteprimaModifica(pid, tpl, conds, dataI) {
+  const d = differenzaStruttura(pid, tpl, conds, dataI);
+  const box = (col, tit, corpo) => '<div class="card mb16" style="margin-top:16px;background:'
+    + col[0] + ';border-color:' + col[1] + '"><b style="font-size:13px">' + tit + '</b>' + corpo + '</div>';
+  const elenco = righe => '<div style="font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.7">'
+    + righe.slice(0, 25).map(x => '• ' + x).join('<br>')
+    + (righe.length > 25 ? '<br><i>… e altre ' + (righe.length - 25) + '</i>' : '') + '</div>';
+
+  if (d.nulla)
+    return box(['var(--bg)', 'var(--bord2)'], 'Nessuna modifica alla struttura',
+      '<div style="font-size:12.5px;margin-top:6px;color:var(--mut)">Fasi, attività e pratiche '
+      + 'corrispondono già a questo percorso. I dati del passo 1 si salvano comunque.</div>');
+
+  let h = '';
+  if (d.fasiNuove.length || d.attNuove.length || d.pratNuove.length) {
+    const r = [];
+    d.fasiNuove.forEach(f => r.push('<b>fase</b> ' + esc(f.nome)));
+    d.attNuove.filter(x => !d.fasiNuove.some(f => f.fase_key === x.fase_key))
+      .forEach(x => r.push(esc(x.r.title)));
+    d.pratNuove.forEach(x => r.push('<b>pratica</b> ' + esc(x.ente + ' — ' + x.tipo)));
+    h += box(['var(--grnlt)', '#A9DCC0'], 'Verrà aggiunto',
+      '<div style="font-size:13px;margin-top:8px"><b>' + d.fasiNuove.length + '</b> fasi · <b>'
+      + d.attNuove.length + '</b> attività · <b>' + d.pratNuove.length + '</b> pratiche</div>'
+      + elenco(r));
+  }
+
+  if (d.attObsolete.length || d.pratObsolete.length) {
+    const r = d.attObsolete.map(x => esc(x.t.title))
+      .concat(d.pratObsolete.map(x => '<b>pratica</b> ' + esc(x.p.ente + ' — ' + x.p.tipo)));
+    h += box(['var(--yellt)', '#EBD08A'], 'Non è più previsto',
+      '<div style="font-size:13px;margin-top:8px"><b>' + d.attObsolete.length + '</b> attività · <b>'
+      + d.pratObsolete.length + '</b> pratiche, mai avviate e senza conversazioni</div>'
+      + elenco(r)
+      + '<label class="row" style="cursor:pointer;font-size:12.5px;margin-top:10px">'
+      + '<input type="checkbox" id="w-rimuovi"' + (WZ.rimuovi ? ' checked' : '') + '>'
+      + '&nbsp;Rimuovi anche queste voci</label>'
+      + '<div class="hint">Se lasci la casella vuota le voci restano dove sono: '
+      + 'aggiungere è sempre sicuro, togliere lo decidi tu.</div>');
+  }
+
+  if (d.attProtette.length || d.pratProtette.length) {
+    const r = d.attProtette.map(x => esc(x.t.title) + ' <span style="color:var(--mut2)">('
+        + x.perche + ')</span>')
+      .concat(d.pratProtette.map(x => esc(x.p.ente + ' — ' + x.p.tipo)
+        + ' <span style="color:var(--mut2)">(' + x.perche + ')</span>'));
+    h += box(['var(--bg)', 'var(--bord2)'], 'Resta comunque, anche se non più previsto',
+      '<div style="font-size:12.5px;margin-top:6px;color:var(--mut)">Lavoro già avviato, chiuso, '
+      + 'con una conversazione o già inviato agli enti. Non viene toccato: se davvero non serve '
+      + 'più, va tolto a mano.</div>' + elenco(r));
+  }
+  return h;
+}
+
 /* Intestazione di sezione dentro il modulo della commessa */
 function sez(titolo, nota) {
   return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;'
@@ -6720,6 +6937,9 @@ function fld(label, id, val, ph, type) {
     + '" value="' + esc(val === null || val === undefined ? '' : val) + '" placeholder="' + esc(ph || '') + '"></div>';
 }
 function wzCollect() {
+  /* La casella vive nel passo 3 e sparisce a ogni ridisegno: va letta prima di
+     tutto il resto, altrimenti spuntare una condizione la azzera. */
+  if (el('w-rimuovi')) WZ.rimuovi = el('w-rimuovi').checked;
   if (WZ.step !== 1 && !el('w-name')) return;
   const g = id => el(id) ? el(id).value.trim() : '';
   Object.assign(WZ.d, {
@@ -6774,9 +6994,27 @@ async function wzSave() {
       const { error } = await SB.from('projects').update(pay).eq('id', WZ.edit);
       if (error) return sbErr(error, 'salva commessa');
       if (pay.ente_pubblico) await registraEnte(pay);
-      toast('Commessa aggiornata', 'success');
+
+      /* Il percorso di lavoro puo' essere cambiato: si allinea la struttura a
+         quello che ora e' previsto. Le aggiunte partono sempre, le rimozioni
+         solo se sono state chieste esplicitamente al passo 3. */
+      const diff = differenzaStruttura(WZ.edit, WZ.tpl, WZ.conds, pay.start_date);
+      let res = null;
+      if (!diff.nulla) {
+        if (WZ.rimuovi && (diff.attObsolete.length || diff.pratObsolete.length)
+            && !confirm('Verranno rimosse ' + diff.attObsolete.length + ' attività e '
+                      + diff.pratObsolete.length + ' pratiche non più previste.\n\n'
+                      + 'Sono voci mai avviate e senza conversazioni. Procedo?')) {
+          WZ.rimuovi = false;
+        }
+        res = await applicaStruttura(WZ.edit, WZ.tpl, WZ.conds, pay.start_date, WZ.rimuovi);
+      }
       closeM('m-proj');
       await loadAll(true); render();
+      toast(res && (res.att || res.fasi || res.prat || res.tolte)
+        ? 'Commessa aggiornata: +' + res.fasi + ' fasi, +' + res.att + ' attività, +'
+          + res.prat + ' pratiche' + (res.tolte ? ', ' + res.tolte + ' voci rimosse' : '')
+        : 'Commessa aggiornata', 'success');
       return;
     }
     pay.created_by = S.me.id;
@@ -7666,6 +7904,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (t) { WZ.tpl = t.dataset.tpl; drawWizard(); return; }
     const c = e.target.closest('[data-cond]');
     if (c) {
+      if (el('w-rimuovi')) WZ.rimuovi = el('w-rimuovi').checked;
       const k = c.dataset.cond, i = WZ.conds.indexOf(k);
       if (i >= 0) WZ.conds.splice(i, 1); else WZ.conds.push(k);
       setTimeout(drawWizard, 0);
