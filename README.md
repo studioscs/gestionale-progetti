@@ -35,6 +35,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 14. [`sql/015_blocco_autopromozione.sql`](sql/015_blocco_autopromozione.sql) — **falla di sicurezza: da eseguire**
 15. [`sql/016_progressivo_invio.sql`](sql/016_progressivo_invio.sql) — progressivo di invio persistente
 16. [`sql/017_ore_fase.sql`](sql/017_ore_fase.sql) — ore stimate ed effettive della fase
+17. [`sql/018_visibilita_commesse.sql`](sql/018_visibilita_commesse.sql) — **privacy: ognuno vede le sue commesse, da eseguire**
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -747,6 +748,55 @@ agibilità e per un'altra ventina di voci.
 
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
+
+## Chi vede quali commesse
+
+Fino alla migrazione 018 **tutti vedevano tutto**. Le tabelle nascevano con
+`for select ... using (true)`, quindi chiunque avesse un accesso allo studio
+poteva leggere ogni commessa: importi, dati fiscali dei committenti, fatture,
+conversazioni. E non era un problema di interfaccia risolvibile nascondendo una
+voce di menu — **la chiave anon sta dentro `index.html`, che è pubblico**, e con
+quella si interroga l'API direttamente.
+
+### La regola
+
+**Si vede una commessa quando ci si lavora.** Basta un solo aggancio:
+
+- un'attività assegnata;
+- la verifica di un'attività;
+- la responsabilità di una fase o di una pratica;
+- ore registrate su quella commessa;
+- esserne responsabile o averla creata.
+
+E da quel momento la si vede **per intero**: chi lavora a una fase deve poter
+capire dove si colloca, e nascondergli il resto della commessa non protegge
+nessuno. Gli **amministratori** vedono tutto.
+
+### L'eccezione dichiarata
+
+Chi tiene l'amministrazione emette fatture di commesse su cui non ha mai
+lavorato. Per questo c'è il contrassegno **«Vede tutte le commesse dello
+studio»** sulla scheda utente, che un amministratore accende da **Utenti**.
+Nessuno se lo può dare da solo, e sulla propria scheda il campo è bloccato —
+come il ruolo.
+
+### Dove è applicata
+
+Nel **database**, con le politiche RLS: `projects`, `tasks`, `commessa_fasi`,
+`commessa_pratiche`, `commessa_fatture`, `commessa_sal`, `commessa_varianti`,
+`time_entries`, `files`, gli eventi delle pratiche, i messaggi delle attività e
+l'anagrafica clienti. Anche la **scrittura** segue la lettura: non si modifica
+ciò che non si vede, quindi indovinare un id non serve a niente.
+
+L'interfaccia si limita a spiegarlo: in **Progetti**, a chi non vede tutto,
+compare la nota che dice perché l'elenco è corto. La protezione non sta lì.
+
+### Verificarlo
+
+Non fidarti: [`sql/998_verifica_visibilita.sql`](sql/998_verifica_visibilita.sql)
+crea due utenti e due commesse di prova, interroga il database come ciascuno di
+loro e ripulisce tutto. Su Supabase basta entrare con due utenti diversi e
+guardare l'elenco delle commesse.
 
 ## Modificare una commessa già avviata
 

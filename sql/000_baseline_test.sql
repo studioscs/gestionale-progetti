@@ -11,8 +11,13 @@
 -- =============================================================================
 
 create extension if not exists pgcrypto;
-create role authenticated;
-create role anon;
+-- I ruoli vivono nel cluster, non nel database: cancellando il database di
+-- prova restano. Ricrearli farebbe fallire l'intero file al secondo giro.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+  if not exists (select 1 from pg_roles where rolname = 'anon')          then create role anon;          end if;
+end $$;
 create schema if not exists auth;
 create table auth.users(id uuid primary key default gen_random_uuid(), email text);
 create or replace function auth.uid() returns uuid language sql stable as $$ select current_setting('test.uid', true)::uuid $$;

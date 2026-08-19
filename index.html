@@ -863,6 +863,16 @@ tbody tr:hover td { background:#f0f4f9; }
         </select>
       </div>
       <div class="fg"><label class="fl">Attivo</label><select class="fc" id="mu-a"><option value="1">S&igrave;</option><option value="0">No (disattivato)</option></select></div>
+      <div class="fg"><label class="fl">Visibilit&agrave; delle commesse</label>
+        <select class="fc" id="mu-vt">
+          <option value="0">Solo quelle su cui lavora</option>
+          <option value="1">Tutte le commesse dello studio</option>
+        </select>
+        <div class="hint">Di norma si vedono soltanto le commesse a cui si &egrave; agganciati: un&rsquo;attivit&agrave; assegnata,
+        la verifica di un&rsquo;attivit&agrave;, la responsabilit&agrave; di una fase o di una pratica, ore registrate. Basta un aggancio e
+        la commessa si vede <b>per intero</b>. Gli amministratori vedono sempre tutto. Concedi <b>tutte le commesse</b>
+        solo a chi ne ha davvero bisogno &mdash; tipicamente chi tiene l&rsquo;amministrazione e deve fatturare.</div>
+      </div>
       <div id="mu-self"></div>
       <div id="mu-costi"></div>
     </div>
@@ -942,7 +952,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.7';
+const VERSIONE = '2026.08.05.8';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1036,6 +1046,11 @@ const pn = id => { const p = byId(S.projects, id); return p ? p.name : '-'; };
 const un = id => { const u = byId(S.profs, id); return u ? u.full_name : '-'; };
 const canW = () => !!S.prof && (S.prof.role === 'admin' || S.prof.role === 'collaboratore');
 const isAd = () => !!S.prof && S.prof.role === 'admin';
+/* Chi vede tutte le commesse dello studio: gli amministratori e chi ha il
+   contrassegno sul profilo. Per tutti gli altri il database mostra soltanto le
+   commesse a cui sono agganciati (migrazione 018), e l'interfaccia lo dice
+   invece di lasciar credere che manchi qualcosa. */
+const vedeTutto = () => isAd() || !!(S.prof && S.prof.vede_tutto);
 const puoEliminarePratica = () => PERMESSI.eliminaPratica === 'staff' ? canW() : isAd();
 
 const ST_TASK = { da_fare:['Da fare','bgr'], in_corso:['In corso','bb'], revisione:['In revisione','by'], completato:['Completata','bg'] };
@@ -1106,7 +1121,8 @@ const MIGRAZIONI = {
   '013_ordine_pratiche':  ['ordine'],
   '014_chat_attivita':    ['task_messaggi','testo'],
   '016_progressivo_invio':['progressivo_invio'],
-  '017_ore_fase':         ['ore_stimate','ore_effettive']
+  '017_ore_fase':         ['ore_stimate','ore_effettive'],
+  '018_visibilita_commesse': ['vede_tutto']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -4811,14 +4827,22 @@ function drawProjects() {
     .filter(p => !S.pst || p.status === S.pst)
     .filter(p => !q || (p.name + ' ' + (p.client || '') + ' ' + (p.comune || '') + ' ' + (p.codice || '')).toLowerCase().includes(q));
 
-  if (!list.length) return el('page').innerHTML =
-    '<div class="card"><div class="empty"><i>◫</i><p>'
-    + (ar === 'arch' ? 'Nessuna commessa archiviata.' : 'Nessuna commessa trovata.') + '</p>'
+  /* Perche' l'elenco e' corto: non e' un filtro dimenticato, e' la visibilita'. */
+  const nota = vedeTutto() ? '' :
+      '<div class="ibox mb16" style="font-size:12px">Vedi le commesse a cui sei agganciato: '
+    + 'un’attività assegnata, la verifica di un’attività, la responsabilità di una fase o di una '
+    + 'pratica, ore registrate. Basta un aggancio e la commessa si vede <b>per intero</b>. '
+    + 'Se ti aspetti una commessa che non c’è, chiedi a un amministratore di assegnarti qualcosa.</div>';
+
+  if (!list.length) return el('page').innerHTML = nota
+    + '<div class="card"><div class="empty"><i>◫</i><p>'
+    + (ar === 'arch' ? 'Nessuna commessa archiviata.'
+       : vedeTutto() ? 'Nessuna commessa trovata.' : 'Nessuna commessa assegnata a te.') + '</p>'
     + (canW() && ar !== 'arch' ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
 
-  el('page').innerHTML = S.pvista === 'lista'
+  el('page').innerHTML = nota + (S.pvista === 'lista'
     ? elencoProgetti(list)
-    : '<div class="g3">' + list.map(projCard).join('') + '</div>';
+    : '<div class="g3">' + list.map(projCard).join('') + '</div>');
 }
 
 /* ---------------------------------------------------------------------------
@@ -7769,6 +7793,7 @@ function openUser(id) {
   el('mu-e').value = u.email || '';
   el('mu-r').value = u.role || 'viewer';
   el('mu-a').value = u.attivo === false ? '0' : '1';
+  el('mu-vt').value = u.vede_tutto ? '1' : '0';
   el('mu-costi').innerHTML = costiUtenteHtml(id);
   /* La delega dei clic copre #page e #top, non le modali: qui l'aggancio e'
      diretto, altrimenti il pulsante c'e' ma non fa niente. */
@@ -7785,6 +7810,10 @@ function openUser(id) {
   const io = id === S.me.id;
   el('mu-r').disabled = io;
   el('mu-a').disabled = io;
+  /* Anche la visibilita' e' una forma di privilegio: come il ruolo, non ci si
+     allarga da soli. Agli amministratori la casella non dice nulla, perche'
+     vedono tutto comunque. */
+  el('mu-vt').disabled = io || u.role === 'admin';
   el('mu-self').innerHTML = io
     ? '<div class="ibox" style="font-size:12px">Questa è la tua scheda. Puoi cambiare il tuo nome e '
       + 'impostare il <b>tuo costo orario</b>. Ruolo e stato sono bloccati: declassarti o disattivarti '
@@ -7800,6 +7829,7 @@ async function saveUser() {
   if (EUID !== S.me.id) {
     patch.role   = el('mu-r').value;
     patch.attivo = el('mu-a').value === '1';
+    patch.vede_tutto = el('mu-vt').value === '1';
   }
   const { error } = await SB.from('profiles').update(patch).eq('id', EUID);
   if (error) { setLoading('su-btn', false); return sbErr(error, 'utente'); }

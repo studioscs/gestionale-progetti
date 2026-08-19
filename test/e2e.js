@@ -1527,6 +1527,39 @@ function launchOpts(){
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
   });
+  // --- VISIBILITÀ DELLE COMMESSE ---
+  await t('la scheda utente permette di concedere la visibilità totale',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('users'); openUser('u-due'); });
+    await p.waitForSelector('#m-user.show'); await p.waitForTimeout(400);
+    must(await p.locator('#mu-vt').count()===1,'manca la scelta sulla visibilità');
+    must(await p.inputValue('#mu-vt')==='0','non parte da "solo quelle su cui lavora"');
+    const h=await p.textContent('#m-user');
+    must(/per intero/.test(h),'non spiega che un aggancio basta a vedere tutta la commessa');
+    await p.selectOption('#mu-vt','1');
+    await p.click('#su-btn'); await p.waitForTimeout(700);
+    must(await p.evaluate(()=>byId(S.profs,'u-due').vede_tutto)===true,
+         'il contrassegno non è stato salvato');
+    /* e si torna indietro */
+    await p.evaluate(()=>openUser('u-due')); await p.waitForTimeout(300);
+    await p.selectOption('#mu-vt','0');
+    await p.click('#su-btn'); await p.waitForTimeout(700);
+    must(await p.evaluate(()=>byId(S.profs,'u-due').vede_tutto)===false,'non si può revocare');
+  });
+  await t('sulla propria scheda la visibilità non si allarga da soli',async()=>{
+    await p.evaluate(()=>openUser(S.me.id));
+    await p.waitForSelector('#m-user.show'); await p.waitForTimeout(300);
+    must(await p.locator('#mu-vt').isDisabled(),'si può cambiare la propria visibilità');
+    await p.evaluate(()=>closeM('m-user'));
+  });
+  await t('a chi non vede tutto la pagina Progetti spiega perché',async()=>{
+    const h=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false;
+                                   go('projects'); return el('page').textContent; });
+    must(/agganciato/.test(h),'non spiega il criterio di visibilità: '+h.slice(0,160));
+    must(/per intero/.test(h),'non dice che la commessa si vede intera');
+    const h2=await p.evaluate(()=>{ S.prof.role='admin'; go('projects'); return el('page').textContent; });
+    must(!/agganciato/.test(h2),'la nota compare anche a chi vede tutto');
+  });
+
   await t('il costo che decorre troppo tardi viene detto per nome',async()=>{
     /* «Ma il costo orario gliel'ho messo»: c'è, ma vale da una data in avanti e
        il lavoro precedente conta zero. Il messaggio deve dire chi e da quando. */
