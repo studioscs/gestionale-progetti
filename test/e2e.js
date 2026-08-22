@@ -1527,9 +1527,126 @@ function launchOpts(){
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
   });
+  // --- «QUESTA SI PUÒ FATTURARE»: DAL TECNICO ALL'AMMINISTRAZIONE ---
+  await t('lo scaglione aperto ha il pulsante per chiedere di fatturare',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({name:'Da fatturare a Vania',status:'attivo',
+        amount:40000,client:'Committente X'}).select().single();
+      await SB.from('commessa_fatture').insert([
+        {project_id:data.id,descrizione:'Primo acconto 30%',imponibile:12000,stato:'da_emettere',ordine:1},
+        {project_id:data.id,descrizione:'Saldo',imponibile:28000,stato:'da_emettere',ordine:2}]);
+      await loadAll(true);
+      window.__PIDF=data.id;
+      S.projId=data.id; S.tab='fatture'; go('project');
+    });
+    await p.waitForTimeout(500);
+    must(await p.locator('#page [data-chiedi]').count()===2,'manca il pulsante sugli scaglioni aperti');
+    must(await p.locator('#page [data-nchiedi]').count()===1,'manca il pulsante in testa alla scheda');
+  });
+  await t('la modale elenca gli scaglioni aperti e permette di crearne uno nuovo',async()=>{
+    await p.locator('#page [data-chiedi]').first().click();
+    await p.waitForSelector('#m-chiedi.show'); await p.waitForTimeout(300);
+    const opz=await p.evaluate(()=>Array.from(document.querySelectorAll('#ch-fatt option')).map(o=>o.textContent));
+    must(opz.length===3,'opzioni attese 3 (due scaglioni + nuovo), trovate '+opz.length);
+    must(opz.some(o=>/Primo acconto/.test(o)),'il primo acconto non è in elenco');
+    must(opz.some(o=>/Nuovo scaglione/.test(o)),'manca la voce per crearne uno nuovo');
+    must(await p.isHidden('#ch-nuovo'),'i campi del nuovo scaglione sono visibili senza averlo scelto');
+    await p.selectOption('#ch-fatt','nuovo'); await p.waitForTimeout(200);
+    must(await p.isVisible('#ch-nuovo'),'scegliendo "nuovo" i campi non compaiono');
+    must(/Indica un imponibile/.test(await p.textContent('#ch-riep')),'nessun riepilogo di aiuto');
+    await p.evaluate(()=>closeM('m-chiedi'));
+  });
+  await t('chiedere di fatturare segna lo scaglione e lascia traccia di chi e quando',async()=>{
+    const g=await p.evaluate(async pid=>{
+      /* Anna tiene l'amministrazione: è lei che deve ricevere l'avviso.
+         Chi chiede non notifica se stesso, quindi serve un destinatario vero. */
+      await SB.from('profiles').update({vede_tutto:true}).eq('id','u-due');
+      await loadAll(true);
+      const f=S.fatture.find(x=>x.project_id===pid&&/Primo acconto/.test(x.descrizione));
+      const prima=__DB.notifiche.length;
+      openChiedi(pid,f.id);
+      el('ch-note').value='SAL n. 1 approvato, fatturare con riferimento al contratto';
+      mailAmministrazione=()=>{};              // la posta non parte durante i test
+      await inviaChiedi();
+      await loadAll(true);
+      const dopo=byId(S.fatture,f.id);
+      return {stato:dopo.stato,da:dopo.richiesta_da,note:dopo.richiesta_note,
+              quando:!!dopo.richiesta_at,notifiche:__DB.notifiche.length-prima,
+              a:__DB.notifiche.slice(prima).map(n=>n.user_id)};
+    },await p.evaluate(()=>window.__PIDF));
+    await p.waitForTimeout(500);
+    must(g.stato==='pronta','lo scaglione non è passato a "pronta": '+g.stato);
+    must(g.quando,'non è rimasta la data della richiesta');
+    must(g.da==='u-me','non è rimasto chi ha chiesto: '+g.da);
+    must(/SAL n. 1/.test(g.note||''),'la nota non è stata salvata: '+g.note);
+    must(g.notifiche>0,'nessuna notifica a chi emette le fatture');
+    must(g.a.includes('u-due'),'l avviso non è arrivato a chi tiene l amministrazione: '+g.a);
+  });
+  await t('la mail all amministrazione parte già scritta',async()=>{
+    const url=await p.evaluate(pid=>{
+      const f=S.fatture.find(x=>x.project_id===pid&&/Primo acconto/.test(x.descrizione));
+      return decodeURIComponent(mailtoAmministrazione(f.id));
+    },await p.evaluate(()=>window.__PIDF));
+    must(/^mailto:amministrazione@studiotecnicoscs\.com/.test(url),'destinatario sbagliato: '+url.slice(0,80));
+    must(/Da fatturare: Primo acconto/.test(url),'oggetto senza lo scaglione');
+    must(/Da fatturare a Vania/.test(url),'la mail non nomina la commessa');
+    must(/Imponibile/.test(url)&&/Totale documento/.test(url),'mancano gli importi');
+    must(/SAL n\. 1/.test(url),'la nota non è finita nella mail');
+    must(/Richiesta da/.test(url),'non dice chi ha chiesto');
+  });
+  await t('la pagina Da fatturare mette le richieste in cima',async()=>{
+    await p.evaluate(()=>go('fatturare')); await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Chieste dai responsabili/.test(h),'manca la sezione delle richieste');
+    must(/Richieste dall’area tecnica/.test(h),'manca la spiegazione');
+    must(/Chieste dai tecnici/.test(h),'manca il riquadro di riepilogo');
+    must(/SAL n. 1/.test(h),'la nota non è visibile a chi fattura');
+  });
+  await t('uno scaglione non previsto si crea e si chiede in un colpo solo',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const prima=S.fatture.filter(x=>x.project_id===pid).length;
+      openChiedi(pid,null);
+      el('ch-fatt').value='nuovo'; disegnaChiedi();
+      el('ch-desc').value='Compenso per variante non prevista';
+      el('ch-imp').value='3500';
+      el('ch-note').value='Variante approvata in corso d’opera';
+      mailAmministrazione=()=>{};
+      await inviaChiedi();
+      await loadAll(true);
+      const nuovo=S.fatture.find(x=>x.project_id===pid&&/variante/i.test(x.descrizione));
+      return {prima,dopo:S.fatture.filter(x=>x.project_id===pid).length,
+              stato:nuovo&&nuovo.stato,imp:nuovo&&Number(nuovo.imponibile),
+              richiesta:!!(nuovo&&nuovo.richiesta_at)};
+    },await p.evaluate(()=>window.__PIDF));
+    await p.waitForTimeout(500);
+    must(g.dopo===g.prima+1,'lo scaglione nuovo non è stato creato');
+    must(g.stato==='pronta','non nasce già pronta da emettere: '+g.stato);
+    must(g.imp===3500,'importo sbagliato: '+g.imp);
+    must(g.richiesta,'lo scaglione nuovo non porta la richiesta');
+  });
+  await t('la richiesta si chiude da sola quando la fattura viene emessa',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const f=S.fatture.find(x=>x.project_id===pid&&/Primo acconto/.test(x.descrizione));
+      const prima=fattRichiesta(byId(S.fatture,f.id));
+      await SB.from('commessa_fatture').update({stato:'emessa',numero_fattura:'2026/014'}).eq('id',f.id);
+      await loadAll(true);
+      return {prima,dopo:fattRichiesta(byId(S.fatture,f.id))};
+    },await p.evaluate(()=>window.__PIDF));
+    must(g.prima===true,'la richiesta non risultava aperta');
+    must(g.dopo===false,'la richiesta resta aperta dopo l emissione');
+    const h=await p.evaluate(()=>{ go('fatturare'); return el('page').textContent; });
+    must(!/Primo acconto/.test(h)||!/Chieste dai responsabili/.test(h)
+         ||h.indexOf('Primo acconto')>h.indexOf('Emesse'),'resta fra le richieste dopo l emissione');
+  });
+
   // --- VISIBILITÀ DELLE COMMESSE ---
   await t('la scheda utente permette di concedere la visibilità totale',async()=>{
-    await p.evaluate(()=>{ S.prof.role='admin'; go('users'); openUser('u-due'); });
+    await p.evaluate(async()=>{
+      /* si riparte dal valore di riposo: un test precedente lo ha acceso ad Anna */
+      await SB.from('profiles').update({vede_tutto:false}).eq('id','u-due');
+      await loadAll(true);
+      S.prof.role='admin'; go('users'); openUser('u-due');
+    });
     await p.waitForSelector('#m-user.show'); await p.waitForTimeout(400);
     must(await p.locator('#mu-vt').count()===1,'manca la scelta sulla visibilità');
     must(await p.inputValue('#mu-vt')==='0','non parte da "solo quelle su cui lavora"');

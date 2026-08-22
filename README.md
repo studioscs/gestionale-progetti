@@ -36,6 +36,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 15. [`sql/016_progressivo_invio.sql`](sql/016_progressivo_invio.sql) — progressivo di invio persistente
 16. [`sql/017_ore_fase.sql`](sql/017_ore_fase.sql) — ore stimate ed effettive della fase
 17. [`sql/018_visibilita_commesse.sql`](sql/018_visibilita_commesse.sql) — **privacy: ognuno vede le sue commesse, da eseguire**
+18. [`sql/019_richiesta_fattura.sql`](sql/019_richiesta_fattura.sql) — «questa si può fatturare»: dal tecnico all'amministrazione
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -748,6 +749,52 @@ agibilità e per un'altra ventina di voci.
 
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
+
+## «Questa si può fatturare»
+
+Gli scaglioni si predispongono a inizio commessa secondo contratto: acconto,
+secondo acconto, saldo. Poi qualcuno deve accorgersi che uno è maturato e dirlo
+a chi fattura. Quel passaggio non stava da nessuna parte — avveniva a voce, e
+quando non avveniva la fattura restava lì per settimane.
+
+Chi lo sa è il responsabile della commessa, che però non fattura; chi fattura
+non segue i lavori e non può indovinare.
+
+### Come funziona
+
+Nella scheda **Fatturazione** della commessa, il pulsante 📣 accanto a ogni
+scaglione ancora aperto — o **Chiedi di fatturare** in testa alla scheda. Si
+apre una finestra che chiede:
+
+- **quale scaglione**, scelto fra quelli aperti del contratto. Se serve
+  fatturare qualcosa che il contratto non aveva previsto (una variante, una
+  prestazione aggiuntiva), c'è **Nuovo scaglione** e lo si descrive lì: viene
+  creato già come *pronta da emettere*;
+- una **nota per l'amministrazione**: riferimenti, SAL, prescrizioni sul
+  documento.
+
+Alla conferma succedono tre cose:
+
+1. lo scaglione passa a **«pronta da emettere»**, con scritto **chi** l'ha
+   chiesto, **quando** e **con quali note**;
+2. parte una **notifica nel gestionale** a chi emette le fatture — gli
+   amministratori e chi ha il contrassegno *«vede tutte le commesse»*;
+3. si apre il programma di posta con la **mail già scritta** a
+   `amministrazione@studiotecnicoscs.com`: commessa, committente, CIG e CUP se
+   il committente è pubblico, importi calcolati (imponibile, cassa, IVA, netto),
+   l'avviso sull'IBAN dedicato se è un lavoro sisma, le note e chi ha chiesto.
+
+Il gestionale non spedisce niente da solo: apre la posta con tutto compilato,
+così la mail parte dalla casella di chi la manda e resta nei suoi inviati.
+
+### Dove le vede chi fattura
+
+In **Da fatturare**, le richieste stanno **in cima e in una sezione a parte** —
+sono l'unica cosa in quella pagina che qualcuno ha esplicitamente chiesto di
+fare — con il nome di chi ha chiesto, la data e la nota sotto ciascuna riga.
+
+La richiesta **si chiude da sola** quando la fattura viene segnata come emessa:
+nessun secondo pulsante da ricordarsi di premere.
 
 ## Chi vede quali commesse
 

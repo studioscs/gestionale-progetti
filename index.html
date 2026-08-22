@@ -599,6 +599,42 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
+<!-- Chiedi all'amministrazione di fatturare -->
+<div class="ov" id="m-chiedi">
+  <div class="modal modal-sm">
+    <div class="mh"><h3>Chiedi di fatturare</h3><button class="mx" data-close="m-chiedi">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16" style="font-size:12px">Serve a dire all&rsquo;amministrazione che uno scaglione
+        &egrave; maturato e si pu&ograve; emettere. Resta scritto nel gestionale <b>e</b> parte una mail:
+        chi fattura non deve rincorrere nessuno.</div>
+      <div class="fg"><label class="fl">Commessa</label><input class="fc" id="ch-proj" disabled></div>
+      <div class="fg"><label class="fl">Quale scaglione</label>
+        <select class="fc" id="ch-fatt"></select>
+        <div class="hint">Se quello che ti serve non &egrave; previsto dal contratto iniziale, scegli
+          <b>Nuovo scaglione</b> e descrivilo qui sotto.</div>
+      </div>
+      <div id="ch-nuovo" style="display:none">
+        <div class="fg"><label class="fl">Descrizione *</label>
+          <input class="fc" id="ch-desc" placeholder="Es. Secondo acconto 30% al deposito sismico"></div>
+        <div class="fg2">
+          <div class="fg"><label class="fl">Imponibile &euro;</label>
+            <input type="number" class="fc" id="ch-imp" step="0.01" min="0"></div>
+          <div class="fg"><label class="fl">oppure % dell&rsquo;importo commessa</label>
+            <input type="number" class="fc" id="ch-perc" step="0.5" min="0" max="100"></div>
+        </div>
+      </div>
+      <div class="fg" id="ch-riep-box"><div class="hint" id="ch-riep"></div></div>
+      <div class="fg"><label class="fl">Nota per l&rsquo;amministrazione</label>
+        <textarea class="fc" id="ch-note" rows="3"
+          placeholder="Es. SAL n. 2 approvato il 12/03, fatturare con riferimento al CIG in commessa"></textarea>
+        <div class="hint">Riferimenti, SAL, prescrizioni sul documento. Finisce nella mail e resta sullo scaglione.</div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn" data-close="m-chiedi">Annulla</button>
+      <button class="btn btn-p" id="ch-go">&#9993;&#65039; Avvisa l&rsquo;amministrazione</button></div>
+  </div>
+</div>
+
 <div class="ov" id="m-fatt">
   <div class="modal">
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
@@ -947,12 +983,15 @@ const STUDIO = {
      della stessa giornata, non un supplemento. */
   quotaLavoro   : 0.7,
   quotaVerifica : 0.3,
+  /* Dove arrivano le richieste di fatturazione dei responsabili di commessa.
+     E' la casella che legge chi emette le fatture. */
+  emailAmministrazione : 'amministrazione@studiotecnicoscs.com',
 };
 
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.8';
+const VERSIONE = '2026.08.05.9';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1122,7 +1161,8 @@ const MIGRAZIONI = {
   '014_chat_attivita':    ['task_messaggi','testo'],
   '016_progressivo_invio':['progressivo_invio'],
   '017_ore_fase':         ['ore_stimate','ore_effettive'],
-  '018_visibilita_commesse': ['vede_tutto']
+  '018_visibilita_commesse': ['vede_tutto'],
+  '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -4240,7 +4280,12 @@ function fatturePanel(pid) {
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
       + '<td><b>' + esc(f.descrizione) + '</b>'
-        + (fa ? '<div style="font-size:11px;color:var(--mut)">matura con: ' + esc(fa.nome) + '</div>' : '') + '</td>'
+        + (fa ? '<div style="font-size:11px;color:var(--mut)">matura con: ' + esc(fa.nome) + '</div>' : '')
+        + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600">'
+            + '📣 fatturazione chiesta da ' + esc(un(f.richiesta_da)) + ' il '
+            + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
+            + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut)">' + esc(f.richiesta_note) + '</div>' : '')
+          : '') + '</td>'
       + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
         + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
@@ -4249,6 +4294,8 @@ function fatturePanel(pid) {
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
       + '<td class="ac" style="white-space:nowrap">'
+        + (canW() && fattAperta(f)
+            ? '<button class="btn btn-xs" data-chiedi="' + f.id + '" title="Dì all’amministrazione che si può fatturare">&#128227;</button> ' : '')
         + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '')
         + (canW() && p.referente_email && ['emessa','incassata'].indexOf(f.stato) >= 0
             ? ' <button class="btn btn-xs" data-mailfatt="' + f.id + '" title="Invia copia al referente amministrativo">&#9993;&#65039;</button>' : '')
@@ -4296,6 +4343,8 @@ function fatturePanel(pid) {
     + '<div class="card"><div class="card-h"><span class="card-t">Scaglioni</span>'
       + (canW() ? '<span class="row">'
           + (list.length ? '' : '<button class="btn btn-sm" data-act="fattstd">Genera scaglioni standard</button>')
+          + '<button class="btn btn-sm" data-nchiedi="" title="Dì all’amministrazione che si può fatturare">'
+          + '📣 Chiedi di fatturare</button>'
           + '<button class="btn btn-p btn-sm" data-newfatt="">＋ Scaglione</button></span>' : '') + '</div>'
     + (list.length
         ? '<div class="tw"><table class="tsm"><thead><tr><th>Descrizione</th><th>Stato</th>'
@@ -4319,7 +4368,11 @@ function rFatturare() {
     if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
   });
 
-  const pronte = list.filter(f => f.stato === 'pronta');
+  /* Le richieste dei responsabili stanno in cima e da sole: sono l'unica cosa
+     in questa pagina che qualcuno ha esplicitamente chiesto di fare. */
+  const richieste = list.filter(fattRichiesta)
+    .sort((a, b) => String(b.richiesta_at).localeCompare(String(a.richiesta_at)));
+  const pronte = list.filter(f => f.stato === 'pronta' && !fattRichiesta(f));
   const totP = pronte.reduce((a, f) => a + impFattura(f), 0);
   const totT = list.reduce((a, f) => a + impFattura(f), 0);
   const incassato = S.fatture.filter(f => f.stato === 'incassata')
@@ -4342,7 +4395,11 @@ function rFatturare() {
         + '<div style="color:var(--mut)">' + esc((byId(S.projects, f.project_id) || {}).client || '') + '</div></td>'
       + '<td>' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
+      + '<td>' + bdg(f.stato, ST_FATT)
+        + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
+            + '📣 ' + esc(un(f.richiesta_da)) + ' · ' + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
+            + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
+                + esc(f.richiesta_note) + '</div>' : '') : '') + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
@@ -4358,6 +4415,9 @@ function rFatturare() {
 
   el('page').innerHTML =
       '<div class="kgrid">'
+      + kpi('Chieste dai tecnici', richieste.length,
+            feuro(richieste.reduce((a, f) => a + impFattura(f), 0)),
+            richieste.length ? 100 : 0, 'var(--ora)')
       + kpi('Pronte da emettere', pronte.length, feuro(totP), pronte.length ? 100 : 0, 'var(--yel)')
       + kpi('In attesa di maturare', list.length - pronte.length, feuro(totT - totP), 60, 'var(--mut2)')
       + kpi('Emesse non incassate', emesse.length,
@@ -4366,6 +4426,13 @@ function rFatturare() {
       + '</div>'
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
+    + (richieste.length
+        ? '<div class="ibox mb16" style="font-size:12.5px"><b>Richieste dall’area tecnica.</b> '
+          + 'Qualcuno ha dichiarato che questi scaglioni si possono emettere: sotto ciascuno trovi '
+          + 'chi l’ha chiesto, quando e con quali riferimenti. La richiesta si chiude da sola quando '
+          + 'segni la fattura come <b>emessa</b>.</div>'
+        : '')
+    + tabella(richieste, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
     + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
     + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti')
     + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)');
@@ -5297,6 +5364,168 @@ function mailFattura(fid) {
     + '&body=' + encodeURIComponent(rows.join('\n'));
   window.location.href = url;
   toast('Ricorda di allegare il PDF della fattura prima di inviare.');
+}
+
+/* ===========================================================================
+   «QUESTA SI PUO' FATTURARE»: DAL TECNICO ALL'AMMINISTRAZIONE
+
+   Gli scaglioni si predispongono a inizio commessa secondo contratto. Poi
+   qualcuno deve accorgersi che uno e' maturato e dirlo a chi fattura: chi lo sa
+   e' il responsabile della commessa, che pero' non fattura; chi fattura non
+   segue i lavori e non puo' indovinare.
+
+   Quel passaggio ora e' un atto esplicito, con un mittente, una data e un
+   motivo. Resta scritto sullo scaglione, arriva come notifica a chi emette le
+   fatture e parte anche come email, perche' l'amministrazione lavora sulla
+   posta e non sul gestionale. La richiesta si chiude da sola quando lo
+   scaglione viene emesso: nessun secondo pulsante da ricordarsi.
+   =========================================================================== */
+
+/* Chi in studio emette le fatture: gli amministratori e chi ha il contrassegno
+   "vede tutte le commesse", che e' esattamente il profilo dell'amministrazione. */
+const chiFattura = () => S.profs.filter(u => u.attivo !== false
+  && (u.role === 'admin' || u.vede_tutto)).map(u => u.id);
+
+const fattRichiesta = f => !!f.richiesta_at && fattAperta(f);
+
+let CHIEDI_PID = null;
+function openChiedi(pid, fid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  if (!canW()) return toast('Non hai i permessi per chiedere la fatturazione.', 'error');
+  CHIEDI_PID = pid;
+  el('ch-proj').value = p.name;
+  el('ch-note').value = '';
+  el('ch-desc').value = ''; el('ch-imp').value = ''; el('ch-perc').value = '';
+
+  const aperte = fattureOf(pid).filter(fattAperta);
+  fillSel('ch-fatt', aperte.map(f => ({
+    v: f.id,
+    l: f.descrizione + ' — ' + feuro(impFattura(f))
+       + (f.richiesta_at ? ' (già richiesta il ' + fdate(String(f.richiesta_at).split('T')[0]) + ')' : '')
+  })), fid || (aperte[0] && aperte[0].id) || 'nuovo', null);
+  /* L'opzione per crearne uno che il contratto non aveva previsto */
+  const sel = el('ch-fatt');
+  const opt = document.createElement('option');
+  opt.value = 'nuovo'; opt.textContent = '— Nuovo scaglione, non previsto all’inizio —';
+  sel.appendChild(opt);
+  if (!aperte.length) sel.value = 'nuovo';
+
+  sel.onchange = disegnaChiedi;
+  ['ch-imp','ch-perc'].forEach(k => el(k).oninput = disegnaChiedi);
+  disegnaChiedi();
+  openM('m-chiedi');
+}
+
+function disegnaChiedi() {
+  const nuovo = el('ch-fatt').value === 'nuovo';
+  el('ch-nuovo').style.display = nuovo ? '' : 'none';
+  const p = byId(S.projects, CHIEDI_PID) || {};
+  let imp = 0;
+  if (nuovo) {
+    const fisso = parseFloat(el('ch-imp').value), perc = parseFloat(el('ch-perc').value);
+    if (!isNaN(fisso) && fisso > 0) imp = fisso;
+    else if (!isNaN(perc) && p.amount) imp = r2(Number(p.amount) * perc / 100);
+  } else {
+    const f = byId(S.fatture, el('ch-fatt').value);
+    imp = f ? impFattura(f) : 0;
+  }
+  if (!imp) { el('ch-riep').textContent = nuovo
+      ? 'Indica un imponibile oppure una percentuale dell’importo di commessa.'
+      : 'Questo scaglione non ha ancora un importo: aprilo dalla scheda Fatturazione e completalo.';
+    return; }
+  const c = calcolaFattura(imp);
+  el('ch-riep').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b> → totale documento <b>'
+    + feuro(c.totale) + '</b>' + (c.ritenuta ? ', netto a pagare ' + feuro(c.netto) : '');
+}
+
+async function inviaChiedi() {
+  const p = byId(S.projects, CHIEDI_PID); if (!p) return;
+  const nuovo = el('ch-fatt').value === 'nuovo';
+  const note  = el('ch-note').value.trim() || null;
+  let fid = nuovo ? null : el('ch-fatt').value;
+
+  setLoading('ch-go', true);
+  try {
+    if (nuovo) {
+      const desc = el('ch-desc').value.trim();
+      if (!desc) return toast('Descrivi lo scaglione da fatturare.', 'error');
+      const fisso = el('ch-imp').value, perc = el('ch-perc').value;
+      if (fisso === '' && perc === '') return toast('Indica un imponibile oppure una percentuale.', 'error');
+      const { data, error } = await SB.from('commessa_fatture').insert({
+        project_id: CHIEDI_PID, descrizione: desc,
+        imponibile:  fisso === '' ? null : parseFloat(fisso),
+        percentuale: perc  === '' ? null : parseFloat(perc),
+        stato: 'pronta', ordine: fattureOf(CHIEDI_PID).length,
+        data_prevista: todayISO(), created_by: S.me.id,
+        richiesta_at: new Date().toISOString(), richiesta_da: S.me.id, richiesta_note: note
+      }).select().single();
+      if (error) return sbErr(error, 'nuovo scaglione');
+      fid = data.id;
+    } else {
+      /* Lo stato diventa "pronta": e' il significato della richiesta. */
+      const { error } = await SB.from('commessa_fatture').update({
+        stato: 'pronta',
+        richiesta_at: new Date().toISOString(), richiesta_da: S.me.id, richiesta_note: note
+      }).eq('id', fid);
+      if (error) return sbErr(error, 'richiesta di fatturazione');
+    }
+
+    await loadAll(true);
+    const f = byId(S.fatture, fid);
+
+    /* Dentro il gestionale, a chi emette le fatture */
+    await notifica(chiFattura(), 'Da fatturare: ' + p.name,
+      (f ? f.descrizione + ' — ' + feuro(impFattura(f)) : '') + (note ? ' · ' + note : ''),
+      CHIEDI_PID);
+
+    closeM('m-chiedi'); render();
+    toast('Richiesta registrata. Ora si apre la mail all’amministrazione.', 'success');
+    /* E fuori, perche' l'amministrazione lavora sulla posta */
+    mailAmministrazione(fid);
+  } finally { setLoading('ch-go', false); }
+}
+
+/* Bozza di email alla casella dell'amministrazione. Il gestionale non spedisce
+   nulla da solo: apre il programma di posta con tutto gia' scritto, cosi' la
+   mail parte dalla casella di chi la manda e resta nei suoi inviati. */
+function mailAmministrazione(fid) {
+  const url = mailtoAmministrazione(fid);
+  if (url) window.location.href = url;
+}
+
+/* Il testo della mail si compone a parte da chi la apre: cosi' lo si puo'
+   leggere e verificare senza far partire il programma di posta. */
+function mailtoAmministrazione(fid) {
+  const f = byId(S.fatture, fid); if (!f) return null;
+  const p = byId(S.projects, f.project_id) || {};
+  const c = calcolaFattura(impFattura(f));
+  const cl = clienteDi(p.id);
+  const rows = [
+    'Si può procedere alla fatturazione dello scaglione indicato di seguito.',
+    '',
+    'Commessa: ' + p.name + (p.codice ? ' (' + p.codice + ')' : ''),
+    'Committente: ' + (p.client || (cl && cl.denominazione) || '—'),
+    p.ente_pubblico ? 'Committente pubblico — CIG ' + (p.cig || 'da indicare')
+      + (p.cup ? ' · CUP ' + p.cup : '')
+      + (p.codice_ufficio ? ' · Codice Univoco Ufficio ' + p.codice_ufficio : '') : '',
+    p.ente_pubblico && p.rif_incarico ? 'Atto di affidamento: ' + p.rif_incarico : '',
+    '',
+    'Scaglione: ' + f.descrizione,
+    'Imponibile: ' + feuro(c.imponibile),
+    c.cassa ? 'Contributo cassa: ' + feuro(c.cassa) : '',
+    'IVA: ' + feuro(c.iva),
+    'Totale documento: ' + feuro(c.totale),
+    c.ritenuta ? 'Netto a pagare: ' + feuro(c.netto) : '',
+    p.sisma ? 'Lavori di ricostruzione post-sisma: usare l’IBAN dedicato.' : '',
+    '',
+    f.richiesta_note ? 'Note: ' + f.richiesta_note : '',
+    f.richiesta_note ? '' : '',
+    'Richiesta da ' + (S.prof.full_name || '') + ' il ' + fdate(todayISO()) + '.',
+    'Lo scaglione è segnato come «pronta da emettere» nel gestionale, sezione Da fatturare.'
+  ].filter(x => x !== '');
+  return 'mailto:' + encodeURIComponent(STUDIO.emailAmministrazione || '')
+    + '?subject=' + encodeURIComponent('[' + p.name + '] Da fatturare: ' + f.descrizione)
+    + '&body=' + encodeURIComponent(rows.join('\n'));
 }
 
 function orePanel(pid) {
@@ -7887,6 +8116,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('mp-next').onclick = () => { wzCollect(); if (WZ.step === 1 && !WZ.d.name) return toast('Inserisci il nome della commessa.', 'error'); WZ.step++; drawWizard(); };
   el('mp-back').onclick = () => { wzCollect(); WZ.step--; drawWizard(); };
   el('mp-save').onclick = wzSave;
+  el('ch-go').onclick = inviaChiedi;
   el('mp-arch').onclick = () => {
     const p = byId(S.projects, WZ.edit);
     archiviaProj(WZ.edit, !(p && p.archiviato));
@@ -8025,6 +8255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
     if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
+    if ((n = f('data-chiedi')))  { e.stopPropagation();
+      const fa = byId(S.fatture, n.dataset.chiedi);
+      return openChiedi(fa ? fa.project_id : S.projId, n.dataset.chiedi); }
+    if ((n = f('data-nchiedi'))) { e.stopPropagation(); return openChiedi(S.projId, null); }
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
     if ((n = f('data-mailfatt'))) { e.stopPropagation(); return mailFattura(n.dataset.mailfatt); }
     if ((n = f('data-mailtec'))) { e.stopPropagation(); return mailTecnico(S.projId); }
