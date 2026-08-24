@@ -1594,6 +1594,103 @@ function launchOpts(){
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
   });
+  // --- CONTRATTO E INTEGRAZIONI ---
+  await t('la scheda Fatturazione mostra il riquadro degli atti',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'CTR_01',name:'Villa con integrazioni',
+        status:'attivo',amount:20000,client:'Fam. Neri'}).select().single();
+      await loadAll(true);
+      window.__PIDC=data.id; S.projId=data.id; S.tab='fatture'; go('project');
+    });
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Contratto e integrazioni/.test(h),'riquadro assente');
+    must(/Nessun atto registrato/.test(h),'non dice che gli atti non ci sono');
+    must(/scritto a mano/.test(h),'non spiega da dove viene l importo');
+    must(await p.locator('#page [data-newcontr]').count()===1,'manca il pulsante per registrare l incarico');
+  });
+  await t('il primo atto eredita l importo già scritto',async()=>{
+    await p.click('#page [data-newcontr]');
+    await p.waitForSelector('#m-contr.show'); await p.waitForTimeout(300);
+    must(await p.inputValue('#mc-tipo')==='incarico','non propone l incarico originario');
+    must(Number(await p.inputValue('#mc-imp'))===20000,'non eredita l importo della commessa');
+    must(Number(await p.inputValue('#mc-num'))===1,'il primo atto non è il numero 1');
+    await p.click('#mc-save'); await p.waitForTimeout(800);
+    const g=await p.evaluate(pid=>({atti:S.contratti.filter(c=>c.project_id===pid).length,
+                                    amount:Number(byId(S.projects,pid).amount),
+                                    fatture:S.fatture.filter(f=>f.project_id===pid).length}),
+                             await p.evaluate(()=>window.__PIDC));
+    must(g.atti===1,'atto non registrato');
+    must(g.amount===20000,'l importo è cambiato senza motivo: '+g.amount);
+    must(g.fatture===1,'lo scaglione dell incarico non è stato creato');
+  });
+  await t('un integrazione accettata alza l importo e produce la sua fattura',async()=>{
+    const g=await p.evaluate(async pid=>{
+      openContratto(pid,null);
+      el('mc-ogg').value='Progetto strutturale non previsto nell’incarico iniziale';
+      el('mc-imp').value='6500';
+      el('mc-rif').value='Preventivo 2026/44';
+      await salvaContratto();
+      await loadAll(true);
+      const f=S.fatture.filter(x=>x.project_id===pid);
+      const c=S.contratti.filter(x=>x.project_id===pid).find(x=>x.numero===2);
+      return {tipo:c&&c.tipo,numero:c&&c.numero,
+              amount:Number(byId(S.projects,pid).amount),
+              fatture:f.length,
+              agganciata:f.some(x=>x.contratto_id===(c&&c.id)),
+              imp:f.filter(x=>x.contratto_id===(c&&c.id)).map(x=>Number(x.imponibile))[0]};
+    },await p.evaluate(()=>window.__PIDC));
+    await p.waitForTimeout(600);
+    must(g.tipo==='integrazione','il secondo atto non nasce come integrazione: '+g.tipo);
+    must(g.numero===2,'numerazione sbagliata: '+g.numero);
+    must(g.amount===26500,'l importo non si è aggiornato: '+g.amount);
+    must(g.fatture===2,'la fattura dell integrazione non è stata creata');
+    must(g.agganciata,'la fattura non è agganciata all atto');
+    must(g.imp===6500,'importo della fattura sbagliato: '+g.imp);
+  });
+  await t('un atto solo proposto non entra nell importo',async()=>{
+    const g=await p.evaluate(async pid=>{
+      openContratto(pid,null);
+      el('mc-ogg').value='Assistenza al collaudo, da confermare';
+      el('mc-imp').value='2000';
+      el('mc-stato').value='proposto';
+      el('mc-scag').checked=false;
+      await salvaContratto();
+      await loadAll(true);
+      const prima=Number(byId(S.projects,pid).amount);
+      const c=S.contratti.filter(x=>x.project_id===pid).find(x=>x.numero===3);
+      /* poi lo si firma */
+      openContratto(pid,c.id); el('mc-stato').value='accettato'; await salvaContratto();
+      await loadAll(true);
+      return {prima,dopo:Number(byId(S.projects,pid).amount)};
+    },await p.evaluate(()=>window.__PIDC));
+    await p.waitForTimeout(700);
+    must(g.prima===26500,'un atto proposto ha già alzato l importo: '+g.prima);
+    must(g.dopo===28500,'accettandolo l importo non è salito: '+g.dopo);
+  });
+  await t('il riquadro dice quanto di ogni atto è ancora da fatturare',async()=>{
+    await p.evaluate(pid=>{ S.projId=pid; S.tab='fatture'; go('project'); },
+                     await p.evaluate(()=>window.__PIDC));
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Incarico originario/.test(h),'non distingue l incarico dalle integrazioni');
+    must(/Integrazioni accettate/.test(h),'non somma le integrazioni a parte');
+    must(/da mettere in fattura/.test(h),'non dice cosa resta da fatturare');
+    must(/proposti e non ancora firmati/.test(h)===false,'segnala proposte che non ci sono più');
+  });
+  await t('con gli atti l importo non si scrive più a mano',async()=>{
+    await p.evaluate(pid=>openEditProj(pid),await p.evaluate(()=>window.__PIDC));
+    await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(400);
+    must(await p.locator('#w-imp').isDisabled(),'l importo è ancora modificabile a mano');
+    const h=await p.textContent('#mp-body');
+    must(/somma degli atti accettati/.test(h),'non spiega perché è bloccato');
+    /* e salvando non viene sovrascritto */
+    const g=await p.evaluate(async pid=>{ await wzSave(); await loadAll(true);
+      return Number(byId(S.projects,pid).amount); },await p.evaluate(()=>window.__PIDC));
+    await p.waitForTimeout(700);
+    must(g===28500,'salvando la commessa l importo si è perso: '+g);
+  });
+
   // --- «QUESTA SI PUÒ FATTURARE»: DAL TECNICO ALL'AMMINISTRAZIONE ---
   await t('lo scaglione aperto ha il pulsante per chiedere di fatturare',async()=>{
     await p.evaluate(async()=>{

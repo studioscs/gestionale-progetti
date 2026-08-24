@@ -599,6 +599,59 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
+<!-- Atto di incarico o integrazione -->
+<div class="ov" id="m-contr">
+  <div class="modal modal-sm">
+    <div class="mh"><h3 id="mc-t">Integrazione di contratto</h3><button class="mx" data-close="m-contr">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16" style="font-size:12px">Un incarico quasi mai resta quello di partenza. Ogni atto
+        &mdash; l&rsquo;incarico originario e le integrazioni che seguono &mdash; sta qui con il suo oggetto e il suo
+        importo, e <b>l&rsquo;importo della commessa &egrave; la loro somma</b>: non lo scrive pi&ugrave; nessuno a mano.</div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Tipo di atto</label>
+          <select class="fc" id="mc-tipo">
+            <option value="incarico">Incarico originario</option>
+            <option value="integrazione">Integrazione &mdash; prestazioni aggiuntive</option>
+            <option value="riduzione">Riduzione / stralcio</option>
+          </select></div>
+        <div class="fg"><label class="fl">Numero</label><input type="number" class="fc" id="mc-num" min="1"></div>
+        <div class="fg"><label class="fl">Stato</label>
+          <select class="fc" id="mc-stato">
+            <option value="accettato">Accettato &mdash; firmato</option>
+            <option value="proposto">Proposto &mdash; non ancora firmato</option>
+            <option value="rifiutato">Rifiutato</option>
+          </select></div>
+      </div>
+      <div class="fg"><label class="fl">Oggetto delle prestazioni *</label>
+        <textarea class="fc" id="mc-ogg" rows="2"
+          placeholder="Es. Progetto e direzione lavori delle opere strutturali non previste nell&rsquo;incarico iniziale"></textarea></div>
+      <div class="fg3">
+        <div class="fg"><label class="fl">Importo &euro; *</label>
+          <input type="number" class="fc" id="mc-imp" step="0.01"></div>
+        <div class="fg"><label class="fl">Data dell&rsquo;atto</label><input type="date" class="fc" id="mc-data"></div>
+        <div class="fg"><label class="fl">Riferimento</label>
+          <input class="fc" id="mc-rif" placeholder="Preventivo, delibera, protocollo"></div>
+      </div>
+      <div class="hint" id="mc-calc" style="margin:-8px 0 14px"></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="mc-note" rows="2"></textarea></div>
+      <div class="fg" id="mc-scag-box">
+        <label class="row" style="cursor:pointer;font-size:13px">
+          <input type="checkbox" id="mc-scag" checked>&nbsp;<b>Crea subito lo scaglione di fatturazione</b></label>
+        <div class="hint">Le prestazioni aggiuntive vanno fatturate: se lasci la spunta, nasce lo scaglione
+          corrispondente in <b>Fatturazione</b>, gi&agrave; agganciato a questo atto. Toglila se preferisci
+          suddividerlo tu in pi&ugrave; acconti.</div>
+      </div>
+      <input type="hidden" id="mc-id">
+    </div>
+    <div class="mf">
+      <button class="btn btn-d" id="mc-del" style="display:none">Elimina</button>
+      <span style="flex:1"></span>
+      <button class="btn" data-close="m-contr">Annulla</button>
+      <button class="btn btn-p" id="mc-save">Salva</button>
+    </div>
+  </div>
+</div>
+
 <!-- Chiedi all'amministrazione di fatturare -->
 <div class="ov" id="m-chiedi">
   <div class="modal modal-sm">
@@ -991,7 +1044,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.1';
+const VERSIONE = '2026.08.06.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1000,7 +1053,7 @@ const SB = supabase.createClient(SURL, SKEY);
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [],
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1166,7 +1219,8 @@ const MIGRAZIONI = {
   '017_ore_fase':         ['ore_stimate','ore_effettive'],
   '018_visibilita_commesse': ['vede_tutto'],
   '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note'],
-  '020_codice_commessa':     ['uq_projects_codice']
+  '020_codice_commessa':     ['uq_projects_codice'],
+  '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2492,7 +2546,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2507,7 +2561,8 @@ async function loadAll(silent) {
       SB.from('enti_pa').select('*').order('denominazione'),
       SB.from('commessa_sal').select('*').order('numero'),
       SB.from('commessa_varianti').select('*').order('numero'),
-      SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300)
+      SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300),
+      SB.from('commessa_contratti').select('*').order('numero')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2528,6 +2583,7 @@ async function loadAll(silent) {
     S.enti      = ren.error ? [] : (ren.data || []);
     S.sal       = rsa.error ? [] : (rsa.data || []);
     S.varianti  = rva.error ? [] : (rva.data || []);
+    S.contratti = rct.error ? [] : (rct.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2536,7 +2592,7 @@ async function loadAll(silent) {
     controllaSchema([[rfa, 'commessa_fatture'], [rcl, 'clienti'],
                      [rco, 'profili_costi'],    [ren, 'enti_pa'],
                      [rsa, 'commessa_sal'],     [rva, 'commessa_varianti'],
-                     [rms, 'task_messaggi']]);
+                     [rms, 'task_messaggi'],   [rct, 'commessa_contratti']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -4266,6 +4322,198 @@ async function delVar(id) {
 }
 
 /* -------------------------- PANNELLO DI COMMESSA -------------------------- */
+/* ===========================================================================
+   IL CONTRATTO NON E' UN NUMERO: E' UN ELENCO DI ATTI
+
+   Un incarico quasi mai resta quello di partenza. Il committente chiede una
+   prestazione in piu', si concorda un atto aggiuntivo, l'importo cresce.
+   Riscrivere un campo faceva sparire la storia - quanto era l'incarico
+   originario, che cosa e' stato aggiunto, quando e per quale accordo - e
+   soprattutto non produceva le fatture corrispondenti: quelle andavano
+   ricordate a mente.
+
+   Ora c'e' una riga per ogni atto e l'importo della commessa e' la somma di
+   quelli accettati, tenuta dal database. Un'integrazione soltanto proposta non
+   conta: non e' ancora denaro.
+
+   Le commesse che di atti non ne hanno tengono l'importo scritto a mano, come
+   hanno sempre fatto. Dal primo atto in poi lo governano gli atti.
+   =========================================================================== */
+const ST_CONTR = {
+  accettato:['Accettato','bg'], proposto:['Proposto','by'], rifiutato:['Rifiutato','br']
+};
+const TIPO_CONTR = { incarico:'Incarico originario', integrazione:'Integrazione', riduzione:'Riduzione' };
+
+const contrattiOf = pid => S.contratti.filter(c => c.project_id === pid)
+  .sort((a, b) => (a.numero || 0) - (b.numero || 0));
+
+/* Quanto vale oggi l'incarico secondo gli atti, e quanto e' ancora in ballo */
+function contoContratti(pid) {
+  const list = contrattiOf(pid);
+  const somma = st => r2(list.filter(c => c.stato === st).reduce((a, c) => a + Number(c.importo || 0), 0));
+  return { list, accettato: somma('accettato'), proposto: somma('proposto'),
+           originario: r2(list.filter(c => c.tipo === 'incarico' && c.stato === 'accettato')
+                              .reduce((a, c) => a + Number(c.importo || 0), 0)),
+           aggiunto: r2(list.filter(c => c.tipo !== 'incarico' && c.stato === 'accettato')
+                            .reduce((a, c) => a + Number(c.importo || 0), 0)) };
+}
+
+/* Quanto di un atto e' gia' stato messo in fatturazione */
+const fattureDiContratto = cid => S.fatture.filter(f => f.contratto_id === cid && f.stato !== 'annullata');
+function contrattoFatturato(c) {
+  return r2(fattureDiContratto(c.id).reduce((a, f) => a + impFattura(f), 0));
+}
+
+let CONTR_PID = null;
+function openContratto(pid, id) {
+  const p = byId(S.projects, pid); if (!p) return;
+  if (!canW()) return toast('Non hai i permessi per modificare i contratti.', 'error');
+  CONTR_PID = pid;
+  const c = id ? byId(S.contratti, id) : null;
+  const list = contrattiOf(pid);
+  const primo = !list.length;
+
+  el('mc-t').textContent = c ? 'Atto n. ' + c.numero : (primo ? 'Incarico originario' : 'Integrazione di contratto');
+  el('mc-id').value    = id || '';
+  el('mc-tipo').value  = c ? c.tipo : (primo ? 'incarico' : 'integrazione');
+  el('mc-num').value   = c ? c.numero : (list.reduce((a, x) => Math.max(a, x.numero || 0), 0) + 1);
+  el('mc-stato').value = c ? c.stato : 'accettato';
+  el('mc-ogg').value   = c ? (c.oggetto || '') : (primo ? 'Incarico professionale come da disciplinare' : '');
+  /* Al primo atto si eredita l'importo scritto a mano: e' quello che il
+     committente ha gia' firmato, e riscriverlo sarebbe solo lavoro in piu'. */
+  el('mc-imp').value   = c ? c.importo : (primo && p.amount ? p.amount : '');
+  el('mc-data').value  = c ? (c.data_atto || '') : todayISO();
+  el('mc-rif').value   = c ? (c.riferimento || '') : '';
+  el('mc-note').value  = c ? (c.note || '') : '';
+  el('mc-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+  /* Lo scaglione si propone solo per un atto nuovo che porta denaro in piu' */
+  el('mc-scag').checked = !c;
+  el('mc-scag-box').style.display = c ? 'none' : '';
+  el('mc-tipo').onchange = el('mc-imp').oninput = el('mc-stato').onchange = calcoloContratto;
+  calcoloContratto();
+  openM('m-contr');
+}
+
+function calcoloContratto() {
+  const p = byId(S.projects, CONTR_PID) || {};
+  const co = contoContratti(CONTR_PID);
+  const id = el('mc-id').value;
+  const imp = parseFloat(el('mc-imp').value) || 0;
+  const era = id ? Number((byId(S.contratti, id) || {}).importo || 0) : 0;
+  const eraOk = id ? (byId(S.contratti, id) || {}).stato === 'accettato' : false;
+  const ora = el('mc-stato').value === 'accettato' ? imp : 0;
+  const nuovo = r2(co.accettato - (eraOk ? era : 0) + ora);
+  const base = co.list.length ? co.accettato : Number(p.amount || 0);
+  el('mc-calc').innerHTML = 'Importo della commessa: <b>' + feuro(base) + '</b> → <b>' + feuro(nuovo) + '</b>'
+    + (co.proposto ? ' · ' + feuro(co.proposto) + ' ancora soltanto proposti' : '')
+    + (el('mc-stato').value !== 'accettato'
+        ? '<br>Un atto non accettato non entra nell’importo: entrerà quando lo segnerai come accettato.' : '');
+}
+
+async function salvaContratto() {
+  const ogg = el('mc-ogg').value.trim();
+  if (!ogg) return toast('L’oggetto delle prestazioni è obbligatorio.', 'error');
+  const imp = el('mc-imp').value;
+  if (imp === '') return toast('Indica l’importo dell’atto.', 'error');
+  const num = parseInt(el('mc-num').value, 10);
+  const id  = el('mc-id').value;
+  const gia = contrattiOf(CONTR_PID).find(c => c.numero === num && c.id !== id);
+  if (gia) return toast('Esiste già l’atto n. ' + num + ' su questa commessa.', 'error');
+
+  const pay = {
+    project_id: CONTR_PID, numero: num || 1, tipo: el('mc-tipo').value,
+    oggetto: ogg, importo: parseFloat(imp),
+    stato: el('mc-stato').value,
+    data_atto: el('mc-data').value || null,
+    riferimento: el('mc-rif').value.trim() || null,
+    note: el('mc-note').value.trim() || null
+  };
+  setLoading('mc-save', true);
+  try {
+    let cid = id;
+    if (id) {
+      const { error } = await SB.from('commessa_contratti').update(pay).eq('id', id);
+      if (error) return sbErr(error, 'contratto');
+    } else {
+      const { data, error } = await SB.from('commessa_contratti')
+        .insert(Object.assign({ created_by: S.me.id }, pay)).select().single();
+      if (error) return sbErr(error, 'contratto');
+      cid = data.id;
+      /* Le prestazioni aggiuntive vanno fatturate: lo scaglione nasce qui,
+         altrimenti resta un accordo che nessuno mette in fattura. */
+      if (el('mc-scag').checked && pay.importo > 0) {
+        const { error: e2 } = await SB.from('commessa_fatture').insert({
+          project_id: CONTR_PID, contratto_id: cid,
+          descrizione: (pay.tipo === 'incarico' ? 'Incarico' : 'Integrazione n. ' + pay.numero) + ' — ' + ogg,
+          imponibile: pay.importo, stato: 'da_emettere',
+          ordine: fattureOf(CONTR_PID).length + 1,
+          data_prevista: pay.data_atto, created_by: S.me.id
+        });
+        if (e2) sbErr(e2, 'scaglione dell’integrazione');
+      }
+    }
+    closeM('m-contr'); await loadAll(true); render();
+    toast('Atto salvato', 'success');
+  } finally { setLoading('mc-save', false); }
+}
+
+async function elimContratto() {
+  const id = el('mc-id').value; const c = byId(S.contratti, id); if (!c) return;
+  const fatt = fattureDiContratto(id);
+  if (!confirm('Eliminare l’atto n. ' + c.numero + '?\n\nL’importo della commessa tornerà a '
+    + feuro(r2(contoContratti(CONTR_PID).accettato - (c.stato === 'accettato' ? Number(c.importo || 0) : 0)))
+    + (fatt.length ? '.\nI ' + fatt.length + ' scaglioni collegati restano, senza più il riferimento.' : '.'))) return;
+  const { error } = await SB.from('commessa_contratti').delete().eq('id', id);
+  if (error) return sbErr(error, 'elimina contratto');
+  closeM('m-contr'); await loadAll(true); render(); toast('Atto eliminato', 'success');
+}
+
+/* Il riquadro degli atti, in testa alla scheda Fatturazione */
+function contrattiPanel(p) {
+  const co = contoContratti(p.id);
+  const righe = co.list.map(c => {
+    const f = contrattoFatturato(c);
+    const resta = r2(Number(c.importo || 0) - f);
+    return '<tr' + (canW() ? ' data-contr="' + c.id + '" style="cursor:pointer"' : '') + '>'
+      + '<td style="white-space:nowrap"><b>' + (c.numero || '') + '</b> '
+        + '<span style="font-size:11px;color:var(--mut)">' + esc(TIPO_CONTR[c.tipo] || c.tipo) + '</span></td>'
+      + '<td>' + esc(c.oggetto)
+        + (c.riferimento ? '<div style="font-size:11px;color:var(--mut)">' + esc(c.riferimento) + '</div>' : '') + '</td>'
+      + '<td>' + bdg(c.stato, ST_CONTR) + '</td>'
+      + '<td style="font-size:12px;color:var(--mut);white-space:nowrap">' + fdate(c.data_atto) + '</td>'
+      + '<td style="text-align:right"><b>' + feuro(c.importo) + '</b></td>'
+      + '<td style="text-align:right;font-size:12px">'
+        + (c.stato !== 'accettato' ? '<span style="color:var(--mut2)">—</span>'
+           : f >= Number(c.importo || 0) - 0.01
+             ? '<span style="color:var(--grn)">tutto in fatturazione</span>'
+             : '<span style="color:var(--ora)">' + feuro(resta) + ' da mettere in fattura</span>')
+      + '</td></tr>';
+  }).join('');
+
+  return '<div class="card mb16"><div class="card-h"><span class="card-t">Contratto e integrazioni</span>'
+    + (canW() ? '<button class="btn btn-p btn-sm" data-newcontr="">＋ '
+        + (co.list.length ? 'Integrazione' : 'Registra l’incarico') + '</button>' : '') + '</div>'
+    + (co.list.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>Atto</th><th>Oggetto</th><th>Stato</th>'
+          + '<th>Data</th><th style="text-align:right">Importo</th><th style="text-align:right">Fatturazione</th>'
+          + '</tr></thead><tbody>' + righe + '</tbody></table></div>'
+          + '<div class="spread" style="margin-top:10px;font-size:13px">'
+            + '<span>Incarico originario</span><b>' + feuro(co.originario) + '</b></div>'
+          + (co.aggiunto ? '<div class="spread" style="font-size:13px"><span>Integrazioni accettate</span>'
+              + '<b style="color:var(--grn)">+ ' + feuro(co.aggiunto) + '</b></div>' : '')
+          + '<div class="spread" style="font-size:13px;border-top:1px solid var(--bord);margin-top:6px;padding-top:6px">'
+            + '<b>Importo della commessa</b><b>' + feuro(co.accettato) + '</b></div>'
+          + (co.proposto ? '<div class="hint" style="margin-top:8px">Ci sono <b>' + feuro(co.proposto)
+              + '</b> di atti <b>proposti e non ancora firmati</b>: non entrano nell’importo finché non li segni '
+              + 'come accettati.</div>' : '')
+        : '<div class="empty" style="padding:18px"><p>Nessun atto registrato: l’importo della commessa è '
+          + '<b>' + feuro(p.amount) + '</b>, scritto a mano.</p>'
+          + '<p style="font-size:12px;margin-top:6px">Registrando l’incarico originario, da qui in avanti '
+          + 'l’importo lo calcola il gestionale sommando gli atti: ogni prestazione aggiuntiva diventa una riga, '
+          + 'con il suo scaglione di fatturazione.</p></div>')
+    + '</div>';
+}
+
 function fatturePanel(pid) {
   const p = byId(S.projects, pid) || {};
   const list = fattureOf(pid);
@@ -4308,7 +4556,8 @@ function fatturePanel(pid) {
       + '</td></tr>';
   }).join('');
 
-  return '<div class="g2 mb16">'
+  return contrattiPanel(p)
+    + '<div class="g2 mb16">'
     + '<div class="card"><div class="card-h"><span class="card-t">Situazione economica</span></div>'
       + '<div class="spread" style="font-size:13px;margin-bottom:12px"><span>Importo di commessa</span><b>' + feuro(imp) + '</b></div>'
       + barra('Fatturato', fatturato, 'var(--blue)')
@@ -7024,7 +7273,11 @@ function drawWizard() {
         + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + ((d.status || 'attivo') === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
       + '</select></div>'
       + '<div class="fg"><label class="fl">Responsabile</label><select class="fc" id="w-own">' + uopts + '</select></div>'
-      + fld('Importo €', 'w-imp', d.amount, '', 'number')
+      + (WZ.edit && contrattiOf(WZ.edit).length
+          ? '<div class="fg"><label class="fl">Importo €</label>'
+            + '<input class="fc" type="number" id="w-imp" value="' + esc(d.amount == null ? '' : d.amount) + '" disabled>'
+            + '<div class="hint">È la somma degli atti accettati. Si cambia da <b>Fatturazione → Contratto e integrazioni</b>.</div></div>'
+          : fld('Importo €', 'w-imp', d.amount, '', 'number'))
       + '</div><div class="fg2">'
       + fld('Importo contrattuale dei lavori €', 'w-lav', d.importo_lavori, 'appalto dell’impresa', 'number')
       + fld('di cui compenso per DL e CSE €', 'w-cdl', d.compenso_dl, 'matura sui SAL', 'number')
@@ -7272,7 +7525,7 @@ function wzCollect() {
     comune: g('w-com') || null, provincia: g('w-prov') || null,
     indirizzo: g('w-ind') || null, dati_catastali: g('w-cat') || null,
     status: g('w-st') || 'attivo', owner_id: g('w-own') || null,
-    amount: g('w-imp') || null, start_date: g('w-di') || null, end_date: g('w-df') || null,
+    start_date: g('w-di') || null, end_date: g('w-df') || null,
     importo_lavori: g('w-lav') || null, compenso_dl: g('w-cdl') || null,
     cliente_piva: g('w-cpiva') || null, cliente_cf: g('w-ccf') || null,
     cliente_sdi: g('w-csdi') || null, cliente_pec: g('w-cpec') || null,
@@ -7280,6 +7533,10 @@ function wzCollect() {
     cliente_comune: g('w-ccom') || null, cliente_prov: g('w-cprov') || null,
     description: el('w-desc') ? el('w-desc').value.trim() || null : null
   });
+  /* L'importo lo governano gli atti quando ci sono: rimandarlo indietro
+     riscriverebbe con il valore del campo disabilitato cio' che il database
+     tiene aggiornato da solo. */
+  if (el('w-imp') && !el('w-imp').disabled) WZ.d.amount = el('w-imp').value || null;
   if (el('w-clid'))  WZ.d.cliente_id = el('w-clid').value || null;
   if (el('w-sisma')) WZ.d.sisma = el('w-sisma').checked;
 
@@ -8190,6 +8447,8 @@ document.addEventListener('DOMContentLoaded', () => {
   el('mp-back').onclick = () => { wzCollect(); WZ.step--; drawWizard(); };
   el('mp-save').onclick = wzSave;
   el('ch-go').onclick = inviaChiedi;
+  el('mc-save').onclick = salvaContratto;
+  el('mc-del').onclick  = elimContratto;
   el('mp-arch').onclick = () => {
     const p = byId(S.projects, WZ.edit);
     archiviaProj(WZ.edit, !(p && p.archiviato));
@@ -8328,6 +8587,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
     if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
+    if ((n = f('data-newcontr'))) { e.stopPropagation(); return openContratto(S.projId, null); }
+    if ((n = f('data-contr')))   { e.stopPropagation();
+      const c = byId(S.contratti, n.dataset.contr);
+      return openContratto(c ? c.project_id : S.projId, n.dataset.contr); }
     if ((n = f('data-chiedi')))  { e.stopPropagation();
       const fa = byId(S.fatture, n.dataset.chiedi);
       return openChiedi(fa ? fa.project_id : S.projId, n.dataset.chiedi); }

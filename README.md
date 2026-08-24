@@ -38,6 +38,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 17. [`sql/018_visibilita_commesse.sql`](sql/018_visibilita_commesse.sql) — **privacy: ognuno vede le sue commesse, da eseguire**
 18. [`sql/019_richiesta_fattura.sql`](sql/019_richiesta_fattura.sql) — «questa si può fatturare»: dal tecnico all'amministrazione
 19. [`sql/020_codice_commessa.sql`](sql/020_codice_commessa.sql) — il codice commessa è unico
+20. [`sql/021_contratti_commessa.sql`](sql/021_contratti_commessa.sql) — contratto e integrazioni, con l'importo che si somma da solo
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -750,6 +751,52 @@ agibilità e per un'altra ventina di voci.
 
 Anche qui: **sintesi operative, non testo di legge**, con il richiamo esatto alla
 norma perché il riscontro sia immediato.
+
+## Contratto e integrazioni
+
+L'importo della commessa era un campo solo, scritto a mano. Ma un incarico quasi
+mai resta quello di partenza: il committente chiede una prestazione in più, si
+concorda un atto aggiuntivo, l'importo cresce. Riscrivere quel campo faceva
+sparire la storia — quanto era l'incarico originario, che cosa è stato aggiunto,
+quando e per quale accordo — e soprattutto **non produceva le fatture
+corrispondenti**: quelle andavano ricordate a mente.
+
+Nella scheda **Fatturazione**, in testa, c'è ora **Contratto e integrazioni**:
+una riga per ogni atto.
+
+| Tipo | Quando si usa |
+|---|---|
+| **Incarico originario** | l'atto di partenza, uno solo |
+| **Integrazione** | prestazioni aggiuntive richieste in corso d'opera |
+| **Riduzione** | uno stralcio, con importo negativo |
+
+Ogni atto ha oggetto, importo, data, riferimento (preventivo, delibera,
+protocollo) e uno **stato**: *proposto*, *accettato*, *rifiutato*. Solo gli atti
+**accettati** concorrono all'importo — un'integrazione proposta e non firmata non
+è ancora denaro, e il riquadro lo dice a parte.
+
+### L'importo se lo calcola il gestionale
+
+Dal primo atto registrato, **l'importo della commessa è la somma degli atti
+accettati** e lo tiene il database: nel modulo della commessa il campo diventa di
+sola lettura, perché non c'è più niente da scrivere a mano e quindi niente da
+disallineare.
+
+Le commesse che di atti non ne hanno tengono l'importo scritto a mano, come hanno
+sempre fatto: gli atti sono una scelta, commessa per commessa. Registrando
+l'incarico originario, l'importo già presente viene **ereditato** — è quello che
+il committente ha firmato, riscriverlo sarebbe solo lavoro in più.
+
+### E le fatture
+
+Salvando un atto nuovo, la spunta **«Crea subito lo scaglione di fatturazione»**
+genera la fattura corrispondente, già agganciata all'atto. Da lì in poi segue la
+strada normale: si può chiedere all'amministrazione di emetterla, si può
+suddividere in acconti.
+
+Il riquadro dice, atto per atto, **quanto è già in fatturazione e quanto resta**:
+così alla domanda «questa integrazione l'abbiamo poi fatturata?» si risponde
+guardando, non ricordando.
 
 ## «Questa si può fatturare»
 

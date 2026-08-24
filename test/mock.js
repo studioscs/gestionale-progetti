@@ -7,7 +7,8 @@
     projects:[], tasks:[], commessa_fasi:[], commessa_pratiche:[],
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
-    profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[]
+    profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
+    commessa_contratti:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -29,6 +30,7 @@
     commessa_fasi:['project_id','fase_key','nome','ordine','stato'],
     projects:['name','status'],
     commessa_pratiche:['project_id','ente','tipo','stato'],
+    commessa_contratti:['project_id','numero','tipo','oggetto','importo','stato'],
     commessa_fatture:['project_id','descrizione','stato'],
     profili_costi:['profile_id','valido_dal']
   };
@@ -64,6 +66,17 @@
       ordine:DB.commessa_fatture.filter(f=>f.project_id===s.project_id).length+1,
       imponibile:quota,data_prevista:s.data_emissione||null,stato:'pronta',sal_id:s.id,
       created_at:new Date().toISOString()});
+  }
+  /* Trigger della migrazione 021: l'importo della commessa e' la somma degli
+     atti accettati. Finche' la commessa non ha atti, resta quello scritto a
+     mano - come fa il database. */
+  function ricalcolaImporto(pid){
+    const atti=DB.commessa_contratti.filter(c=>c.project_id===pid);
+    if(!atti.length) return;
+    const tot=r2(atti.filter(c=>c.stato==='accettato')
+      .reduce((a,c)=>a+Number(c.importo||0),0));
+    const p=DB.projects.find(x=>x.id===pid);
+    if(p) p.amount=tot;
   }
   function applicaVariante(v){
     if(v.stato!=='approvata'||v._applicata||!v.aggiorna_importo||v.importo==null) return;
@@ -114,6 +127,7 @@
            che matura sul SAL. Replicati qui perche' l'app ci conta. */
         if(table==='commessa_sal') made.forEach(percSal), made.forEach(maturaDL);
         if(table==='commessa_varianti') made.forEach(applicaVariante);
+        if(table==='commessa_contratti') made.forEach(c=>ricalcolaImporto(c.project_id));
         api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];
@@ -140,6 +154,8 @@
           .forEach(r=>{ percSal(r); maturaDL(r); });
         if(table==='commessa_varianti') DB.commessa_varianti.filter(r=>flt.every(f=>f(r)))
           .forEach(applicaVariante);
+        if(table==='commessa_contratti') DB.commessa_contratti.filter(r=>flt.every(f=>f(r)))
+          .forEach(c=>ricalcolaImporto(c.project_id));
       },
       delete(){ api._del=true; return api; },
       then(res,rej){
@@ -148,7 +164,10 @@
           if(api._upd){ api._stampaChiusura();
             DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); });
             api._dopoUpdate(); return res({data:null,error:null}); }
-          if(api._del){ DB[table]=DB[table].filter(r=>!flt.every(f=>f(r))); return res({data:null,error:null}); }
+          if(api._del){ const tolti=DB[table].filter(r=>flt.every(f=>f(r)));
+            DB[table]=DB[table].filter(r=>!flt.every(f=>f(r)));
+            if(table==='commessa_contratti') tolti.forEach(c=>ricalcolaImporto(c.project_id));
+            return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }
           let d=rows().filter(r=>flt.every(f=>f(r)));
           if(api._count) return res({data:null,count:d.length,error:null});
