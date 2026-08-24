@@ -991,7 +991,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.05.9';
+const VERSIONE = '2026.08.06.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1015,7 +1015,10 @@ const S = {
      perche' e' una preferenza di chi guarda e non un filtro da rifare ogni volta. */
   pvista: (() => { try { return localStorage.getItem('scs-vista-progetti') || 'griglia'; }
                    catch (e) { return 'griglia'; } })(),
-  pord:'name', pasc:true,        // elenco commesse: colonna e verso di ordinamento
+  /* L'elenco parte dal codice commessa crescente: e' l'ordine con cui lo studio
+     nomina il proprio lavoro, e ritrovare "2026_06" e' piu' rapido che cercare
+     un nome. */
+  pord:'codice', pasc:true,      // elenco commesse: colonna e verso di ordinamento
   tq:'',  tst:'', two:false,     // attivita': ricerca, stato, solo mie
   clQ:'',                        // clienti: ricerca
   chatQ:'', chatProj:'',         // chat: ricerca e commessa
@@ -1162,7 +1165,8 @@ const MIGRAZIONI = {
   '016_progressivo_invio':['progressivo_invio'],
   '017_ore_fase':         ['ore_stimate','ore_effettive'],
   '018_visibilita_commesse': ['vede_tutto'],
-  '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note']
+  '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note'],
+  '020_codice_commessa':     ['uq_projects_codice']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -3492,7 +3496,9 @@ function projCard(p) {
   const late = tasksOf(p.id).filter(t => isOpen(t) && isLate(t.due_date)).length;
   const pl   = praticheOf(p.id).filter(praticaLate).length;
   return '<div class="card" style="cursor:pointer' + (p.archiviato ? ';opacity:.65' : '') + '" data-proj="' + p.id + '">'
-    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">' + esc(p.name) + '</span>'
+    + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">'
+      + (p.codice ? '<span style="color:var(--mut)">' + esc(p.codice) + '</span> · ' : '')
+      + esc(p.name) + '</span>'
     + (p.archiviato ? '<span class="chip">archiviata</span>' : bdg(p.status, ST_PROJ)) + '</div>'
     + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">' + esc(p.client || 'Cliente non indicato')
     + (p.comune ? ' · ' + esc(p.comune) : '') + '</div>'
@@ -4907,9 +4913,12 @@ function drawProjects() {
        : vedeTutto() ? 'Nessuna commessa trovata.' : 'Nessuna commessa assegnata a te.') + '</p>'
     + (canW() && ar !== 'arch' ? '<button class="btn btn-p" data-act="newproj" style="margin-top:10px">Crea la prima commessa</button>' : '') + '</div></div>';
 
+  /* Anche le schede seguono il codice: e' l'ordine con cui lo studio nomina il
+     proprio lavoro, e cambiare vista non deve cambiare il posto delle cose. */
   el('page').innerHTML = nota + (S.pvista === 'lista'
     ? elencoProgetti(list)
-    : '<div class="g3">' + list.map(projCard).join('') + '</div>');
+    : '<div class="g3">' + list.slice().sort((a, b) => cmpCodice(a.codice, b.codice))
+        .map(projCard).join('') + '</div>');
 }
 
 /* ---------------------------------------------------------------------------
@@ -4919,7 +4928,53 @@ function drawProjects() {
    punto è, chi la segue, quanto vale, cosa è in ritardo - e la possibilità di
    ordinare per una di quelle.
    --------------------------------------------------------------------------- */
+/* Ordinamento naturale: "2026_6" e "2026_06" devono finire nello stesso posto,
+   e "2026_10" dopo "2026_9" e non prima. Il confronto alfabetico da solo
+   sbaglierebbe entrambi i casi, quindi si spezza in pezzi e i numeri si
+   confrontano da numeri. Chi non ha codice va in fondo: e' una mancanza da
+   sistemare, non un valore. */
+/* Il prossimo codice libero dell'anno, nel formato che lo studio usa gia':
+   ANNO_NN a due cifre. Proporlo e' il modo per rendere indolore l'obbligo -
+   nessuno deve andare a cercare qual era l'ultimo. */
+function prossimoCodice() {
+  const anno = String(today().getFullYear());
+  let max = 0;
+  S.projects.forEach(p => {
+    const m = String(p.codice || '').match(/^(\d{4})[._\-\/ ]?(\d+)$/);
+    if (m && m[1] === anno) max = Math.max(max, Number(m[2]));
+  });
+  return anno + '_' + String(max + 1).padStart(2, '0');
+}
+
+/* Chi ha gia' questo codice, a parte la commessa che si sta salvando. Due
+   commesse con lo stesso codice sono un errore di cancelleria che si paga in
+   fase di fatturazione. */
+function codiceOccupato(cod, esclusoId) {
+  const c = String(cod || '').trim().toLowerCase();
+  if (!c) return null;
+  return S.projects.find(p => p.id !== esclusoId
+    && String(p.codice || '').trim().toLowerCase() === c) || null;
+}
+
+function cmpCodice(a, b) {
+  const A = String(a || '').trim(), B = String(b || '').trim();
+  if (!A && !B) return 0;
+  if (!A) return 1;
+  if (!B) return -1;
+  const pa = A.match(/\d+|\D+/g) || [], pb = B.match(/\d+|\D+/g) || [];
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i], y = pb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+    if (nx && ny) { const d = Number(x) - Number(y); if (d) return d; }
+    else { const d = x.localeCompare(y, 'it'); if (d) return d; }
+  }
+  return 0;
+}
+
 const COL_PROG = [
+  { k:'codice',  l:'Codice',     v:p => p.codice || '', cmp:cmpCodice },
   { k:'name',    l:'Commessa',   v:p => p.name },
   { k:'client',  l:'Cliente',    v:p => p.client || '' },
   { k:'comune',  l:'Comune',     v:p => p.comune || '' },
@@ -4937,7 +4992,9 @@ function elencoProgetti(list) {
   const col = COL_PROG.find(c => c.k === ord) || COL_PROG[0];
   const righe = list.slice().sort((a, b) => {
     const x = col.v(a), y = col.v(b);
-    const r = col.num ? (x - y) : String(x).localeCompare(String(y), 'it');
+    const r = col.cmp ? col.cmp(x, y)
+            : col.num ? (x - y)
+            : String(x).localeCompare(String(y), 'it');
     return asc ? r : -r;
   });
 
@@ -4949,10 +5006,16 @@ function elencoProgetti(list) {
         + '</th>').join('') + '</tr></thead><tbody>'
     + righe.map(p => {
         const pr = progressOf(p.id);
-        const rit = COL_PROG[8].v(p);
+        /* per chiave e non per posizione: aggiungendo una colonna in testa,
+           l'indice fisso puntava a un'altra colonna e la cifra dei ritardi
+           diventava una data */
+        const rit = COL_PROG.find(c => c.k === 'late').v(p);
         return '<tr data-proj="' + p.id + '"' + (p.archiviato ? ' style="opacity:.6"' : '') + '>'
+          + '<td style="white-space:nowrap">' + (p.codice
+              ? '<b>' + esc(p.codice) + '</b>'
+              : '<span class="chip chip-a" title="Il codice è obbligatorio: apri la commessa e inseriscilo">senza codice</span>')
+            + '</td>'
           + '<td><b>' + esc(p.name) + '</b>'
-            + (p.codice ? ' <span class="chip">' + esc(p.codice) + '</span>' : '')
             + (p.archiviato ? ' <span class="chip">archiviata</span>' : '') + '</td>'
           + '<td>' + esc(p.client || '-') + '</td>'
           + '<td>' + esc(p.comune || '-') + '</td>'
@@ -6908,8 +6971,13 @@ function drawWizard() {
       + '<div class="hint">Scegliendo un cliente già presente, dati fiscali e referenti vengono compilati da soli. '
       + 'Se è nuovo, lascia questa voce e compila i campi: verrà aggiunto all’anagrafica al salvataggio.</div></div>'
       + '<div class="fg2">'
-      + fld('Nome commessa *', 'w-name', d.name) + fld('Codice interno', 'w-cod', d.codice, 'Es. 2026-014')
-      + '</div><div class="fg">'
+      + fld('Nome commessa *', 'w-name', d.name)
+      + fld('Codice commessa *', 'w-cod', d.codice || (WZ.edit ? '' : prossimoCodice()), 'Es. 2026_06')
+      + '</div>'
+      + '<div class="hint" style="margin:-8px 0 14px">Il <b>codice commessa</b> è obbligatorio: è con quello '
+      + 'che l’elenco viene ordinato e con quello che si ritrova una pratica fra due anni. '
+      + 'Per una commessa nuova è già proposto il primo libero dell’anno.</div>'
+      + '<div class="fg">'
       + fld('Cliente / committente', 'w-cli', d.client)
       + '</div>'
       + sez('Referente amministrativo', 'riceve la copia della fattura')
@@ -7236,6 +7304,11 @@ function wzCollect() {
 async function wzSave() {
   wzCollect();
   if (!WZ.d.name) { WZ.step = 1; drawWizard(); return toast('Il nome della commessa è obbligatorio.', 'error'); }
+  if (!WZ.d.codice) { WZ.step = 1; drawWizard();
+    return toast('Il codice commessa è obbligatorio: serve a ordinare e a ritrovare il lavoro.', 'error'); }
+  const doppio = codiceOccupato(WZ.d.codice, WZ.edit);
+  if (doppio) { WZ.step = 1; drawWizard();
+    return toast('Il codice ' + WZ.d.codice + ' è già di «' + doppio.name + '».', 'error'); }
   setLoading('mp-save', true);
   const pay = Object.assign({}, WZ.d);
   ['id','created_at','updated_at','created_by','archiviato'].forEach(k => delete pay[k]);

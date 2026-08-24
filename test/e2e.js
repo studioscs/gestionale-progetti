@@ -77,6 +77,38 @@ function launchOpts(){
   console.log('   generati →',JSON.stringify(stats));
   await t('generazione consistente',async()=>{ must(stats.fasi>=10&&stats.att>=100&&stats.prat>=5,JSON.stringify(stats)); });
   // --- LA COMMESSA SI MODIFICA IN TUTTI E TRE I PASSAGGI ---
+  await t('il codice commessa è obbligatorio e viene proposto',async()=>{
+    await p.evaluate(()=>openNewProj());
+    await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(400);
+    const proposto=await p.inputValue('#w-cod');
+    must(/^\d{4}_\d{2}$/.test(proposto),'non propone un codice nel formato ANNO_NN: '+proposto);
+    must(await p.evaluate(()=>codiceOccupato(el('w-cod').value,null))===null,
+         'il codice proposto è già in uso');
+    const g=await p.evaluate(async()=>{
+      el('w-name').value='Prova senza codice';
+      el('w-cod').value='';
+      await wzSave();
+      return {creata:__DB.projects.some(x=>x.name==='Prova senza codice'),
+              aperta:el('m-proj').classList.contains('show'), step:WZ.step};
+    });
+    await p.waitForTimeout(300);
+    must(!g.creata,'la commessa è stata creata senza codice');
+    must(g.aperta,'la modale si è chiusa senza salvare nulla');
+    must(g.step===1,'non riporta al passo dove sta il campo: '+g.step);
+  });
+  await t('due commesse non possono avere lo stesso codice',async()=>{
+    const g=await p.evaluate(async()=>{
+      const gia=S.projects.find(x=>x.codice);
+      el('w-name').value='Prova doppione';
+      el('w-cod').value='  '+gia.codice.toUpperCase()+' ';   // spazi e maiuscole non bastano
+      await wzSave();
+      return {codice:gia.codice,
+              creata:__DB.projects.some(x=>x.name==='Prova doppione')};
+    });
+    await p.waitForTimeout(300);
+    must(!g.creata,'ha creato una commessa con il codice '+g.codice+', già in uso');
+    await p.evaluate(()=>closeM('m-proj'));
+  });
   await t('in modifica ci sono tutti e tre i passi',async()=>{
     await p.evaluate(()=>openEditProj(S.projects.find(x=>x.template_key==='privato').id));
     await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(400);
@@ -95,7 +127,7 @@ function launchOpts(){
   });
   await t('su una commessa senza percorso registrato lo riconosce dalle fasi',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Senza percorso',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_01',name:'Senza percorso',status:'attivo',
         start_date:'2026-03-02'}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-03-02');
       await loadAll(true);
@@ -131,7 +163,7 @@ function launchOpts(){
   });
   await t('salvando dal passo 3 le attività nuove compaiono davvero',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Da ampliare',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_02',name:'Da ampliare',status:'attivo',
         start_date:'2026-03-02',template_key:'interno',condizioni:['catasto']}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-03-02');
       await loadAll(true);
@@ -200,7 +232,7 @@ function launchOpts(){
   });
   await t('non tocca mai il lavoro gia avviato o aggiunto a mano',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Da sfoltire',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_03',name:'Da sfoltire',status:'attivo',
         start_date:'2026-03-02',template_key:'interno',
         condizioni:['catasto','sicurezza','impianti','acustica']}).select().single();
       await generaStruttura(data.id,'interno',['catasto','sicurezza','impianti','acustica'],'2026-03-02');
@@ -237,7 +269,8 @@ function launchOpts(){
     const g=await p.evaluate(async()=>{
       const out={};
       for(const caso of ['viol_tolleranze','viol_parziale','viol_totale']){
-        const {data}=await SB.from('projects').insert({name:'Sismica '+caso,status:'attivo'})
+        const {data}=await SB.from('projects').insert({name:'Sismica '+caso,status:'attivo',
+          codice:'SIS_'+caso})
           .select().single();
         const res=await generaStruttura(data.id,'sismica',[caso],'2026-03-02');
         await loadAll(true);
@@ -277,7 +310,7 @@ function launchOpts(){
     const esiti=await p.evaluate(async()=>{
       const out={};
       for(const k of Object.keys(TEMPLATES)){
-        const {data}=await SB.from('projects').insert({name:'Gen '+k,status:'attivo'})
+        const {data}=await SB.from('projects').insert({name:'Gen '+k,status:'attivo',codice:'GEN_'+k})
           .select().single();
         const res=await generaStruttura(data.id,k,CONDIZIONI.map(c=>c.k),'2026-03-02');
         await loadAll(true);
@@ -387,6 +420,37 @@ function launchOpts(){
     must(await p.evaluate(()=>S.page)==='project','la riga non ha aperto la commessa');
     await p.evaluate(()=>go('projects')); await p.waitForTimeout(300);
   });
+  await t('l elenco parte ordinato per codice commessa crescente',async()=>{
+    await p.evaluate(async()=>{
+      /* codici volutamente disordinati e con e senza zero davanti */
+      const cod=['2026_10','2025_32','2026_9','2026_06'];
+      for(let i=0;i<cod.length;i++)
+        await SB.from('projects').insert({name:'Ordinata '+i,status:'attivo',codice:cod[i]});
+      await loadAll(true);
+      S.pord='codice'; S.pasc=true; S.pvista='lista'; go('projects');
+    });
+    await p.waitForTimeout(400);
+    const codici=await p.evaluate(()=>Array.from(document.querySelectorAll('#page tbody tr td:first-child'))
+      .map(e=>e.textContent.trim()).filter(x=>/^\d{4}_/.test(x)));
+    const attesi=['2025_32','2026_06','2026_9','2026_10'];
+    must(JSON.stringify(codici.filter(c=>attesi.includes(c)))===JSON.stringify(attesi),
+         'ordine sbagliato: '+JSON.stringify(codici));
+    const th=await p.textContent('#page thead');
+    must(/Codice/.test(th),'manca la colonna del codice');
+    must(await p.evaluate(()=>!!document.querySelector('#page th[data-ord="codice"] span')),
+         'la colonna del codice non risulta quella ordinata');
+  });
+  await t('chi non ha il codice finisce in fondo ed è segnalato',async()=>{
+    await p.evaluate(async()=>{
+      await SB.from('projects').insert({name:'Senza codice',status:'attivo'});   // apposta senza
+      await loadAll(true); go('projects');
+    });
+    await p.waitForTimeout(400);
+    const celle=await p.evaluate(()=>Array.from(document.querySelectorAll('#page tbody tr td:first-child'))
+      .map(e=>e.textContent.trim()));
+    must(/senza codice/i.test(celle[celle.length-1]),'le commesse senza codice non sono in fondo');
+    must(celle.some(c=>/senza codice/i.test(c)),'la mancanza non è segnalata');
+  });
   await t('l elenco si ordina cliccando l intestazione',async()=>{
     const nomi=()=>p.evaluate(()=>Array.from(document.querySelectorAll('#page tbody tr td:first-child b'))
                                        .map(e=>e.textContent));
@@ -428,7 +492,7 @@ function launchOpts(){
   // --- PRATICHE: FILTRI ---
   await t('prepara dati per i filtri',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Capannone Marini',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_04',name:'Capannone Marini',status:'attivo',
         start_date:'2026-06-01'}).select().single();
       await generaStruttura(data.id,'privato',['vvf','strutture','impianti','acustica'],'2026-06-01');
       await loadAll(true);
@@ -655,8 +719,10 @@ function launchOpts(){
     await nw.close();
   });
   await t('nota operativa di fase mostrata',async()=>{
-    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
-    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
+    /* la commessa del wizard, non "la prima dell'elenco": l'elenco è ordinato
+       per codice e la prima riga cambia a ogni commessa di prova aggiunta */
+    await p.evaluate(()=>goProject(S.projects.find(x=>/Palazzo Bianchi/.test(x.name)).id));
+    await p.waitForTimeout(600);
     await p.evaluate(()=>{ const g=[...document.querySelectorAll('.grp-h')]
       .find(x=>/firme|Dati definitivi/i.test(x.textContent)); if(g) g.click(); });
     await p.waitForTimeout(400);
@@ -667,8 +733,8 @@ function launchOpts(){
 
   // --- FATTURAZIONE ---
   await t('scheda Fatturazione nella commessa',async()=>{
-    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
-    await p.locator('#page [data-proj]').first().click(); await p.waitForTimeout(600);
+    await p.evaluate(()=>goProject(S.projects.find(x=>/Palazzo Bianchi/.test(x.name)).id));
+    await p.waitForTimeout(600);
     must(await p.locator('[data-tab="fatture"]').count()===1,'scheda assente');
     await p.click('[data-tab="fatture"]'); await p.waitForTimeout(500);
     must(/Situazione economica/.test(await p.textContent('#page')),'pannello non mostrato');
@@ -990,7 +1056,8 @@ function launchOpts(){
       return x&&x.sisma===true;}),'sisma non salvato');
   });
   await t('la scheda Anagrafica mostra il conto di accredito',async()=>{
-    await p.locator('.card:has-text("Ricostruzione post-sisma Via Roma")').first().click().catch(()=>{});
+    /* il clic sulla scheda era inutile - lo stato lo imposta la riga sotto - e
+       costava trenta secondi di attesa a vuoto ogni volta */
     await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Ricostruzione post-sisma Via Roma');
       S.projId=x.id; S.tab='anagrafica'; go('project'); });
     await p.waitForTimeout(500);
@@ -1255,7 +1322,7 @@ function launchOpts(){
   });
   await t('prepara una commessa con soci e dipendenti',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Redditività prova',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_05',name:'Redditività prova',status:'attivo',
         amount:10000,start_date:'2026-02-01'}).select().single();
       /* I costi si impostano qui e non altrove: un test che dipende da cosa
          hanno fatto i test precedenti smette di dire la verità appena si
@@ -1321,7 +1388,7 @@ function launchOpts(){
         email:'e@scs.it',role:'collaboratore',attivo:true});
       await SB.from('profili_costi').insert({profile_id:'u-tre',costo_orario_lordo:40,
         costo_orario_netto:24,valido_dal:'2026-01-01'});
-      const {data}=await SB.from('projects').insert({name:'Lavorata senza ore',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_06',name:'Lavorata senza ore',status:'attivo',
         amount:20000,start_date:'2026-06-01'}).select().single();
       await generaStruttura(data.id,'interno',['catasto','sicurezza'],'2026-06-01');
       await loadAll(true);
@@ -1383,7 +1450,7 @@ function launchOpts(){
   });
   await t('la stessa giornata su due commesse non si conta due volte',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Seconda dello stesso periodo',
+      const {data}=await SB.from('projects').insert({codice:'TST_07',name:'Seconda dello stesso periodo',
         status:'attivo',amount:5000,start_date:'2026-06-01'}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-06-01');
       await loadAll(true);
@@ -1489,7 +1556,7 @@ function launchOpts(){
   // --- CHI LAVORA E CHI VERIFICA ---
   await t('il lavoro va al 70% a chi lo svolge e al 30% a chi lo verifica',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Lavoro e verifica',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_08',name:'Lavoro e verifica',status:'attivo',
         amount:10000,start_date:'2026-07-06'}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-07-06');
       await loadAll(true);
@@ -1530,7 +1597,7 @@ function launchOpts(){
   // --- «QUESTA SI PUÒ FATTURARE»: DAL TECNICO ALL'AMMINISTRAZIONE ---
   await t('lo scaglione aperto ha il pulsante per chiedere di fatturare',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Da fatturare a Vania',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_09',name:'Da fatturare a Vania',status:'attivo',
         amount:40000,client:'Committente X'}).select().single();
       await SB.from('commessa_fatture').insert([
         {project_id:data.id,descrizione:'Primo acconto 30%',imponibile:12000,stato:'da_emettere',ordine:1},
@@ -1743,7 +1810,7 @@ function launchOpts(){
     /* Attività non assegnate a nessuno, spuntate dall'amministratore: il lavoro
        è di chi ha in carico la fase, non di chi ha messo la spunta. */
     const chi=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Fase di Anna',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_10',name:'Fase di Anna',status:'attivo',
         amount:8000,start_date:'2026-07-06'}).select().single();
       await generaStruttura(data.id,'interno',['catasto'],'2026-07-06');
       await loadAll(true);
@@ -1887,7 +1954,7 @@ function launchOpts(){
   // --- EDILIZIA PRIVATA: PERCORSO COMPLETO E PRATICHE IN ORDINE ---
   await t('il privato genera un percorso articolato',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Villa Rossi — ampliamento',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_11',name:'Villa Rossi — ampliamento',status:'attivo',
         start_date:'2026-02-02',client:'Fam. Rossi'}).select().single();
       const tutte=CONDIZIONI.map(c=>c.k);
       await generaStruttura(data.id,'privato',tutte,'2026-02-02');
@@ -2084,7 +2151,7 @@ function launchOpts(){
   });
   await t('il contenuto è consultabile dalla riga di checklist',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Opera pubblica I.7',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_12',name:'Opera pubblica I.7',status:'attivo',
         start_date:'2026-01-07'}).select().single();
       await generaStruttura(data.id,'pubblico',['strutture','sicurezza'],'2026-01-07');
       await loadAll(true); S.projId=data.id; S.tab='avanzamento'; go('project');
@@ -2232,7 +2299,7 @@ function launchOpts(){
   });
   await t('valorizza le ore alla tariffa del giorno',async()=>{
     const c=await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Commessa da valorizzare',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_13',name:'Commessa da valorizzare',status:'attivo',
         start_date:'2026-02-01',amount:5000}).select().single();
       await SB.from('time_entries').insert([
         {project_id:data.id,hours:10,entry_date:'2026-02-10',operator_id:'u-due'},   // 25 €/h
@@ -2286,7 +2353,7 @@ function launchOpts(){
   // Lavora su una commessa usa-e-getta, cosi' la principale resta per gli screenshot
   await t('prepara commessa di prova',async()=>{
     await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({name:'Commessa da eliminare',status:'attivo',
+      const {data}=await SB.from('projects').insert({codice:'TST_14',name:'Commessa da eliminare',status:'attivo',
         start_date:'2026-07-01'}).select().single();
       await generaStruttura(data.id,'strutture',['strutture','geologia'],'2026-07-01');
       await SB.from('time_entries').insert({project_id:data.id,hours:5,entry_date:'2026-07-10',operator_id:'u-me'});

@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -440,6 +440,34 @@ t('senza condizioni restano solo le pratiche di base',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k).sort().join(',')
     ==='accesso_atti,cdu,titolo_edilizio',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
+
+console.log('\n— CODICE COMMESSA —');
+const ord=a=>a.slice().sort(ctx.cmpCodice);
+t('i numeri si confrontano da numeri, non da testo',
+  ord(['2026_10','2026_9','2026_06']).join(',')==='2026_06,2026_9,2026_10',
+  ord(['2026_10','2026_9','2026_06']));
+t('lo zero davanti non cambia il posto',
+  ord(['2026_6','2026_05','2026_07']).join(',')==='2026_05,2026_6,2026_07',
+  ord(['2026_6','2026_05','2026_07']));
+t('gli anni si ordinano prima del progressivo',
+  ord(['2026_01','2025_32','2026_02']).join(',')==='2025_32,2026_01,2026_02',
+  ord(['2026_01','2025_32','2026_02']));
+t('chi non ha codice finisce in fondo',
+  ord(['2026_02','','2026_01']).join(',')==='2026_01,2026_02,',
+  ord(['2026_02','','2026_01']));
+t('due codici uguali non si scambiano',ctx.cmpCodice('2026_06','2026_06')===0,null);
+
+ctx.S.projects=[{id:'a',codice:'2026_01'},{id:'b',codice:'2026_07'},{id:'c',codice:'2025_32'}];
+t('propone il primo progressivo libero dell anno',
+  ctx.prossimoCodice()===String(ctx.today().getFullYear())+'_08'
+  ||ctx.prossimoCodice()===String(ctx.today().getFullYear())+'_01',
+  ctx.prossimoCodice());
+t('riconosce un codice gia in uso',!!ctx.codiceOccupato('2026_07',null),null);
+t('non se stessa',!ctx.codiceOccupato('2026_07','b'),null);
+t('gli spazi e le maiuscole non fanno un codice diverso',
+  !!ctx.codiceOccupato('  2026_07 ',null),null);
+t('un codice libero resta libero',!ctx.codiceOccupato('2026_99',null),null);
+ctx.S.projects=[];
 
 console.log('\n— GIORNI FERIALI —');
 /* 2026-06-01 è un lunedì; 06 e 07 sono sabato e domenica */

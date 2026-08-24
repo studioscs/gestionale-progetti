@@ -37,6 +37,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 16. [`sql/017_ore_fase.sql`](sql/017_ore_fase.sql) — ore stimate ed effettive della fase
 17. [`sql/018_visibilita_commesse.sql`](sql/018_visibilita_commesse.sql) — **privacy: ognuno vede le sue commesse, da eseguire**
 18. [`sql/019_richiesta_fattura.sql`](sql/019_richiesta_fattura.sql) — «questa si può fatturare»: dal tecnico all'amministrazione
+19. [`sql/020_codice_commessa.sql`](sql/020_codice_commessa.sql) — il codice commessa è unico
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -892,6 +893,23 @@ segue, importo, fine prevista, quante cose sono in ritardo — e l'ordinamento
 cliccando l'intestazione (un secondo clic inverte il verso). La scelta resta
 come l'hai lasciata: è una preferenza di chi guarda, non un filtro da rifare
 ogni volta.
+
+### Il codice commessa
+
+L'elenco parte ordinato per **codice commessa crescente** — `2025_32`, `2026_01`,
+`2026_06` — perché è l'ordine con cui lo studio nomina il proprio lavoro:
+ritrovare *2026_06* è più rapido che cercare un nome.
+
+L'ordinamento è **naturale, non alfabetico**: `2026_9` sta prima di `2026_10` e
+non dopo, e `2026_6` finisce dove finirebbe `2026_06`. Chi non ha ancora un
+codice va in fondo, segnalato in rosso.
+
+Il codice è **obbligatorio**. Per una commessa nuova viene già proposto il primo
+libero dell'anno nel formato `ANNO_NN`, così l'obbligo non costa niente. Due
+commesse non possono averlo uguale: lo impedisce l'applicazione al salvataggio e
+lo impedisce il database con un indice unico — spazi e maiuscole non fanno un
+codice diverso. Le commesse vecchie senza codice non bloccano nulla: l'elenco le
+segnala e si sistemano una alla volta.
 
 ## Da dove vengono le ore
 
