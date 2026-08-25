@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -440,6 +440,36 @@ t('senza condizioni restano solo le pratiche di base',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k).sort().join(',')
     ==='accesso_atti,cdu,titolo_edilizio',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
+
+console.log('\n— ORE DELLO STUDIO E PARCELLE DEGLI ESTERNI —');
+ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,
+              valido_dal:'2026-01-01',valido_al:null}];
+ctx.S.projects=[{id:'pE',name:'E',amount:10000}];
+ctx.S.fasi=[]; ctx.S.tasks=[];
+ctx.S.time=[
+  {id:'t1',project_id:'pE',operator_id:'u1',entry_date:'2026-05-04',hours:10},
+  {id:'t2',project_id:'pE',entry_date:'2026-05-10',hours:0,esterno:'Geol. Rossi',costo_totale:1800},
+  {id:'t3',project_id:'pE',entry_date:'2026-05-20',hours:0,esterno:'Geol. Rossi',costo_totale:200},
+  {id:'t4',project_id:'pE',entry_date:'2026-05-22',hours:0,esterno:'Acustico Bianchi',costo_totale:600}
+];
+const cE=ctx.costoCommessa('pE');
+t('le ore dello studio restano ore',cE.ore===10,cE.ore);
+t('gli esterni non aggiungono ore',cE.ore===10,cE.ore);
+t('il costo comprende ore e parcelle',cE.lordo===r2b(10*50+1800+200+600),cE.lordo);
+t('gli esterni sono contati a parte',cE.costoEsterni===2600,cE.costoEsterni);
+t('e raggruppati per nome',cE.esterni.length===2,cE.esterni.map(x=>x.nome));
+t('sommando le loro prestazioni',
+  cE.esterni.find(x=>x.nome==='Geol. Rossi').costo===2000,cE.esterni);
+t('con il numero di prestazioni',
+  cE.esterni.find(x=>x.nome==='Geol. Rossi').righe===2,cE.esterni);
+t('un esterno non compare fra le persone dello studio',
+  !Object.keys(cE.perPersona).some(k=>/Rossi|Bianchi/.test(k)),Object.keys(cE.perPersona));
+t('il margine sottrae anche le parcelle',cE.margine===r2b(10000-500-2600),cE.margine);
+t('riconosce una riga esterna',ctx.eEsterna(ctx.S.time[1])===true,null);
+t('e una interna no',ctx.eEsterna(ctx.S.time[0])===false,null);
+t('i nomi già usati si possono riproporre',
+  ctx.nomiEsterni().join(',')==='Acustico Bianchi,Geol. Rossi',ctx.nomiEsterni());
+ctx.S.time=[]; ctx.S.projects=[]; ctx.S.costi=[];
 
 console.log('\n— CODICE COMMESSA —');
 const ord=a=>a.slice().sort(ctx.cmpCodice);

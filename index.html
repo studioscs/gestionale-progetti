@@ -924,18 +924,47 @@ tbody tr:hover td { background:#f0f4f9; }
 <!-- Ore -->
 <div class="ov" id="m-time">
   <div class="modal modal-sm">
-    <div class="mh"><h3>Registra Ore</h3><button class="mx" data-close="m-time">&#10005;</button></div>
+    <div class="mh"><h3 id="mte-t">Registra Ore</h3><button class="mx" data-close="m-time">&#10005;</button></div>
     <div class="mb">
+      <div class="fg"><label class="fl">Che cosa stai registrando</label>
+        <select class="fc" id="te-kind">
+          <option value="int">Ore di una persona dello studio</option>
+          <option value="ext">Costo di un collaboratore esterno</option>
+        </select>
+        <div class="hint">Il geologo, il collaudatore, l&rsquo;acustico non mandano ore: mandano una parcella.
+        Registrala qui e peser&agrave; sulla commessa come tutto il resto.</div>
+      </div>
       <div class="fg"><label class="fl">Commessa *</label><select class="fc" id="te-p"></select></div>
       <div class="fg"><label class="fl">Attivit&agrave;</label><select class="fc" id="te-t"></select></div>
       <div class="fg"><label class="fl">Descrizione</label><input class="fc" id="te-d" placeholder="Es. Calcolo strutturale, sopralluogo, DL..."></div>
-      <div class="fg2">
-        <div class="fg"><label class="fl">Data *</label><input type="date" class="fc" id="te-dt"></div>
+
+      <div id="te-int">
+        <div class="fg2">
+          <div class="fg"><label class="fl">Chi *</label><select class="fc" id="te-op"></select></div>
+          <div class="fg"><label class="fl">Data *</label><input type="date" class="fc" id="te-dt"></div>
+        </div>
         <div class="fg"><label class="fl">Ore *</label><input type="number" class="fc" id="te-h" step="0.5" min="0.5" max="24"></div>
+        <div class="row" id="te-quick" style="flex-wrap:wrap"></div>
       </div>
-      <div class="row" id="te-quick" style="flex-wrap:wrap"></div>
+
+      <div id="te-ext" style="display:none">
+        <div class="fg2">
+          <div class="fg"><label class="fl">Collaboratore esterno *</label>
+            <input class="fc" id="te-nome" list="te-nomi" placeholder="Es. Dott. Geol. Rossi">
+            <datalist id="te-nomi"></datalist></div>
+          <div class="fg"><label class="fl">Data *</label><input type="date" class="fc" id="te-dt2"></div>
+        </div>
+        <div class="fg"><label class="fl">Costo totale &euro; *</label>
+          <input type="number" class="fc" id="te-costo" step="0.01" min="0" placeholder="quanto ci costa la prestazione">
+          <div class="hint">L&rsquo;importo della sua parcella, non quello che fatturiamo al committente.
+          Entra nel costo della commessa e quindi nella Redditivit&agrave;.</div></div>
+      </div>
     </div>
-    <div class="mf"><button class="btn" data-close="m-time">Annulla</button><button class="btn btn-p" id="ste-btn">Registra</button></div>
+    <div class="mf">
+      <button class="btn btn-d" id="te-del" style="display:none">Elimina</button>
+      <span style="flex:1"></span>
+      <button class="btn" data-close="m-time">Annulla</button>
+      <button class="btn btn-p" id="ste-btn">Registra</button></div>
   </div>
 </div>
 
@@ -1057,7 +1086,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.4';
+const VERSIONE = '2026.08.06.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1235,7 +1264,8 @@ const MIGRAZIONI = {
   '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note'],
   '020_codice_commessa':     ['uq_projects_codice'],
   '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento'],
-  '022_ripartizione_soci':   ['ripartisce']
+  '022_ripartizione_soci':   ['ripartisce'],
+  '023_ore_esterni':         ['esterno','costo_totale']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2627,6 +2657,14 @@ const praticheOf= pid => S.pratiche.filter(p => p.project_id === pid)
 const tasksFase = fid => S.tasks.filter(t => t.commessa_fase_id === fid)
                                 .sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
 const isOpen    = t => t.status !== 'completato';
+/* Una registrazione di tempo e' di un collaboratore esterno quando porta un
+   nome che non e' un profilo dello studio: allora quello che pesa e' la sua
+   parcella, non le ore. Sta qui, fra i selettori, perche' la usa anche il
+   calcolo del costo di commessa. */
+const eEsterna = e => !!(e && e.esterno && String(e.esterno).trim());
+/* I nomi gia' usati, per non doverli riscrivere ogni volta */
+const nomiEsterni = () => Array.from(new Set(S.time.filter(eEsterna)
+  .map(e => String(e.esterno).trim()))).sort((a, b) => a.localeCompare(b, 'it'));
 /* Un'attivita' e' ancora DA FARE solo se la sua fase e' ancora aperta. Chiusa la
    fase, quello che sta dentro non e' piu' in scadenza: continuare a mostrarlo
    nello scadenzario riempirebbe la pagina di cose gia' archiviate e chi la
@@ -5963,24 +6001,48 @@ function mailtoAmministrazione(fid) {
 
 function orePanel(pid) {
   const list = S.time.filter(e => e.project_id === pid);
-  const tot  = list.reduce((a, e) => a + Number(e.hours || 0), 0);
+  const interne = list.filter(e => !eEsterna(e));
+  const tot  = interne.reduce((a, e) => a + Number(e.hours || 0), 0);
   const per  = {};
-  list.forEach(e => per[e.operator_id] = (per[e.operator_id] || 0) + Number(e.hours || 0));
+  interne.forEach(e => per[e.operator_id] = (per[e.operator_id] || 0) + Number(e.hours || 0));
   const rows = Object.keys(per).sort((a,b) => per[b] - per[a]).map(u =>
     '<div class="spread" style="padding:6px 0;border-bottom:1px solid var(--bord)">'
     + '<span class="row">' + av(u, 22) + esc(un(u)) + '</span><b>' + per[u].toFixed(1) + ' h</b></div>').join('');
+
+  /* Le prestazioni esterne non si misurano in ore: si contano in euro */
+  const est = {};
+  list.filter(eEsterna).forEach(e => {
+    const n = String(e.esterno).trim();
+    est[n] = r2((est[n] || 0) + Number(e.costo_totale || 0));
+  });
+  const nomiEst = Object.keys(est).sort((a, b) => est[b] - est[a]);
+  const totEst = r2(nomiEst.reduce((a, n) => a + est[n], 0));
+
   return '<div class="g2">'
-    + '<div class="card"><div class="card-h"><span class="card-t">Ore per collaboratore</span>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Ore e collaborazioni</span>'
       + (canW() ? '<button class="btn btn-sm" data-act="ore">＋ Registra</button>' : '') + '</div>'
-      + (rows || '<div class="empty"><p>Nessuna ora registrata.</p></div>')
-      + '<div class="spread" style="padding-top:9px"><b>Totale commessa</b><b>' + tot.toFixed(1) + ' h</b></div></div>'
-    + '<div class="card"><div class="card-h"><span class="card-t">Ultime registrazioni</span></div>'
-      + (list.slice(0, 15).map(e =>
-          '<div class="spread" style="padding:6px 0;border-bottom:1px solid var(--bord);font-size:12.5px">'
+      + (rows || '<div class="empty" style="padding:14px"><p>Nessuna ora registrata.</p></div>')
+      + '<div class="spread" style="padding-top:9px"><b>Ore dello studio</b><b>' + tot.toFixed(1) + ' h</b></div>'
+      + (nomiEst.length
+          ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;'
+            + 'color:var(--mut);margin:14px 0 5px;border-top:1px solid var(--bord);padding-top:12px">'
+            + 'Collaboratori esterni</div>'
+            + nomiEst.map(n => '<div class="spread" style="padding:6px 0;border-bottom:1px solid var(--bord)">'
+                + '<span>' + esc(n) + '</span><b>' + feuro(est[n]) + '</b></div>').join('')
+            + '<div class="spread" style="padding-top:9px"><b>Costo esterni</b><b>' + feuro(totEst) + '</b></div>'
+          : '')
+    + '</div>'
+    + '<div class="card"><div class="card-h"><span class="card-t">Ultime registrazioni</span>'
+      + (canW() ? '<span style="font-size:11px;color:var(--mut)">clicca per correggere</span>' : '') + '</div>'
+      + (list.slice(0, 20).map(e =>
+          '<div class="spread"' + (canW() ? ' data-ore="' + e.id + '" style="cursor:pointer;' : ' style="')
+          + 'padding:6px 0;border-bottom:1px solid var(--bord);font-size:12.5px">'
           + '<div><div>' + esc(e.description || '-') + '</div>'
-          + '<div style="font-size:11px;color:var(--mut)">' + fdate(e.entry_date) + ' · ' + esc(un(e.operator_id)) + '</div></div>'
-          + '<b>' + Number(e.hours).toFixed(1) + ' h</b></div>').join('')
-         || '<div class="empty"><p>Nessuna registrazione.</p></div>') + '</div></div>';
+          + '<div style="font-size:11px;color:var(--mut)">' + fdate(e.entry_date) + ' · '
+            + (eEsterna(e) ? '<span style="color:var(--vio)">esterno</span> · ' + esc(e.esterno)
+                           : esc(un(e.operator_id))) + '</div></div>'
+          + '<b>' + (eEsterna(e) ? feuro(e.costo_totale) : Number(e.hours).toFixed(1) + ' h') + '</b></div>').join('')
+         || '<div class="empty" style="padding:14px"><p>Nessuna registrazione.</p></div>') + '</div></div>';
 }
 
 /* ===========================================================================
@@ -6404,6 +6466,7 @@ async function rTime() {
   S.time = data || [];
 
   const tot = S.time.reduce((a, e) => a + Number(e.hours || 0), 0);
+  const totEst = r2(S.time.filter(eEsterna).reduce((a, e) => a + Number(e.costo_totale || 0), 0));
   const m0  = new Date(); m0.setDate(1); m0.setHours(0,0,0,0);
   const mese = S.time.filter(e => pd(e.entry_date) >= m0).reduce((a, e) => a + Number(e.hours || 0), 0);
   const mie  = S.time.filter(e => e.operator_id === S.me.id).reduce((a, e) => a + Number(e.hours || 0), 0);
@@ -6423,18 +6486,22 @@ async function rTime() {
       + kpi('Ore totali', tot.toFixed(1), 'tutte le commesse', 100, 'var(--navy)')
       + kpi('Questo mese', mese.toFixed(1), 'dal 1° del mese', tot ? mese/tot*100 : 0, 'var(--blue)')
       + kpi('Le tue ore', mie.toFixed(1), 'registrate da te', tot ? mie/tot*100 : 0, 'var(--grn)')
-      + kpi('Registrazioni', S.time.length, 'ultime 1000', 100, 'var(--yel)') + '</div>'
+      + kpi('Collaboratori esterni', feuro(totEst),
+            S.time.filter(eEsterna).length + ' prestazioni', totEst ? 100 : 0, 'var(--vio)') + '</div>'
     + '<div class="g2 mb16">'
       + '<div class="card"><div class="card-h"><span class="card-t">Ore per commessa</span></div>' + (bar(perP, pn) || '<div class="empty"><p>Nessuna registrazione.</p></div>') + '</div>'
       + '<div class="card"><div class="card-h"><span class="card-t">Ore per collaboratore</span></div>' + (bar(perU, un) || '<div class="empty"><p>Nessuna registrazione.</p></div>') + '</div>'
     + '</div>'
     + '<div class="card"><div class="card-h"><span class="card-t">Registrazioni recenti</span></div><div class="tw"><table class="tsm">'
-    + '<thead><tr><th>Data</th><th>Commessa</th><th>Descrizione</th><th>Chi</th><th class="ac">Ore</th>' + (isAd() ? '<th></th>' : '') + '</tr></thead><tbody>'
-    + S.time.slice(0, 40).map(e => '<tr><td style="font-size:12px">' + fdate(e.entry_date) + '</td>'
-        + '<td style="font-size:12px" data-proj="' + e.project_id + '">' + esc(pn(e.project_id)) + '</td>'
+    + '<thead><tr><th>Data</th><th>Commessa</th><th>Descrizione</th><th>Chi</th><th class="ac">Ore / costo</th>' + (isAd() ? '<th></th>' : '') + '</tr></thead><tbody>'
+    + S.time.slice(0, 40).map(e => '<tr' + (canW() ? ' data-ore="' + e.id + '" style="cursor:pointer"' : '') + '>'
+        + '<td style="font-size:12px">' + fdate(e.entry_date) + '</td>'
+        + '<td style="font-size:12px">' + esc(pn(e.project_id)) + '</td>'
         + '<td style="font-size:12px">' + esc(e.description || '-') + '</td>'
-        + '<td style="font-size:12px">' + esc(un(e.operator_id)) + '</td>'
-        + '<td class="ac"><b>' + Number(e.hours).toFixed(1) + '</b></td>'
+        + '<td style="font-size:12px">' + (eEsterna(e)
+            ? '<span class="chip">esterno</span> ' + esc(e.esterno) : esc(un(e.operator_id))) + '</td>'
+        + '<td class="ac"><b>' + (eEsterna(e) ? feuro(e.costo_totale)
+            : Number(e.hours).toFixed(1)) + '</b></td>'
         + (isAd() ? '<td class="ac"><button class="btn btn-xs btn-d" data-delte="' + e.id + '">✕</button></td>' : '') + '</tr>').join('')
     + '</tbody></table></div></div>';
 }
@@ -6814,8 +6881,19 @@ function oreFase(f) {
 function costoCommessa(pid) {
   const ore = S.time.filter(e => e.project_id === pid);
   let lordo = 0, netto = 0, h = 0;
-  const perPersona = {};
+  const perPersona = {}, esterni = {};
   ore.forEach(e => {
+    /* Un esterno non ha ore ne' costo orario: ha una parcella, e quella pesa
+       per intero sulla commessa. Sta a parte perche' non e' costo del
+       personale ne' quota di un socio: e' una spesa in piu'. */
+    if (eEsterna(e)) {
+      const nome = String(e.esterno).trim();
+      const c = r2(Number(e.costo_totale || 0));
+      lordo += c; netto += c;
+      const x = esterni[nome] = esterni[nome] || { nome, costo:0, righe:0 };
+      x.costo = r2(x.costo + c); x.righe++;
+      return;
+    }
     const c = costoDi(e.operator_id, e.entry_date);
     const ore_ = Number(e.hours || 0);
     const l = ore_ * Number((c && c.costo_orario_lordo) || 0);
@@ -6856,6 +6934,8 @@ function costoCommessa(pid) {
     medio: h ? r2(lordo / h) : 0,
     persone: Object.keys(perPersona).length,
     perPersona,
+    esterni: Object.keys(esterni).map(k => esterni[k]).sort((a, b) => b.costo - a.costo),
+    costoEsterni: r2(Object.keys(esterni).reduce((a, k) => a + esterni[k].costo, 0)),
     haStime: Object.keys(perPersona).some(k => perPersona[k].stimato),
     haForzate: Object.keys(perPersona).some(k => perPersona[k].forzato),
     prima: date[0] || null, ultima: date[date.length - 1] || null,
@@ -6909,10 +6989,14 @@ function redditivita(pid) {
 
   const daSoci   = r2(soci.reduce((a, x) => a + x.importo, 0));
   const daInterni = r2(interni.reduce((a, x) => a + x.importo, 0));
-  const residuo  = importo ? r2(importo - daSoci - daInterni) : null;
+  /* Le parcelle degli esterni sono soldi che escono: tolgono capienza esattamente
+     come le ore di chi sta in studio. */
+  const daEsterni = r2(c.costoEsterni || 0);
+  const residuo  = importo ? r2(importo - daSoci - daInterni - daEsterni) : null;
 
   return {
     importo, soci, interni, daSoci, daInterni, residuo,
+    esterni: c.esterni || [], daEsterni,
     ore: c.ore, haStime: c.haStime, haForzate: c.haForzate,
     senzaCosto: soci.concat(interni).some(x => x.senzaCosto),
     /* Capienza esaurita: le ore valgono piu' di quanto la commessa incassa */
@@ -6928,7 +7012,7 @@ function rRedditivita() {
 
   const attive = S.projects.filter(x => !x.archiviato)
     .map(x => ({ p: x, r: redditivita(x.id) }))
-    .filter(x => x.r.importo > 0 || x.r.ore > 0)
+    .filter(x => x.r.importo > 0 || x.r.ore > 0 || x.r.daEsterni > 0)
     .sort((a, b) => (b.r.importo || 0) - (a.r.importo || 0));
 
   if (!attive.length) return el('page').innerHTML =
@@ -6938,8 +7022,9 @@ function rRedditivita() {
     importo: a.importo + x.r.importo,
     soci:    a.soci    + x.r.daSoci,
     interni: a.interni + x.r.daInterni,
+    esterni: a.esterni + (x.r.daEsterni || 0),
     residuo: a.residuo + (x.r.residuo || 0)
-  }), { importo:0, soci:0, interni:0, residuo:0 });
+  }), { importo:0, soci:0, interni:0, esterni:0, residuo:0 });
 
   const senza = attive.some(x => x.r.senzaCosto);
 
@@ -6951,6 +7036,8 @@ function rRedditivita() {
             tot.importo ? tot.soci / tot.importo * 100 : 0, 'var(--vio)')
       + kpi('Costo interno', feuro(r2(tot.interni)), 'ore di chi non è socio',
             tot.importo ? tot.interni / tot.importo * 100 : 0, 'var(--red)')
+      + kpi('Collaboratori esterni', feuro(r2(tot.esterni)), 'parcelle di chi non è dello studio',
+            tot.importo ? tot.esterni / tot.importo * 100 : 0, 'var(--vio)')
       + kpi('Residuo', feuro(r2(tot.residuo)),
             'ancora fatturabile, altrimenti guadagno extra',
             tot.importo ? Math.max(0, tot.residuo) / tot.importo * 100 : 0,
@@ -7047,6 +7134,7 @@ function schedaRedditivita(p, r) {
             : '<span style="color:var(--ora)">importo non inserito</span>') + '</b></div>'
         + barra('Quota dei soci', r.daSoci, 'var(--vio)')
         + barra('Costo interno', r.daInterni, 'var(--red)')
+        + (r.daEsterni ? barra('Collaboratori esterni', r.daEsterni, 'var(--ora)') : '')
         + (r.residuo !== null ? barra(r.sforato ? 'Capienza superata' : 'Residuo',
             r.residuo, r.sforato ? 'var(--red)' : 'var(--grn)') : '')
         + (r.sforato
@@ -7070,6 +7158,7 @@ function schedaRedditivita(p, r) {
             + 'su questa commessa.</p></div>')
       + '</div>'
     + '</div>'
+    + esterniRedditivita(r)
     + fasiRedditivita(p, r)
     + '</div>';
 }
@@ -7077,6 +7166,22 @@ function schedaRedditivita(p, r) {
 /* Dettaglio per fase: e' li' che si vede dove il tempo se n'e' andato.
    Compare solo quando l'impegno e' stimato dalle attivita' completate, perche'
    le ore registrate a mano non dicono a quale fase appartengono. */
+/* Le parcelle di chi non e' dello studio: non sono ore, non hanno un costo
+   orario, ma tolgono capienza esattamente come le ore. */
+function esterniRedditivita(r) {
+  if (!r.esterni || !r.esterni.length) return '';
+  return '<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;'
+    + 'text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:6px">'
+    + 'Collaboratori esterni</div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Chi</th>'
+    + '<th style="text-align:right">Prestazioni</th><th style="text-align:right">Costo</th>'
+    + '</tr></thead><tbody>'
+    + r.esterni.map(x => '<tr><td>' + esc(x.nome) + '</td>'
+        + '<td style="text-align:right;color:var(--mut)">' + x.righe + '</td>'
+        + '<td style="text-align:right"><b>' + feuro(x.costo) + '</b></td></tr>').join('')
+    + '</tbody></table></div></div>';
+}
+
 function fasiRedditivita(p, r) {
   const tutte = r.soci.concat(r.interni).filter(x => (x.stimato || x.forzato) && x.perFase);
   if (!tutte.length) return '';
@@ -8454,17 +8559,39 @@ async function saveFase() {
 /* ===========================================================================
    MODALE ORE
    =========================================================================== */
-function openOre(pid) {
-  fillSel('te-p', projItems(), defaultProj(pid), '- Seleziona commessa -');
-  el('te-d').value = '';
-  el('te-dt').value = todayISO();
-  el('te-h').value = '';
+let ORE_ID = null;
+function openOre(pid, id) {
+  const e = id ? byId(S.time, id) : null;
+  ORE_ID = e ? id : null;
+  el('mte-t').textContent = e ? 'Modifica registrazione' : 'Registra ore o costi';
+  el('ste-btn').textContent = e ? 'Salva' : 'Registra';
+  el('te-del').style.display = (e && canW()) ? 'inline-flex' : 'none';
+
+  fillSel('te-p', projItems(), e ? e.project_id : defaultProj(pid), '- Seleziona commessa -');
+  el('te-d').value = e ? (e.description || '') : '';
+  /* Chi ha fatto il lavoro si sceglie: assegnare sempre a chi sta compilando
+     significa attribuire a una persona sola le ore di tutto lo studio. */
+  fillSel('te-op', userItems(), e ? e.operator_id : S.me.id, '- Nessuno -');
+  el('te-dt').value = el('te-dt2').value = e ? e.entry_date : todayISO();
+  el('te-h').value = e && !eEsterna(e) ? e.hours : '';
+  el('te-nome').value = e ? (e.esterno || '') : '';
+  el('te-costo').value = e && e.costo_totale != null ? e.costo_totale : '';
+  el('te-nomi').innerHTML = nomiEsterni().map(n => '<option value="' + esc(n) + '">').join('');
+  el('te-kind').value = eEsterna(e) ? 'ext' : 'int';
+  el('te-kind').onchange = disegnaOre;
+
   el('te-quick').innerHTML = [1,2,4,8].map(h => '<button class="btn btn-xs" data-h="' + h + '">' + h + ' h</button>').join('')
     + '<button class="btn btn-xs" data-d="-1">ieri</button>';
   qsa('[data-h]', el('te-quick')).forEach(b => b.onclick = () => el('te-h').value = b.dataset.h);
   qsa('[data-d]', el('te-quick')).forEach(b => b.onclick = () => el('te-dt').value = iso(addD(today(), -1)));
+  disegnaOre();
   loadTeTasks();
   openM('m-time');
+}
+function disegnaOre() {
+  const ext = el('te-kind').value === 'ext';
+  el('te-int').style.display = ext ? 'none' : '';
+  el('te-ext').style.display = ext ? '' : 'none';
 }
 function loadTeTasks() {
   const pid = el('te-p').value;
@@ -8472,29 +8599,60 @@ function loadTeTasks() {
   fillSel('te-t', list.map(t => ({v:t.id, l:t.title})), '', '- Nessuna attività -');
 }
 async function saveOre() {
-  const h = parseFloat(el('te-h').value), dt = el('te-dt').value, pid = el('te-p').value;
+  const pid = el('te-p').value;
   if (!pid) return toast('Seleziona una commessa.', 'error');
-  if (!h || h <= 0 || h > 24) return toast('Inserisci un numero di ore tra 0.5 e 24.', 'error');
-  if (!dt) return toast('La data è obbligatoria.', 'error');
+  const ext = el('te-kind').value === 'ext';
+
+  let pay = { project_id: pid, task_id: el('te-t').value || null,
+              description: el('te-d').value.trim() || null };
+
+  if (ext) {
+    const nome = el('te-nome').value.trim();
+    const costo = parseFloat(el('te-costo').value);
+    const dt = el('te-dt2').value;
+    if (!nome) return toast('Indica il nome del collaboratore esterno.', 'error');
+    if (isNaN(costo) || costo < 0) return toast('Indica il costo della prestazione.', 'error');
+    if (!dt) return toast('La data è obbligatoria.', 'error');
+    /* Le ore restano a zero: quello che pesa e' la parcella. */
+    Object.assign(pay, { entry_date: dt, hours: 0, operator_id: null,
+                         esterno: nome, costo_totale: costo });
+  } else {
+    const h = parseFloat(el('te-h').value), dt = el('te-dt').value;
+    if (!h || h <= 0 || h > 24) return toast('Inserisci un numero di ore tra 0.5 e 24.', 'error');
+    if (!dt) return toast('La data è obbligatoria.', 'error');
+    if (!el('te-op').value) return toast('Indica chi ha fatto il lavoro.', 'error');
+    Object.assign(pay, { entry_date: dt, hours: h, operator_id: el('te-op').value,
+                         esterno: null, costo_totale: null });
+  }
+
   setLoading('ste-btn', true);
-  const { error } = await SB.from('time_entries').insert({
-    project_id: pid, task_id: el('te-t').value || null,
-    description: el('te-d').value.trim() || null,
-    entry_date: dt, hours: h, operator_id: S.me.id
-  });
+  const { error } = ORE_ID
+    ? await SB.from('time_entries').update(pay).eq('id', ORE_ID)
+    : await SB.from('time_entries').insert(pay);
   setLoading('ste-btn', false);
   if (error) return sbErr(error, 'ore');
   setLastProj(pid);
-  closeM('m-time'); toast('Ore registrate', 'success');
-  const { data } = await SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000);
-  S.time = data || [];
-  render();
+  closeM('m-time'); toast(ORE_ID ? 'Registrazione aggiornata' : 'Registrazione salvata', 'success');
+  await ricaricaOre(); render();
 }
+
+async function ricaricaOre() {
+  const { data } = await SB.from('time_entries').select('*')
+    .order('entry_date', { ascending:false }).limit(1000);
+  S.time = data || [];
+}
+
 async function delOre(id) {
-  if (!confirm('Eliminare questa registrazione?')) return;
+  const e = byId(S.time, id);
+  if (!confirm('Eliminare questa registrazione?'
+    + (e ? '\n\n' + fdate(e.entry_date) + ' — '
+         + (eEsterna(e) ? e.esterno + ' · ' + feuro(e.costo_totale)
+                        : un(e.operator_id) + ' · ' + Number(e.hours).toFixed(1) + ' h') : ''))) return;
   const { error } = await SB.from('time_entries').delete().eq('id', id);
   if (error) return sbErr(error, 'ore');
-  toast('Registrazione eliminata'); rTime();
+  closeM('m-time');
+  await ricaricaOre(); render();
+  toast('Registrazione eliminata');
 }
 
 /* ===========================================================================
@@ -8608,6 +8766,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('ch-go').onclick = inviaChiedi;
   el('mc-save').onclick = salvaContratto;
   el('mc-del').onclick  = elimContratto;
+  el('te-del').onclick  = () => delOre(ORE_ID);
   el('mp-arch').onclick = () => {
     const p = byId(S.projects, WZ.edit);
     archiviaProj(WZ.edit, !(p && p.archiviato));
@@ -8771,7 +8930,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
     if ((n = f('data-usr')))   { return openUser(n.dataset.usr); }
-    if ((n = f('data-delte'))) { return delOre(n.dataset.delte); }
+    if ((n = f('data-delte'))) { e.stopPropagation(); return delOre(n.dataset.delte); }
+    if ((n = f('data-ore')))   { e.stopPropagation(); const r = byId(S.time, n.dataset.ore);
+      return openOre(r ? r.project_id : S.projId, n.dataset.ore); }
     if ((n = f('data-grp')))   {
       const id = n.dataset.grp;
       S.openGrp.has(id) ? S.openGrp.delete(id) : S.openGrp.add(id);

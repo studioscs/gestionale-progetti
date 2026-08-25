@@ -40,6 +40,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 19. [`sql/020_codice_commessa.sql`](sql/020_codice_commessa.sql) — il codice commessa è unico
 20. [`sql/021_contratti_commessa.sql`](sql/021_contratti_commessa.sql) — contratto e integrazioni, con l'importo che si somma da solo
 21. [`sql/022_ripartizione_soci.sql`](sql/022_ripartizione_soci.sql) — il lavoro non assegnato si divide fra i soci tecnici
+22. [`sql/023_ore_esterni.sql`](sql/023_ore_esterni.sql) — costi dei collaboratori esterni, non solo ore
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -958,6 +959,28 @@ commesse non possono averlo uguale: lo impedisce l'applicazione al salvataggio e
 lo impedisce il database con un indice unico — spazi e maiuscole non fanno un
 codice diverso. Le commesse vecchie senza codice non bloccano nulla: l'elenco le
 segnala e si sistemano una alla volta.
+
+## Ore e collaborazioni
+
+Nella scheda **Ore** di ogni commessa si registrano due cose diverse.
+
+**Ore di una persona dello studio.** Si sceglie **chi** ha fatto il lavoro —
+prima venivano attribuite d'ufficio a chi stava compilando, che è il modo più
+rapido di far risultare una persona sola al lavoro su tutto. Il campo propone te
+e si cambia con un clic.
+
+**Costo di un collaboratore esterno.** Il geologo, il collaudatore, l'acustico
+non mandano ore: mandano una parcella. Si registrano con **nome e costo
+totale** — i nomi già usati vengono riproposti — e le ore restano a zero, perché
+quello che pesa è l'importo.
+
+Le parcelle degli esterni **entrano nel costo della commessa** e quindi nella
+Redditività: tolgono capienza esattamente come le ore di chi sta in studio. Le
+trovi come voce a sé, distinta dalla *quota dei soci* e dal *costo interno*,
+perché non sono né l'una né l'altro: sono una spesa in più.
+
+**Ogni registrazione si riapre e si corregge**, o si elimina. Basta cliccarci
+sopra, nella scheda Ore della commessa o nella pagina *Ore*.
 
 ## Da dove vengono le ore
 

@@ -1657,6 +1657,114 @@ function launchOpts(){
     must(g.every(x=>!x.d),'la data di completamento è rimasta appesa');
   });
 
+  // --- ORE: CHI, CORREZIONI, COLLABORATORI ESTERNI ---
+  await t('la registrazione delle ore chiede chi ha fatto il lavoro',async()=>{
+    await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'ORE_01',name:'Ore e collaborazioni',
+        status:'attivo',amount:30000}).select().single();
+      await loadAll(true);
+      window.__PIDO=data.id; S.projId=data.id; S.tab='ore'; go('project');
+    });
+    await p.waitForTimeout(400);
+    await p.click('#page [data-act="ore"]');
+    await p.waitForSelector('#m-time.show'); await p.waitForTimeout(300);
+    must(await p.locator('#te-op').count()===1,'manca la scelta della persona');
+    must(await p.inputValue('#te-op')==='u-me','non propone chi sta compilando');
+    const opz=await p.evaluate(()=>Array.from(document.querySelectorAll('#te-op option')).length);
+    must(opz>2,'l elenco delle persone è vuoto: '+opz);
+  });
+  await t('le ore si possono attribuire a un altro',async()=>{
+    const g=await p.evaluate(async pid=>{
+      el('te-p').value=pid;
+      el('te-op').value='u-due';
+      el('te-dt').value='2026-05-04';
+      el('te-h').value='6';
+      el('te-d').value='Rilievo in cantiere';
+      await saveOre();
+      await ricaricaOre();
+      const r=S.time.find(x=>x.project_id===pid&&x.description==='Rilievo in cantiere');
+      return {chi:r&&r.operator_id,ore:r&&Number(r.hours),id:r&&r.id};
+    },await p.evaluate(()=>window.__PIDO));
+    await p.waitForTimeout(600);
+    must(g.chi==='u-due','le ore sono finite su chi compilava: '+g.chi);
+    must(g.ore===6,'ore sbagliate: '+g.ore);
+    global.__ORE1=g.id;
+  });
+  await t('una registrazione si riapre e si corregge',async()=>{
+    const g=await p.evaluate(async([pid,id])=>{
+      openOre(pid,id);
+      const letti={chi:el('te-op').value,ore:el('te-h').value,data:el('te-dt').value};
+      el('te-h').value='8'; el('te-op').value='u-me';
+      await saveOre();
+      await ricaricaOre();
+      const r=byId(S.time,id);
+      return {letti,chi:r.operator_id,ore:Number(r.hours),
+              righe:S.time.filter(x=>x.project_id===pid).length};
+    },[await p.evaluate(()=>window.__PIDO),global.__ORE1]);
+    await p.waitForTimeout(600);
+    must(g.letti.chi==='u-due','riaprendo non ricarica chi ha fatto il lavoro');
+    must(Number(g.letti.ore)===6,'riaprendo non ricarica le ore');
+    must(g.letti.data==='2026-05-04','riaprendo non ricarica la data');
+    must(g.ore===8&&g.chi==='u-me','la correzione non è stata salvata: '+g.ore+' '+g.chi);
+    must(g.righe===1,'correggendo ha creato una riga in più: '+g.righe);
+  });
+  await t('un collaboratore esterno si registra a costo, non a ore',async()=>{
+    const g=await p.evaluate(async pid=>{
+      openOre(pid,null);
+      el('te-kind').value='ext'; disegnaOre();
+      el('te-p').value=pid;
+      el('te-nome').value='Dott. Geol. Rossi';
+      el('te-costo').value='1800';
+      el('te-dt2').value='2026-05-10';
+      el('te-d').value='Relazione geologica';
+      await saveOre();
+      await ricaricaOre();
+      const r=S.time.find(x=>x.project_id===pid&&x.esterno);
+      const c=costoCommessa(pid);
+      return {nome:r&&r.esterno,costo:r&&Number(r.costo_totale),ore:r&&Number(r.hours),
+              operatore:r&&r.operator_id,
+              esterni:c.esterni,costoEsterni:c.costoEsterni,lordo:c.lordo};
+    },await p.evaluate(()=>window.__PIDO));
+    await p.waitForTimeout(600);
+    must(g.nome==='Dott. Geol. Rossi','il nome dell esterno non è stato salvato');
+    must(g.costo===1800,'costo sbagliato: '+g.costo);
+    must(g.ore===0,'a un esterno sono state attribuite delle ore: '+g.ore);
+    must(!g.operatore,'l esterno è stato agganciato a un profilo dello studio');
+    must(g.costoEsterni===1800,'il costo esterno non entra nel conto: '+g.costoEsterni);
+    must(g.esterni.length===1&&g.esterni[0].nome==='Dott. Geol. Rossi','elenco esterni sbagliato');
+    must(g.lordo>=1800,'il costo della commessa non comprende la parcella: '+g.lordo);
+  });
+  await t('la parcella dell esterno toglie capienza alla commessa',async()=>{
+    const g=await p.evaluate(pid=>{
+      const r=redditivita(pid);
+      return {daEsterni:r.daEsterni,residuo:r.residuo,importo:r.importo,
+              daSoci:r.daSoci,daInterni:r.daInterni};
+    },await p.evaluate(()=>window.__PIDO));
+    must(g.daEsterni===1800,'la Redditività non conta la parcella: '+g.daEsterni);
+    must(Math.abs(g.residuo-(g.importo-g.daSoci-g.daInterni-g.daEsterni))<0.01,
+         'il residuo non sottrae gli esterni');
+  });
+  await t('la scheda Ore mostra le collaborazioni esterne',async()=>{
+    await p.evaluate(pid=>{ S.projId=pid; S.tab='ore'; go('project'); },
+                     await p.evaluate(()=>window.__PIDO));
+    await p.waitForTimeout(500);
+    const h=await p.textContent('#page');
+    must(/Collaboratori esterni/.test(h),'non elenca gli esterni');
+    must(/Dott. Geol. Rossi/.test(h),'non nomina l esterno');
+    must(/Costo esterni/.test(h),'non somma il costo degli esterni');
+    must(await p.locator('#page [data-ore]').count()>0,'le registrazioni non sono apribili');
+  });
+  await t('una registrazione si elimina',async()=>{
+    const g=await p.evaluate(async([pid,id])=>{
+      const prima=S.time.filter(x=>x.project_id===pid).length;
+      await delOre(id);
+      await ricaricaOre();
+      return {prima,dopo:S.time.filter(x=>x.project_id===pid).length};
+    },[await p.evaluate(()=>window.__PIDO),global.__ORE1]);
+    await p.waitForTimeout(600);
+    must(g.dopo===g.prima-1,'la registrazione non è stata eliminata: '+g.prima+' → '+g.dopo);
+  });
+
   // --- CHIUDENDO LA FASE SI CHIUDE QUELLO CHE CONTIENE ---
   await t('chiudendo una fase si spuntano le sue attività',async()=>{
     const g=await p.evaluate(async()=>{
@@ -2574,7 +2682,7 @@ function launchOpts(){
     const h=await p.textContent('#page');
     must(!/Costo del lavoro/.test(h),'pannello economico visibile a un collaboratore');
     must(!/Margine lordo/.test(h),'margine visibile a un collaboratore');
-    must(/Ore per collaboratore/.test(h),'la scheda Ore normale è sparita');
+    must(/Ore e collaborazioni/.test(h),'la scheda Ore normale è sparita');
   });
   await t('il collaboratore non ha la scheda utenti',async()=>{
     must(await p.evaluate(()=>costiUtenteHtml('u-due'))==='','scheda costi generata per un collaboratore');

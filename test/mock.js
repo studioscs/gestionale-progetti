@@ -30,6 +30,7 @@
     commessa_fasi:['project_id','fase_key','nome','ordine','stato'],
     projects:['name','status'],
     commessa_pratiche:['project_id','ente','tipo','stato'],
+    time_entries:['entry_date','hours'],
     commessa_contratti:['project_id','numero','tipo','oggetto','importo','stato'],
     commessa_fatture:['project_id','descrizione','stato'],
     profili_costi:['profile_id','valido_dal']
