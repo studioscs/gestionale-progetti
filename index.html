@@ -1086,7 +1086,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.5';
+const VERSIONE = '2026.08.06.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2672,9 +2672,21 @@ const nomiEsterni = () => Array.from(new Set(S.time.filter(eEsterna)
    sono lavoro che non si fara' mai.
    Serve anche per le commesse chiuse prima di questa regola: quelle attivita'
    restano aperte nel database, ma non devono piu' comparire. */
+/* Mappa id → fase. Senza, ogni attivita' costringerebbe a scorrere tutto
+   l'elenco delle fasi: lo scadenzario le attraversa tutte a ogni ridisegno e il
+   conto diventa migliaia di confronti per niente. Si rifa' quando l'elenco
+   delle fasi viene sostituito. */
+let _MAPFASI = null, _MAPFASI_SRC = null;
+function faseDi(fid) {
+  if (!fid) return null;
+  if (!_MAPFASI || _MAPFASI_SRC !== S.fasi) {
+    _MAPFASI = {}; _MAPFASI_SRC = S.fasi;
+    S.fasi.forEach(f => _MAPFASI[f.id] = f);
+  }
+  return _MAPFASI[fid] || null;
+}
 function faseChiusa(t) {
-  if (!t.commessa_fase_id) return false;
-  const f = byId(S.fasi, t.commessa_fase_id);
+  const f = faseDi(t.commessa_fase_id);
   return !!f && (f.stato === 'completata' || f.stato === 'non_applicabile');
 }
 const daFare = t => isOpen(t) && !faseChiusa(t);
@@ -3647,14 +3659,17 @@ function barraFasi(fasi) {
 async function chiudiAttivitaDellaFase(fid) {
   const aperte = tasksFase(fid).filter(isOpen);
   if (!aperte.length) return 0;
-  const ids = aperte.map(t => t.id);
-  const { error } = await SB.from('tasks').update({ status: 'completato' }).in('id', ids);
+  /* Si filtra sul database invece di elencare gli id: una fase con molte
+     attivita' produrrebbe un indirizzo lunghissimo, e oltre una certa lunghezza
+     la richiesta viene rifiutata. Cosi' e' anche una scrittura sola. */
+  const { error } = await SB.from('tasks').update({ status: 'completato' })
+    .eq('commessa_fase_id', fid).neq('status', 'completato');
   if (error) { sbErr(error, 'chiusura attività della fase'); return 0; }
   /* Chi e quando li segna il database (trigger stamp_task_completion): qui si
      rispecchia lo stato perche' l'elenco in memoria sia gia' coerente. */
   const ora = new Date().toISOString();
   aperte.forEach(t => { t.status = 'completato'; t.completed_at = ora; t.completed_by = S.me.id; });
-  return ids.length;
+  return aperte.length;
 }
 
 async function cambiaStatoFasi(nuovo) {
@@ -6496,7 +6511,7 @@ async function rTime() {
     + '<thead><tr><th>Data</th><th>Commessa</th><th>Descrizione</th><th>Chi</th><th class="ac">Ore / costo</th>' + (isAd() ? '<th></th>' : '') + '</tr></thead><tbody>'
     + S.time.slice(0, 40).map(e => '<tr' + (canW() ? ' data-ore="' + e.id + '" style="cursor:pointer"' : '') + '>'
         + '<td style="font-size:12px">' + fdate(e.entry_date) + '</td>'
-        + '<td style="font-size:12px">' + esc(pn(e.project_id)) + '</td>'
+        + '<td style="font-size:12px" data-proj="' + e.project_id + '">' + esc(pn(e.project_id)) + '</td>'
         + '<td style="font-size:12px">' + esc(e.description || '-') + '</td>'
         + '<td style="font-size:12px">' + (eEsterna(e)
             ? '<span class="chip">esterno</span> ' + esc(e.esterno) : esc(un(e.operator_id))) + '</td>'

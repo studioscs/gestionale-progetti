@@ -11,6 +11,9 @@
 -- e sostituiscila con l'utente loggato, oppure lancialo dal SQL Editor.
 -- =============================================================================
 
+-- ripulisce l'eventuale giro precedente, cosi' il file si puo' rilanciare
+delete from public.projects where id = '44444444-4444-4444-4444-444444444444';
+
 \echo '--- 1. INSERT attività (regressione: OLD non assegnato in BEFORE INSERT) ---'
 insert into public.projects(id,name,status,start_date) values ('44444444-4444-4444-4444-444444444444','Villa Test','attivo','2026-01-07');
 insert into public.commessa_fasi(project_id,fase_key,nome,ordine,data_inizio,data_fine_prevista)

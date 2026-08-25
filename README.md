@@ -45,6 +45,18 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
 
+> **La 018 va sempre per ultima.** Le regole di lettura di PostgreSQL si
+> *sommano*: se su una tabella ne resta anche una sola che dice «leggono tutti»,
+> vince quella e tutte le altre non contano più niente. Le migrazioni prima
+> della 018 quelle regole aperte le creano — quindi rieseguirne una **dopo** la
+> 018 (capita: si ricontrolla l'ordine, si rilancia per sicurezza) riaprirebbe
+> in silenzio tutte le commesse a tutti.
+>
+> Non serve ricordarselo a memoria: **riesegui la 018 alla fine, sempre.** Non
+> si limita a rimettere le sue regole, prima ti dice in chiaro cosa ha trovato
+> aperto e su quali tabelle, e alla fine conferma che ne è rimasta una sola per
+> tabella. Se non compare nessun avviso, non era successo niente.
+
 > **Se salti una migrazione l'app te lo dice, e ti dice quale.** All'avvio, se
 > manca una tabella, compare un avviso in cima alla pagina con l'elenco esatto dei
 > file da eseguire. E se un salvataggio fallisce perché manca una colonna, il

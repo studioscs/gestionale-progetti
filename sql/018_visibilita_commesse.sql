@@ -101,57 +101,100 @@ create index if not exists idx_projects_owner    on public.projects(owner_id)   
 create index if not exists idx_projects_creatore on public.projects(created_by)    where created_by is not null;
 
 -- -----------------------------------------------------------------------------
--- 3. LE POLITICHE DI LETTURA
+-- 3. LE POLITICHE
 --
--- La commessa stessa e tutto cio' che le sta appeso tramite project_id.
--- La scrittura segue la lettura: non si modifica cio' che non si vede. Un
--- collaboratore che indovinasse un id non combinerebbe comunque niente.
+-- PERCHE' SI CANCELLA TUTTO INVECE DI CANCELLARE PER NOME
+-- Le politiche RLS dello stesso comando si SOMMANO: basta che ne resti una che
+-- dice "using (true)" perche' tutte le altre non contino piu' niente. Le
+-- migrazioni precedenti quelle politiche le creano, e rieseguirne una dopo
+-- questa - cosa che capita, per esempio ricontrollando l'ordine - farebbe
+-- tornare la lettura aperta a tutti senza che nulla lo segnali.
+--
+-- Per questo non si cancella un elenco di nomi noti: si cancellano TUTTE le
+-- politiche del comando che questo file governa, qualunque nome abbiano, e poi
+-- si creano le proprie. Cosi' rieseguire questo file rimette le cose a posto
+-- comunque sia ridotto il database.
 -- -----------------------------------------------------------------------------
-drop policy if exists "rls_read_projects" on public.projects;
-drop policy if exists "read_all_projects" on public.projects;
+create or replace function public.togli_politiche(tab text, comando "char")
+returns void language plpgsql as $$
+declare r record;
+begin
+  for r in
+    select p.polname from pg_policy p join pg_class c on c.oid = p.polrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = tab and p.polcmd = comando
+  loop
+    execute format('drop policy if exists %I on public.%I', r.polname, tab);
+  end loop;
+end; $$;
+
+-- Prima di toccare niente si guarda com'e' ridotto il database: se questo file
+-- e' gia' stato eseguito e poi ne e' stato rieseguito uno precedente, qui si
+-- vede - ed e' l'unico momento in cui si puo' vedere, perche' subito dopo viene
+-- rimesso a posto.
+do $$
+declare r record; sporche integer := 0;
+begin
+  for r in
+    select c.relname as tab, count(*) as n
+    from pg_policy p join pg_class c on c.oid = p.polrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and p.polcmd = 'r'
+      and c.relname in ('projects','tasks','commessa_fasi','commessa_pratiche',
+                        'commessa_fatture','commessa_sal','commessa_varianti',
+                        'time_entries','files','pratica_eventi','task_messaggi',
+                        'clienti','commessa_contratti')
+    group by 1 having count(*) > 1
+  loop
+    raise warning 'Trovate % politiche di lettura su %: la visibilita'' non era attiva. La rimetto a posto.', r.n, r.tab;
+    sporche := sporche + 1;
+  end loop;
+  if sporche > 0 then
+    raise warning 'Succede rieseguendo una migrazione precedente a questa: le sue politiche aperte tornano e vincono sulle nostre. Riesegui SEMPRE questo file per ultimo.';
+  end if;
+end $$;
+
+-- --- LA COMMESSA ---------------------------------------------------------
+-- Lettura, modifica e cancellazione le governa questo file; l'inserimento
+-- resta com'era: chiunque sia staff puo' creare una commessa, e la vede perche'
+-- created_by e' fra gli agganci.
+select public.togli_politiche('projects', 'r');
 create policy "vis_read_projects" on public.projects for select to authenticated
   using (id in (select public.commesse_visibili()));
 
-drop policy if exists "rls_update_projects" on public.projects;
+select public.togli_politiche('projects', 'w');
 create policy "vis_update_projects" on public.projects for update to authenticated
   using (public.is_staff() and id in (select public.commesse_visibili()))
   with check (public.is_staff());
 
-drop policy if exists "rls_delete_projects" on public.projects;
+select public.togli_politiche('projects', 'd');
 create policy "vis_delete_projects" on public.projects for delete to authenticated
   using (public.is_admin());
 
--- Creare una commessa resta di chiunque sia staff: chi la crea la vede, perche'
--- created_by e' fra gli agganci.
--- (la politica di insert di 006 resta buona cosi' com'e')
-
+-- --- TUTTO QUELLO CHE STA APPESO ALLA COMMESSA ---------------------------
 do $$
 declare t text;
 begin
+  -- commessa_contratti nasce con la migrazione 021: se questo file gira prima,
+  -- la tabella non c'e' ancora e viene saltata; rieseguendolo dopo, rientra.
   foreach t in array array['tasks','commessa_fasi','commessa_pratiche','commessa_fatture',
-                           'commessa_sal','commessa_varianti','time_entries','files'] loop
+                           'commessa_sal','commessa_varianti','time_entries','files',
+                           'commessa_contratti'] loop
     if not exists (select 1 from pg_tables where schemaname='public' and tablename=t) then
       raise notice 'Tabella % assente, la salto.', t;
       continue;
     end if;
 
-    -- via le vecchie politiche di lettura, comunque si chiamassero
-    execute format('drop policy if exists "rls_read_%1$s"  on public.%1$I', t);
-    execute format('drop policy if exists "read_all_%1$s"  on public.%1$I', t);
-    execute format('drop policy if exists "vis_read_%1$s"  on public.%1$I', t);
+    perform public.togli_politiche(t, 'r');
     execute format('create policy "vis_read_%1$s" on public.%1$I for select to authenticated
                     using (project_id in (select public.commesse_visibili()))', t);
 
-    execute format('drop policy if exists "rls_insert_%1$s"   on public.%1$I', t);
-    execute format('drop policy if exists "insert_staff_%1$s" on public.%1$I', t);
-    execute format('drop policy if exists "vis_insert_%1$s"   on public.%1$I', t);
+    perform public.togli_politiche(t, 'a');
     execute format('create policy "vis_insert_%1$s" on public.%1$I for insert to authenticated
                     with check (public.is_staff()
                                 and project_id in (select public.commesse_visibili()))', t);
 
-    execute format('drop policy if exists "rls_update_%1$s"   on public.%1$I', t);
-    execute format('drop policy if exists "update_staff_%1$s" on public.%1$I', t);
-    execute format('drop policy if exists "vis_update_%1$s"   on public.%1$I', t);
+    perform public.togli_politiche(t, 'w');
     execute format('create policy "vis_update_%1$s" on public.%1$I for update to authenticated
                     using (public.is_staff()
                            and project_id in (select public.commesse_visibili()))
@@ -164,16 +207,17 @@ end $$;
 -- -----------------------------------------------------------------------------
 -- 4. QUELLO CHE STA APPESO PER VIE TRAVERSE
 -- Gli eventi di una pratica e i messaggi di un'attivita' non portano
--- project_id: ci si arriva dal padre.
+-- project_id: ci si arriva dal padre. Qui si governa la sola lettura, quindi si
+-- tolgono le politiche di lettura e si lascia intatto il resto - chi puo'
+-- scrivere un messaggio e chi puo' cancellarlo lo decidono altri file.
 -- -----------------------------------------------------------------------------
-drop policy if exists "rls_read_pratica_eventi" on public.pratica_eventi;
-drop policy if exists "read_all_pratica_eventi" on public.pratica_eventi;
+select public.togli_politiche('pratica_eventi', 'r');
 create policy "vis_read_pratica_eventi" on public.pratica_eventi for select to authenticated
   using (exists (select 1 from public.commessa_pratiche c
                  where c.id = pratica_eventi.pratica_id
                    and c.project_id in (select public.commesse_visibili())));
 
-drop policy if exists "read_all_msg" on public.task_messaggi;
+select public.togli_politiche('task_messaggi', 'r');
 create policy "vis_read_msg" on public.task_messaggi for select to authenticated
   using (exists (select 1 from public.tasks t
                  where t.id = task_messaggi.task_id
@@ -187,7 +231,7 @@ create policy "vis_read_msg" on public.task_messaggi for select to authenticated
 -- chi sta chiedendo - altrimenti il modulo "nuovo cliente" non potrebbe
 -- rileggere cio' che ha appena scritto.
 -- -----------------------------------------------------------------------------
-drop policy if exists "read_all_clienti" on public.clienti;
+select public.togli_politiche('clienti', 'r');
 create policy "vis_read_clienti" on public.clienti for select to authenticated
   using (public.vede_tutte_commesse()
          or created_by = auth.uid()
@@ -195,8 +239,65 @@ create policy "vis_read_clienti" on public.clienti for select to authenticated
                     where p.cliente_id = clienti.id
                       and p.id in (select public.commesse_visibili())));
 
+-- -----------------------------------------------------------------------------
+-- 6. LE TABELLE DEL VECCHIO GESTIONALE
+-- project_fasi e project_sottofasi sono rimaste dalla versione precedente:
+-- l'applicazione non le legge piu', ma stanno li' con la lettura aperta a
+-- chiunque, e dentro ci sono note e responsabili delle vecchie commesse.
+-- Non si prova a legarle alla visibilita' per commessa - non vale la pena su
+-- dati morti - ma almeno si chiudono a chi non lavora in studio.
+-- -----------------------------------------------------------------------------
+do $$
+declare t text;
+begin
+  foreach t in array array['project_fasi','project_sottofasi'] loop
+    if not exists (select 1 from pg_tables where schemaname='public' and tablename=t) then
+      continue;
+    end if;
+    perform public.togli_politiche(t, 'r');
+    execute format('create policy "vis_read_%1$s" on public.%1$I for select to authenticated
+                    using (public.is_staff())', t);
+    raise notice 'Lettura di % riservata allo staff (tabella del vecchio gestionale).', t;
+  end loop;
+end $$;
+
+-- -----------------------------------------------------------------------------
+-- 7. CONTROLLO FINALE
+-- Se su una tabella protetta restasse piu' di una politica di lettura, la piu'
+-- permissiva vincerebbe e tutto questo file non servirebbe a niente. Meglio
+-- accorgersene qui che scoprirlo fra sei mesi.
+-- -----------------------------------------------------------------------------
+do $$
+declare r record; guasti integer := 0;
+begin
+  for r in
+    select c.relname as tab, count(*) as n
+    from pg_policy p join pg_class c on c.oid = p.polrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and p.polcmd = 'r'
+      and c.relname in ('projects','tasks','commessa_fasi','commessa_pratiche',
+                        'commessa_fatture','commessa_sal','commessa_varianti',
+                        'time_entries','files','pratica_eventi','task_messaggi',
+                        'clienti','commessa_contratti')
+    group by 1 having count(*) > 1
+  loop
+    raise warning 'ATTENZIONE: % ha % politiche di lettura. La piu'' permissiva vince: la visibilita'' NON e'' attiva su questa tabella.', r.tab, r.n;
+    guasti := guasti + 1;
+  end loop;
+
+  if guasti = 0 then
+    raise notice 'Visibilita'' per commessa: una sola politica di lettura per tabella, come deve essere.';
+  else
+    raise warning 'Riesegui questo file DOPO qualunque altra migrazione, e ricontrolla.';
+  end if;
+end $$;
+
 -- =============================================================================
 -- FINE MIGRAZIONE 018
+--
+-- Questo file si puo' rieseguire quante volte si vuole: rimette a posto le
+-- politiche qualunque sia lo stato di partenza. Se hai rieseguito una
+-- migrazione precedente, riesegui anche questa.
 --
 -- VERIFICA (da eseguire come collaboratore, dopo aver impostato l'utente):
 --   select count(*) from projects;            -- solo le sue
