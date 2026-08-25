@@ -292,6 +292,40 @@ begin
   end if;
 end $$;
 
+-- -----------------------------------------------------------------------------
+-- 8. IL REFERTO, IN CHIARO
+-- L'editor SQL di Supabase NON mostra gli avvisi qui sopra: fa vedere soltanto
+-- il risultato dell'ultima istruzione che restituisce righe. Quindi il controllo
+-- finale lo si rifa' come tabella, ed e' l'ultima cosa che il file esegue: cosi'
+-- dopo aver premuto "Run" si legge subito com'e' andata, senza dover cercare
+-- niente da nessuna parte.
+--
+-- Va letta cosi': la colonna "esito" deve dire "protetta" su ogni riga.
+-- -----------------------------------------------------------------------------
+select
+  t.tabella,
+  count(p.polname)                                    as regole_di_lettura,
+  case
+    when count(p.polname) = 0 then 'SCOPERTA: nessuno la legge, qualcosa non ha funzionato'
+    when count(p.polname) > 1 then 'APERTA A TUTTI: riesegui questo file per ultimo'
+    when bool_or(pg_get_expr(p.polqual, p.polrelid) = 'true')
+                              then 'APERTA A TUTTI: riesegui questo file per ultimo'
+    else 'protetta'
+  end                                                 as esito
+from (values
+  ('projects'),('tasks'),('commessa_fasi'),('commessa_pratiche'),
+  ('commessa_fatture'),('commessa_sal'),('commessa_varianti'),
+  ('time_entries'),('files'),('pratica_eventi'),('task_messaggi'),
+  ('clienti'),('commessa_contratti')
+) as t(tabella)
+join pg_class c   on c.relname = t.tabella
+join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
+left join pg_policy p on p.polrelid = c.oid and p.polcmd = 'r'
+group by t.tabella
+order by (case when count(p.polname) = 1
+               and not bool_or(pg_get_expr(p.polqual, p.polrelid) = 'true')
+          then 1 else 0 end), t.tabella;
+
 -- =============================================================================
 -- FINE MIGRAZIONE 018
 --

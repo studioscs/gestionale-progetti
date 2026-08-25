@@ -53,9 +53,15 @@ collaboratori possano eliminare le pratiche.)
 > in silenzio tutte le commesse a tutti.
 >
 > Non serve ricordarselo a memoria: **riesegui la 018 alla fine, sempre.** Non
-> si limita a rimettere le sue regole, prima ti dice in chiaro cosa ha trovato
-> aperto e su quali tabelle, e alla fine conferma che ne è rimasta una sola per
-> tabella. Se non compare nessun avviso, non era successo niente.
+> si limita a rimettere le sue regole: finisce stampando un referto, una riga
+> per tabella. Nella colonna `esito` deve esserci scritto `protetta` **su tutte
+> le righe** — le eventuali righe con problemi finiscono in cima, così le vedi
+> per prime senza scorrere. È l'ultima cosa che lo script esegue, quindi è
+> quello che compare sotto «Results» appena premi Run.
+>
+> (Il referto c'è perché l'editor SQL di Supabase non mostra gli avvisi di
+> PostgreSQL: fa vedere solo il risultato dell'ultima istruzione. Una tabella si
+> vede, un avviso no.)
 
 > **Se salti una migrazione l'app te lo dice, e ti dice quale.** All'avvio, se
 > manca una tabella, compare un avviso in cima alla pagina con l'elenco esatto dei
