@@ -1076,6 +1076,30 @@ fine prevista il riquadro lo segnala e invita a chiuderla. Le fasi di una
 commessa **archiviata o completata** smettono da sole di maturare: si fermano
 alla data di fine della commessa.
 
+### Chiudendo una fase si chiude quello che contiene
+
+Spuntare una fase e lasciarci dentro dieci attività «da fare» è una
+contraddizione che si paga sullo **Scadenzario**: continuerebbero a comparire
+come arretrati, e chi guarda quella pagina smetterebbe di fidarsene.
+
+Segnando una fase come **completata** — dalla sua finestra o dal comando in
+blocco — vengono spuntate anche le attività aperte che contiene. Prima di farlo
+il gestionale dice quante sono e chiede conferma.
+
+Tre limiti, voluti:
+
+- **solo in avanti**: riaprire una fase *non* riapre le attività, perché quello
+  sarebbe cancellare un lavoro fatto davvero;
+- **le pratiche verso gli enti non si toccano**: «rilasciata» è un fatto che
+  dipende dall'ente, non una casella da spuntare. Restano nello Scadenzario
+  finché non arriva il provvedimento;
+- **niente riguarda il costo**: la Redditività calcola sul periodo della fase,
+  non sulle singole spunte, quindi chiudere a cascata non gonfia niente.
+
+Per le commesse **chiuse prima di questa regola** non serve toccare nulla:
+Scadenzario, Oggi, Firme e i contatori dei ritardi **ignorano le attività di una
+fase completata o non applicabile**, anche se nel database sono rimaste aperte.
+
 ### Più fasi insieme
 
 A fine commessa si chiudono cinque fasi in fila, e aprire cinque volte la stessa

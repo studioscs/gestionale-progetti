@@ -912,7 +912,9 @@ tbody tr:hover td { background:#f0f4f9; }
       </div>
       <div class="hint" style="margin:-8px 0 14px">Le <b>ore effettive</b> sostituiscono il calcolo automatico per questa fase e si dividono fra chi ha partecipato. Le <b>ore stimate</b> sono solo il confronto: non entrano nel costo.</div>
       <div class="fg"><label class="fl">Note</label><textarea class="fc" id="fa-note" rows="3"></textarea></div>
-      <div class="hint">Impostando la fase su <b>Completata</b> le attivit&agrave; ancora aperte restano tali: chiudile prima se vuoi un avanzamento coerente.</div>
+      <div class="hint">Impostando la fase su <b>Completata</b> vengono spuntate anche le attivit&agrave;
+      ancora aperte che contiene: una fase chiusa non deve lasciare arretrati sullo scadenzario.
+      Riaprirla non le riapre &mdash; quello sarebbe cancellare un lavoro fatto davvero.</div>
       <input type="hidden" id="fa-id">
     </div>
     <div class="mf"><button class="btn" data-close="m-fase">Annulla</button><button class="btn btn-p" id="fa-save">Salva</button></div>
@@ -1055,7 +1057,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.3';
+const VERSIONE = '2026.08.06.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2625,6 +2627,19 @@ const praticheOf= pid => S.pratiche.filter(p => p.project_id === pid)
 const tasksFase = fid => S.tasks.filter(t => t.commessa_fase_id === fid)
                                 .sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
 const isOpen    = t => t.status !== 'completato';
+/* Un'attivita' e' ancora DA FARE solo se la sua fase e' ancora aperta. Chiusa la
+   fase, quello che sta dentro non e' piu' in scadenza: continuare a mostrarlo
+   nello scadenzario riempirebbe la pagina di cose gia' archiviate e chi la
+   guarda smetterebbe di fidarsene. Vale anche per le fasi non applicabili, che
+   sono lavoro che non si fara' mai.
+   Serve anche per le commesse chiuse prima di questa regola: quelle attivita'
+   restano aperte nel database, ma non devono piu' comparire. */
+function faseChiusa(t) {
+  if (!t.commessa_fase_id) return false;
+  const f = byId(S.fasi, t.commessa_fase_id);
+  return !!f && (f.stato === 'completata' || f.stato === 'non_applicabile');
+}
+const daFare = t => isOpen(t) && !faseChiusa(t);
 const activeProfs = () => S.profs.filter(p => p.attivo !== false);
 
 function progressOf(pid) {
@@ -2643,7 +2658,7 @@ function praticaOpen(p) {
 function scadenze(userId) {
   const out = [];
   S.tasks.forEach(t => {
-    if (!isOpen(t) || !t.due_date) return;
+    if (!daFare(t) || !t.due_date) return;
     if (userId && t.assignee_id !== userId && t.responsabile_id !== userId) return;
     out.push({ kind:'task', id:t.id, date:t.due_date, title:t.title, pid:t.project_id, obj:t });
   });
@@ -3259,7 +3274,7 @@ function render() {
 
 function updBadges() {
   const uid = S.me ? S.me.id : null;
-  const mie = S.tasks.filter(t => isOpen(t) && t.assignee_id === uid);
+  const mie = S.tasks.filter(t => daFare(t) && t.assignee_id === uid);
   const urg = mie.filter(t => isLate(t.due_date) || isSoon(t.due_date, 0)).length;
   el('b-oggi').textContent = mie.length;
   el('b-oggi').classList.toggle('alert', urg > 0);
@@ -3279,7 +3294,7 @@ function updBadges() {
   const nf = firmeAperte().length;
   el('b-firme').textContent = nf;
   el('b-firme').classList.toggle('alert', S.tasks.some(t =>
-    t.categoria === 'firma_cliente' && isOpen(t) && isLate(t.due_date)));
+    t.categoria === 'firma_cliente' && daFare(t) && isLate(t.due_date)));
 
   const pr = S.pratiche.filter(praticaOpen).length;
   el('b-prat').textContent = pr;
@@ -3419,7 +3434,7 @@ function checklist(pid) {
     const obb  = list.filter(t => !t.opzionale);
     const done = obb.filter(t => t.status === 'completato').length;
     const pct  = obb.length ? Math.round(done / obb.length * 100) : 0;
-    const late = list.filter(t => isOpen(t) && isLate(t.due_date)).length;
+    const late = list.filter(t => daFare(t) && isLate(t.due_date)).length;
     const open = S.openGrp.has(f.id);
     const col  = f.stato === 'completata' ? 'var(--grn)' : f.stato === 'in_corso' ? 'var(--blue)' : 'var(--bord2)';
     const prat = praticheOf(pid).filter(p => p.fase_id === f.id);
@@ -3573,16 +3588,46 @@ function barraFasi(fasi) {
         + '<button class="btn btn-xs" data-selnessuna="">Deseleziona</button>'
       + '</div>'
     + '</div>'
-    + '<div class="hint" style="margin-top:8px">Le attività ancora aperte restano tali: cambiare lo stato '
-    + 'della fase non le spunta. E se poi si spunta un’attività, lo stato torna a essere quello che risulta '
-    + 'dalle attività.</div></div>';
+    + '<div class="hint" style="margin-top:8px">Segnando una fase come <b>completata</b> vengono spuntate '
+    + 'anche le attività aperte che contiene, così non restano come arretrati sullo scadenzario. '
+    + 'Le pratiche verso gli enti no: «rilasciata» dipende dall’ente, non da noi.</div></div>';
+}
+
+/* ---------------------------------------------------------------------------
+   CHIUDENDO UNA FASE SI CHIUDE QUELLO CHE CONTIENE
+   Spuntare una fase e lasciare dentro dieci attivita' "da fare" e' una
+   contraddizione che si paga sullo scadenzario: continuerebbero a comparire
+   come arretrati. Chiudendo la fase si chiude anche cio' che ci sta dentro.
+
+   Solo in avanti: riaprire una fase non riapre le attivita', perche' quello
+   sarebbe distruggere un dato vero - qualcuno le aveva davvero chiuse.
+
+   Non tocca le pratiche verso gli enti: "rilasciata" e' un fatto che dipende
+   dall'ente, non una casella da spuntare. Restano dove sono, e lo scadenzario
+   le mostra finche' non arriva il provvedimento.
+   --------------------------------------------------------------------------- */
+async function chiudiAttivitaDellaFase(fid) {
+  const aperte = tasksFase(fid).filter(isOpen);
+  if (!aperte.length) return 0;
+  const ids = aperte.map(t => t.id);
+  const { error } = await SB.from('tasks').update({ status: 'completato' }).in('id', ids);
+  if (error) { sbErr(error, 'chiusura attività della fase'); return 0; }
+  /* Chi e quando li segna il database (trigger stamp_task_completion): qui si
+     rispecchia lo stato perche' l'elenco in memoria sia gia' coerente. */
+  const ora = new Date().toISOString();
+  aperte.forEach(t => { t.status = 'completato'; t.completed_at = ora; t.completed_by = S.me.id; });
+  return ids.length;
 }
 
 async function cambiaStatoFasi(nuovo) {
   const ids = S.selFasi.slice();
   if (!ids.length) return;
   const nome = (ST_FASE[nuovo] || [nuovo])[0];
-  if (!confirm('Segnare ' + ids.length + (ids.length === 1 ? ' fase' : ' fasi') + ' come «' + nome + '»?')) return;
+  const aperte = nuovo === 'completata'
+    ? ids.reduce((a, id) => a + tasksFase(id).filter(isOpen).length, 0) : 0;
+  if (!confirm('Segnare ' + ids.length + (ids.length === 1 ? ' fase' : ' fasi') + ' come «' + nome + '»?'
+      + (aperte ? '\n\nVerranno spuntate anche le ' + aperte + ' attività ancora aperte che contengono: '
+                + 'una fase chiusa non deve lasciare arretrati sullo scadenzario.' : ''))) return;
 
   /* La data di completamento si tocca solo dove serve: una fase gia' chiusa
      tiene la sua, altrimenti si sposterebbe in avanti il periodo su cui si
@@ -3597,12 +3642,14 @@ async function cambiaStatoFasi(nuovo) {
     if (error) { sbErr(error, 'stato fase'); return; }
     const era = f.stato;
     Object.assign(f, pay);
+    if (nuovo === 'completata') await chiudiAttivitaDellaFase(id);
     n++;
     if (nuovo === 'completata' && era !== 'completata') notificaFaseCompletata(f);
   }
   S.selFasi = [];
   await loadAll(true); render();
-  toast(n + (n === 1 ? ' fase aggiornata' : ' fasi aggiornate'), 'success');
+  toast(n + (n === 1 ? ' fase aggiornata' : ' fasi aggiornate')
+    + (aperte ? ', ' + aperte + ' attività spuntate' : ''), 'success');
 }
 
 function praticaLine(p) {
@@ -3621,7 +3668,7 @@ function praticaLine(p) {
 
 function projCard(p) {
   const pr = progressOf(p.id);
-  const late = tasksOf(p.id).filter(t => isOpen(t) && isLate(t.due_date)).length;
+  const late = tasksOf(p.id).filter(t => daFare(t) && isLate(t.due_date)).length;
   const pl   = praticheOf(p.id).filter(praticaLate).length;
   return '<div class="card" style="cursor:pointer' + (p.archiviato ? ';opacity:.65' : '') + '" data-proj="' + p.id + '">'
     + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">'
@@ -3651,7 +3698,7 @@ function rOggi() {
     + '<button class="btn btn-sm" data-act="ore">⏱ Registra ore</button>'
     + '<button class="btn btn-p btn-sm" data-act="newproj">＋ Commessa</button>';
 
-  const mie   = S.tasks.filter(t => isOpen(t) && t.assignee_id === uid);
+  const mie   = S.tasks.filter(t => daFare(t) && t.assignee_id === uid);
   const rev   = S.tasks.filter(t => t.status === 'revisione' && t.responsabile_id === uid);
   const scad  = mie.filter(t => isLate(t.due_date));
   const oggiT = mie.filter(t => t.due_date && diffD(t.due_date, todayISO()) === 0);
@@ -5079,7 +5126,9 @@ function mostraContenuto(id) {
    se ne servono cinque, si firmano tutte e cinque nello stesso appuntamento.
    =========================================================================== */
 function firmeAperte() {
-  return S.tasks.filter(t => t.categoria === 'firma_cliente' && isOpen(t));
+  /* Stessa regola dello scadenzario: chiusa la fase, quello che conteneva non
+     e' piu' in attesa di firma. */
+  return S.tasks.filter(t => t.categoria === 'firma_cliente' && daFare(t));
 }
 
 function rFirme() {
@@ -5125,7 +5174,7 @@ function rFirme() {
     + Object.keys(per).map(pid => {
         const p = byId(S.projects, pid) || {};
         const aperte = per[pid].filter(isOpen).length;
-        const late = per[pid].some(t => isOpen(t) && isLate(t.due_date));
+        const late = per[pid].some(t => daFare(t) && isLate(t.due_date));
         return '<div class="card mb16">'
           + '<div class="card-h"><span class="card-t" data-proj="' + pid + '" style="cursor:pointer">'
             + esc(pn(pid)) + (p.referente ? ' <span style="font-weight:400;color:var(--mut)">— ' + esc(p.referente) + '</span>' : '')
@@ -5304,7 +5353,7 @@ const COL_PROG = [
   { k:'owner',   l:'Responsabile', v:p => p.owner_id ? un(p.owner_id) : '' },
   { k:'amount',  l:'Importo',    v:p => Number(p.amount || 0),  num:1 },
   { k:'end',     l:'Fine prevista', v:p => p.end_date || '' },
-  { k:'late',    l:'In ritardo', v:p => tasksOf(p.id).filter(t => isOpen(t) && isLate(t.due_date)).length
+  { k:'late',    l:'In ritardo', v:p => tasksOf(p.id).filter(t => daFare(t) && isLate(t.due_date)).length
                                       + praticheOf(p.id).filter(praticaLate).length, num:1 }
 ];
 
@@ -7229,7 +7278,7 @@ function rUsers() {
     + '<th>Utente</th><th>Email</th><th>Ruolo</th><th>Stato</th><th>Attività aperte</th>'
     + '<th style="text-align:right">Costo orario</th><th></th></tr></thead><tbody>'
     + S.profs.map(u => {
-        const open = S.tasks.filter(t => isOpen(t) && t.assignee_id === u.id).length;
+        const open = S.tasks.filter(t => daFare(t) && t.assignee_id === u.id).length;
         const rc = u.role === 'admin' ? '<span class="chip chip-a">Admin</span>'
                  : u.role === 'collaboratore' ? '<span class="chip chip-c">Collaboratore</span>'
                  : '<span class="chip">Viewer</span>';
@@ -8385,15 +8434,21 @@ async function saveFase() {
     data_completamento: stato === 'completata'
       ? ((byId(S.fasi, id) || {}).data_completamento || todayISO()) : null
   };
+  const aperte = stato === 'completata' ? tasksFase(id).filter(isOpen).length : 0;
+  if (aperte && !confirm('Chiudendo la fase verranno spuntate anche le ' + aperte
+      + ' attività ancora aperte che contiene.\n\nUna fase chiusa non deve lasciare '
+      + 'arretrati sullo scadenzario. Procedo?')) return;
+
   setLoading('fa-save', true);
   const { error } = await SB.from('commessa_fasi').update(pay).eq('id', id);
+  if (error) { setLoading('fa-save', false); return sbErr(error, 'salva fase'); }
+  if (stato === 'completata') await chiudiAttivitaDellaFase(id);
   setLoading('fa-save', false);
-  if (error) return sbErr(error, 'salva fase');
   const f = byId(S.fasi, id);
   const era = f ? f.stato : null;
   closeM('m-fase'); await loadAll(true); render();
   if (stato === 'completata' && era !== 'completata') notificaFaseCompletata(byId(S.fasi, id));
-  toast('Fase aggiornata', 'success');
+  toast('Fase aggiornata' + (aperte ? ', ' + aperte + ' attività spuntate' : ''), 'success');
 }
 
 /* ===========================================================================

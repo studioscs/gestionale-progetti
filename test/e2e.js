@@ -1657,6 +1657,79 @@ function launchOpts(){
     must(g.every(x=>!x.d),'la data di completamento è rimasta appesa');
   });
 
+  // --- CHIUDENDO LA FASE SI CHIUDE QUELLO CHE CONTIENE ---
+  await t('chiudendo una fase si spuntano le sue attività',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'CAS_01',name:'Cascata di fase',
+        status:'attivo',start_date:'2026-03-02'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-03-02');
+      await loadAll(true);
+      const f=fasiOf(data.id).find(x=>tasksFase(x.id).length>1);
+      const prima=tasksFase(f.id).filter(isOpen).length;
+      S.selFasi=[f.id];
+      await cambiaStatoFasi('completata');
+      await loadAll(true);
+      const dopo=tasksFase(f.id).filter(isOpen).length;
+      return {pid:data.id,fid:f.id,prima,dopo,
+              stato:byId(S.fasi,f.id).stato,
+              conData:tasksFase(f.id).every(t=>!!t.completed_at)};
+    });
+    await p.waitForTimeout(900);
+    must(g.prima>1,'la fase di prova non aveva attività aperte');
+    must(g.dopo===0,'sono rimaste '+g.dopo+' attività aperte dentro una fase chiusa');
+    must(g.stato==='completata','la fase non risulta chiusa');
+    must(g.conData,'le attività chiuse non hanno la data di completamento');
+    global.__PIDCAS=g.pid; global.__FIDCAS=g.fid;
+  });
+  await t('e non compaiono più nello scadenzario',async()=>{
+    const g=await p.evaluate(fid=>({
+      inScadenzario:scadenze(null).filter(s=>s.kind==='task'
+        &&tasksFase(fid).some(t=>t.id===s.id)).length
+    }),global.__FIDCAS);
+    must(g.inScadenzario===0,'restano '+g.inScadenzario+' attività della fase chiusa nello scadenzario');
+  });
+  await t('lo scadenzario ignora anche le fasi chiuse prima di questa regola',async()=>{
+    /* commesse vecchie: fase chiusa a mano nel database, attività lasciate
+       aperte. Non devono più comparire, senza dover toccare i dati. */
+    const g=await p.evaluate(async pid=>{
+      const f=fasiOf(pid).find(x=>x.stato!=='completata'&&tasksFase(x.id).length);
+      const ids=tasksFase(f.id).map(t=>t.id);
+      await SB.from('commessa_fasi').update({stato:'completata',
+        data_completamento:'2026-04-01'}).eq('id',f.id);
+      await loadAll(true);
+      return {aperte:tasksFase(f.id).filter(isOpen).length,
+              inScadenzario:scadenze(null).filter(s=>ids.indexOf(s.id)>=0).length,
+              daFare:tasksFase(f.id).filter(daFare).length};
+    },global.__PIDCAS);
+    must(g.aperte>0,'la fase di prova non aveva attività rimaste aperte');
+    must(g.daFare===0,'le attività di una fase chiusa risultano ancora da fare');
+    must(g.inScadenzario===0,'compaiono ancora nello scadenzario: '+g.inScadenzario);
+  });
+  await t('una fase non applicabile non lascia arretrati',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const f=fasiOf(pid).find(x=>x.stato!=='completata'&&tasksFase(x.id).length);
+      if(!f) return {salta:true};
+      const ids=tasksFase(f.id).map(t=>t.id);
+      await SB.from('commessa_fasi').update({stato:'non_applicabile'}).eq('id',f.id);
+      await loadAll(true);
+      return {inScadenzario:scadenze(null).filter(s=>ids.indexOf(s.id)>=0).length};
+    },global.__PIDCAS);
+    if(!g.salta) must(g.inScadenzario===0,'una fase non applicabile lascia arretrati');
+  });
+  await t('riaprire la fase non riapre le attività',async()=>{
+    const g=await p.evaluate(async([pid,fid])=>{
+      S.selFasi=[fid];
+      await cambiaStatoFasi('in_corso');
+      await loadAll(true);
+      return {stato:byId(S.fasi,fid).stato,
+              chiuse:tasksFase(fid).filter(t=>t.status==='completato').length,
+              tot:tasksFase(fid).length};
+    },[global.__PIDCAS,global.__FIDCAS]);
+    await p.waitForTimeout(700);
+    must(g.stato==='in_corso','la fase non è stata riaperta');
+    must(g.chiuse===g.tot,'riaprendo la fase ha riaperto anche le attività: '+g.chiuse+'/'+g.tot);
+  });
+
   // --- CONTRATTO E INTEGRAZIONI ---
   await t('la scheda Fatturazione mostra il riquadro degli atti',async()=>{
     await p.evaluate(async()=>{
