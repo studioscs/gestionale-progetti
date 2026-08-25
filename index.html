@@ -196,6 +196,7 @@ tbody tr:hover td { background:#f0f4f9; }
 .grp.open .grp-caret { transform:rotate(90deg); }
 .grp-b { display:none; border-top:1px solid var(--bord); }
 .grp.open .grp-b { display:block; }
+.grp-ck { width:15px; height:15px; flex-shrink:0; cursor:pointer; accent-color:var(--navy); }
 .grp-mini { width:70px; height:5px; background:var(--bord); border-radius:3px; overflow:hidden; flex-shrink:0; }
 
 .ck { width:19px; height:19px; border:2px solid var(--bord2); border-radius:5px; flex-shrink:0; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; color:transparent; font-size:12px; font-weight:700; background:#fff; transition:all .12s; }
@@ -952,6 +953,16 @@ tbody tr:hover td { background:#f0f4f9; }
         </select>
       </div>
       <div class="fg"><label class="fl">Attivo</label><select class="fc" id="mu-a"><option value="1">S&igrave;</option><option value="0">No (disattivato)</option></select></div>
+      <div class="fg"><label class="fl">Lavoro non assegnato</label>
+        <select class="fc" id="mu-rip">
+          <option value="0">Non partecipa alla ripartizione</option>
+          <option value="1">Socio tecnico &mdash; riceve una quota</option>
+        </select>
+        <div class="hint">Quando un&rsquo;attivit&agrave; non &egrave; assegnata a nessuno e la fase non ha un
+        responsabile, il lavoro si divide <b>in parti uguali fra i soci tecnici</b>. Tienine fuori chi
+        tiene l&rsquo;amministrazione: assegnargli un quarto di ogni fase falserebbe sia il suo costo sia
+        quello degli altri.</div>
+      </div>
       <div class="fg"><label class="fl">Visibilit&agrave; delle commesse</label>
         <select class="fc" id="mu-vt">
           <option value="0">Solo quelle su cui lavora</option>
@@ -1044,7 +1055,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.2';
+const VERSIONE = '2026.08.06.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1063,6 +1074,7 @@ const S = {
      chiave nasce al primo assegnamento, un refuso non da' errore ma crea una
      chiave nuova, e il filtro semplicemente smette di funzionare senza che
      nulla lo segnali. */
+  selFasi: [],                   // fasi spuntate per il cambio di stato in blocco
   pq:'',  pst:'', par:'',        // commesse: ricerca, stato, archiviate
   /* Vista dell'elenco commesse: schede o righe. Resta come l'hai lasciata,
      perche' e' una preferenza di chi guarda e non un filtro da rifare ogni volta. */
@@ -1220,7 +1232,8 @@ const MIGRAZIONI = {
   '018_visibilita_commesse': ['vede_tutto'],
   '019_richiesta_fattura':   ['richiesta_at','richiesta_da','richiesta_note'],
   '020_codice_commessa':     ['uq_projects_codice'],
-  '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento']
+  '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento'],
+  '022_ripartizione_soci':   ['ripartisce']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -3401,7 +3414,7 @@ function checklist(pid) {
       + (canW() ? '<button class="btn btn-p" data-act="genera" style="margin-top:10px">Genera fasi da un template</button>' : '')
       + '</div></div>';
   }
-  return fasi.map(f => {
+  return barraFasi(fasi) + fasi.map(f => {
     const list = tasksFase(f.id);
     const obb  = list.filter(t => !t.opzionale);
     const done = obb.filter(t => t.status === 'completato').length;
@@ -3413,6 +3426,8 @@ function checklist(pid) {
 
     return '<div class="grp ' + (open ? 'open ' : '') + (f.stato === 'completata' ? 'done' : '') + '">'
       + '<div class="grp-h" data-grp="' + f.id + '">'
+        + (canW() ? '<input type="checkbox" class="grp-ck" data-selfase="' + f.id + '"'
+            + (S.selFasi.indexOf(f.id) >= 0 ? ' checked' : '') + ' title="Seleziona per cambiare stato in blocco">' : '')
         + '<span class="grp-caret">▶</span>'
         + '<span class="grp-ic">' + (f.icona || '📌') + '</span>'
         + '<span class="grp-t">' + esc(f.nome) + '</span>'
@@ -3531,6 +3546,63 @@ async function salvaPiano(fid) {
   if (f) Object.assign(f, pay);
   scordaImpegno(); render();
   toast('Fase aggiornata', 'success');
+}
+
+/* ---------------------------------------------------------------------------
+   PIÙ FASI INSIEME
+   A fine commessa si chiudono cinque fasi in fila, e aprire cinque volte la
+   stessa finestra per cambiare la stessa cosa è tempo buttato. Le caselle in
+   testa a ogni fase servono a questo: si spuntano quelle che interessano e si
+   dice una volta sola che cosa devono diventare.
+   --------------------------------------------------------------------------- */
+function barraFasi(fasi) {
+  if (!canW()) return '';
+  const n = S.selFasi.filter(id => fasi.some(f => f.id === id)).length;
+  if (!n) return '<div class="hint" style="margin:-4px 0 8px">Spunta le caselle a sinistra delle fasi '
+    + 'per cambiarne lo stato tutte insieme.</div>';
+
+  const b = (st, l, cls) => '<button class="btn btn-xs ' + (cls || '') + '" data-fasistato="' + st + '">' + l + '</button>';
+  return '<div class="card mb16" style="background:var(--bluelt);border-color:#B5D4F4;padding:10px 14px">'
+    + '<div class="spread" style="flex-wrap:wrap;gap:10px">'
+      + '<b style="font-size:13px">' + n + (n === 1 ? ' fase selezionata' : ' fasi selezionate') + '</b>'
+      + '<div class="row" style="flex-wrap:wrap">'
+        + b('completata', '✅ Completata', 'btn-p')
+        + b('in_corso', '▶ In corso')
+        + b('non_avviata', '↺ Non avviata')
+        + b('non_applicabile', '— Non applicabile')
+        + '<button class="btn btn-xs" data-selnessuna="">Deseleziona</button>'
+      + '</div>'
+    + '</div>'
+    + '<div class="hint" style="margin-top:8px">Le attività ancora aperte restano tali: cambiare lo stato '
+    + 'della fase non le spunta. E se poi si spunta un’attività, lo stato torna a essere quello che risulta '
+    + 'dalle attività.</div></div>';
+}
+
+async function cambiaStatoFasi(nuovo) {
+  const ids = S.selFasi.slice();
+  if (!ids.length) return;
+  const nome = (ST_FASE[nuovo] || [nuovo])[0];
+  if (!confirm('Segnare ' + ids.length + (ids.length === 1 ? ' fase' : ' fasi') + ' come «' + nome + '»?')) return;
+
+  /* La data di completamento si tocca solo dove serve: una fase gia' chiusa
+     tiene la sua, altrimenti si sposterebbe in avanti il periodo su cui si
+     calcola il costo. */
+  const oggi = todayISO();
+  let n = 0;
+  for (const id of ids) {
+    const f = byId(S.fasi, id); if (!f) continue;
+    const pay = { stato: nuovo,
+      data_completamento: nuovo === 'completata' ? (f.data_completamento || oggi) : null };
+    const { error } = await SB.from('commessa_fasi').update(pay).eq('id', id);
+    if (error) { sbErr(error, 'stato fase'); return; }
+    const era = f.stato;
+    Object.assign(f, pay);
+    n++;
+    if (nuovo === 'completata' && era !== 'completata') notificaFaseCompletata(f);
+  }
+  S.selFasi = [];
+  await loadAll(true); render();
+  toast(n + (n === 1 ? ' fase aggiornata' : ' fasi aggiornate'), 'success');
 }
 
 function praticaLine(p) {
@@ -6429,19 +6501,48 @@ function feriale(iso) {
 /* Chi ha contribuito a un'attività, e per quanta parte.
    Il lavoro è di chi ha in carico l'attività; se la verifica è affidata a un
    altro, l'attività si divide fra i due. */
+/* I soci tecnici: quelli che redigono. Fra loro si divide il lavoro che non ha
+   un nome sopra. Chi tiene l'amministrazione ne resta fuori anche se e'
+   amministratore del gestionale - assegnargli un quarto di ogni fase falserebbe
+   sia il suo costo sia quello degli altri. Il contrassegno lo mette un
+   amministratore da Utenti (migrazione 022). */
+const sociTecnici = () => {
+  const attivi = S.profs.filter(u => u.attivo !== false);
+  const scelti = attivi.filter(u => u.ripartisce);
+  /* Finche' nessuno e' contrassegnato - migrazione non ancora eseguita - si
+     ripiega sugli amministratori che non sono l'amministrazione: e' la stessa
+     regola con cui la migrazione imposta i valori di partenza. */
+  return (scelti.length ? scelti
+          : attivi.filter(u => u.role === 'admin' && !u.vede_tutto)).map(u => u.id);
+};
+
 function contributiTask(t, fase) {
   const ql = Number(STUDIO.quotaLavoro   != null ? STUDIO.quotaLavoro   : 0.7);
   const qv = Number(STUDIO.quotaVerifica != null ? STUDIO.quotaVerifica : 0.3);
   const f = fase !== undefined ? fase : byId(S.fasi, t.commessa_fase_id);
-  /* Chi lavora è l'assegnatario. Se l'attività non è assegnata a nessuno la
-     segue chi ha in carico la fase; solo in ultima istanza si ripiega su chi
-     l'ha spuntata, che spesso è soltanto chi passa la checklist. */
-  const lavora   = t.assignee_id || (f && f.responsabile_id) || t.completed_by || null;
   const verifica = t.responsabile_id || null;
-  if (lavora && verifica && verifica !== lavora)
-    return [{ chi: lavora, peso: ql }, { chi: verifica, peso: qv }];
-  const solo = lavora || verifica;
-  return solo ? [{ chi: solo, peso: 1 }] : [];
+
+  /* Chi lavora è l'assegnatario; se l'attività non è assegnata la segue chi ha
+     in carico la fase. Se non c'è nessuno dei due il lavoro è dello studio e si
+     divide in parti uguali fra i soci tecnici: non sappiamo chi l'ha fatto, ma
+     dire "lo ha fatto lo studio" è più onesto che dire il nome di chi ha messo
+     la spunta. Il totale non cambia - quattro persone al 25% fanno la stessa
+     giornata di una al 100%. */
+  const uno = t.assignee_id || (f && f.responsabile_id) || null;
+  const lavora = uno ? [uno] : sociTecnici().filter(u => u !== verifica);
+
+  if (!lavora.length) {
+    /* Nemmeno un socio tecnico impostato: resta l'unica traccia che c'è. */
+    const solo = t.completed_by || verifica;
+    return solo ? [{ chi: solo, peso: 1 }] : [];
+  }
+
+  const quota = (lavora.length === 1 && lavora[0] === verifica) ? 1
+              : verifica ? ql : 1;
+  const out = lavora.map(u => ({ chi: u, peso: r2(quota / lavora.length) }));
+  if (verifica && !(lavora.length === 1 && lavora[0] === verifica))
+    out.push({ chi: verifica, peso: qv });
+  return out;
 }
 
 /* Giorni feriali fra due date, estremi compresi */
@@ -8352,7 +8453,8 @@ function openUser(id) {
   el('mu-e').value = u.email || '';
   el('mu-r').value = u.role || 'viewer';
   el('mu-a').value = u.attivo === false ? '0' : '1';
-  el('mu-vt').value = u.vede_tutto ? '1' : '0';
+  el('mu-vt').value  = u.vede_tutto ? '1' : '0';
+  el('mu-rip').value = u.ripartisce ? '1' : '0';
   el('mu-costi').innerHTML = costiUtenteHtml(id);
   /* La delega dei clic copre #page e #top, non le modali: qui l'aggancio e'
      diretto, altrimenti il pulsante c'e' ma non fa niente. */
@@ -8373,6 +8475,7 @@ function openUser(id) {
      allarga da soli. Agli amministratori la casella non dice nulla, perche'
      vedono tutto comunque. */
   el('mu-vt').disabled = io || u.role === 'admin';
+  el('mu-rip').disabled = io;
   el('mu-self').innerHTML = io
     ? '<div class="ibox" style="font-size:12px">Questa è la tua scheda. Puoi cambiare il tuo nome e '
       + 'impostare il <b>tuo costo orario</b>. Ruolo e stato sono bloccati: declassarti o disattivarti '
@@ -8389,6 +8492,7 @@ async function saveUser() {
     patch.role   = el('mu-r').value;
     patch.attivo = el('mu-a').value === '1';
     patch.vede_tutto = el('mu-vt').value === '1';
+    patch.ripartisce = el('mu-rip').value === '1';
   }
   const { error } = await SB.from('profiles').update(patch).eq('id', EUID);
   if (error) { setLoading('su-btn', false); return sbErr(error, 'utente'); }
@@ -8575,6 +8679,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-var')))   { e.stopPropagation(); return openVar(S.projId, n.dataset.var); }
     if ((n = f('data-as')))    { e.stopPropagation(); return pickAssignee(n, n.dataset.as); }
     if ((n = f('data-due')))   { e.stopPropagation(); return pickDue(n, n.dataset.due); }
+    if ((n = f('data-selfase'))) { e.stopPropagation();
+      const id = n.dataset.selfase, i = S.selFasi.indexOf(id);
+      if (i >= 0) S.selFasi.splice(i, 1); else S.selFasi.push(id);
+      return render(); }
+    if ((n = f('data-fasistato'))) { e.stopPropagation(); return cambiaStatoFasi(n.dataset.fasistato); }
+    if ((n = f('data-selnessuna'))) { e.stopPropagation(); S.selFasi = []; return render(); }
     if ((n = f('data-fase')))  { e.stopPropagation(); return openFase(n.dataset.fase); }
     if ((n = f('data-psave'))) { e.stopPropagation(); return salvaPiano(n.dataset.psave); }
     if ((n = f('data-newt')))  { e.stopPropagation(); return openTask(null, S.projId, n.dataset.newt); }

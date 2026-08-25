@@ -39,6 +39,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 18. [`sql/019_richiesta_fattura.sql`](sql/019_richiesta_fattura.sql) — «questa si può fatturare»: dal tecnico all'amministrazione
 19. [`sql/020_codice_commessa.sql`](sql/020_codice_commessa.sql) — il codice commessa è unico
 20. [`sql/021_contratti_commessa.sql`](sql/021_contratti_commessa.sql) — contratto e integrazioni, con l'importo che si somma da solo
+21. [`sql/022_ripartizione_soci.sql`](sql/022_ripartizione_soci.sql) — il lavoro non assegnato si divide fra i soci tecnici
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1007,6 +1008,32 @@ Il terzo gradino è l'ultimo apposta. Chi spunta è spesso soltanto chi passa la
 checklist — tipicamente sempre la stessa persona — ed è il motivo per cui prima
 il costo di tutte le commesse finiva addosso a lei sola.
 
+### Il lavoro senza un nome sopra
+
+Quando un'attività non è assegnata a nessuno **e** la fase non ha un
+responsabile, il costo finiva su chi aveva messo la spunta — sempre la stessa
+persona, quella che passa la checklist. La Redditività mostrava un socio che
+lavorava a tutto e gli altri fermi, che non è quello che succede.
+
+Ora quel lavoro **si divide in parti uguali fra i soci tecnici**. Non è una
+stima migliore — non sappiamo chi l'ha fatto — ma è onesta: dice «lo ha fatto lo
+studio» invece di dire il nome sbagliato. E il totale non cambia: quattro
+persone al 25% fanno la stessa giornata di una al 100%.
+
+Chi sia un socio tecnico non lo decide il ruolo: c'è un contrassegno sulla
+scheda utente, **«Socio tecnico — riceve una quota»**. Chi tiene
+l'amministrazione ne resta fuori anche se è amministratore del gestionale —
+assegnargli un quarto di ogni fase falserebbe sia il suo costo sia quello degli
+altri. La migrazione lo imposta la prima volta sugli amministratori che non
+vedono tutte le commesse; da lì in poi lo si corregge da **Utenti**.
+
+L'ordine resta questo, dal più preciso al meno:
+
+1. l'**assegnatario** dell'attività;
+2. il **responsabile della fase**;
+3. i **soci tecnici**, in parti uguali;
+4. solo se non c'è nemmeno un socio contrassegnato, chi ha messo la spunta.
+
 ### Chi lavora e chi verifica: 70/30
 
 Un'attività ha due caselle: **Assegnata a** — chi la fa — e **Verifica /
@@ -1048,6 +1075,23 @@ accumulare giornate**, e le toglie a tutte le altre. Se una fase supera la sua
 fine prevista il riquadro lo segnala e invita a chiuderla. Le fasi di una
 commessa **archiviata o completata** smettono da sole di maturare: si fermano
 alla data di fine della commessa.
+
+### Più fasi insieme
+
+A fine commessa si chiudono cinque fasi in fila, e aprire cinque volte la stessa
+finestra per cambiare la stessa cosa è tempo buttato. In **Avanzamento** ogni
+fase ha una casella a sinistra: si spuntano quelle che interessano e si dice una
+volta sola che cosa devono diventare — *Completata*, *In corso*, *Non avviata*,
+*Non applicabile*.
+
+Due cose che il comando rispetta:
+
+- una fase **già chiusa tiene la sua data di completamento**, non viene spostata
+  a oggi — altrimenti si sposterebbe in avanti il periodo su cui si calcola il
+  costo;
+- le **attività aperte restano aperte**: cambiare lo stato della fase non le
+  spunta, e se poi ne spunti una lo stato torna a essere quello che risulta
+  dalle attività.
 
 ### Le quattro caselle in Avanzamento
 

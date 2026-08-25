@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -549,6 +549,56 @@ t('le due quote fanno la settimana',r2b(iC.u1.giorni+iC.u2.giorni)===5,
   iC.u1.giorni+iC.u2.giorni);
 t('il costo usa la tariffa di ciascuno',iC.u1.costo===1400&&iC.u2.costo===1200,
   [iC.u1.costo,iC.u2.costo]);
+
+console.log('\n— IL LAVORO NON ASSEGNATO E DEI SOCI TECNICI —');
+/* Quattro soci tecnici, più chi tiene l'amministrazione, che ne resta fuori */
+ctx.S.profs=[{id:'s1',full_name:'Socio 1',role:'admin',attivo:true,ripartisce:true},
+             {id:'s2',full_name:'Socio 2',role:'admin',attivo:true,ripartisce:true},
+             {id:'s3',full_name:'Socio 3',role:'admin',attivo:true,ripartisce:true},
+             {id:'s4',full_name:'Socio 4',role:'admin',attivo:true,ripartisce:true},
+             {id:'amm',full_name:'Amministrazione',role:'admin',attivo:true,
+              vede_tutto:true,ripartisce:false},
+             {id:'col',full_name:'Collaboratore',role:'collaboratore',attivo:true}];
+t('i soci tecnici sono quelli contrassegnati',
+  ctx.sociTecnici().sort().join(',')==='s1,s2,s3,s4',ctx.sociTecnici());
+t('l amministrazione ne resta fuori',ctx.sociTecnici().indexOf('amm')<0,null);
+
+const contr=(t2,f2)=>ctx.contributiTask(t2,f2||null);
+const somma=a=>r2b(a.reduce((x,y)=>x+y.peso,0));
+
+let c1=contr({id:'x',project_id:'p',status:'completato',completed_by:'s1'});
+t('un attività di nessuno si divide fra i quattro',c1.length===4,c1);
+t('in parti uguali',c1.every(x=>x.peso===0.25),c1.map(x=>x.peso));
+t('e vale comunque una giornata sola',somma(c1)===1,somma(c1));
+t('non finisce su chi ha messo la spunta',
+  c1.filter(x=>x.chi==='s1').length===1&&c1.find(x=>x.chi==='s1').peso===0.25,null);
+
+let c2=contr({id:'x',project_id:'p',status:'completato',completed_by:'s1',responsabile_id:'col'});
+t('con un verificatore il 70% si divide fra i soci',
+  c2.filter(x=>x.chi!=='col').every(x=>x.peso===0.18)
+  ||r2b(c2.filter(x=>x.chi!=='col').reduce((a,x)=>a+x.peso,0))===0.7,
+  c2.map(x=>x.chi+':'+x.peso));
+t('e il verificatore tiene il suo 30%',
+  c2.find(x=>x.chi==='col').peso===0.3,c2);
+
+let c3=contr({id:'x',project_id:'p',status:'completato',assignee_id:'col',completed_by:'s1'});
+t('se qualcuno è assegnato la ripartizione non entra',
+  c3.length===1&&c3[0].chi==='col'&&c3[0].peso===1,c3);
+
+let c4=contr({id:'x',project_id:'p',status:'completato',completed_by:'s1'},
+             {id:'f',responsabile_id:'col'});
+t('il responsabile di fase batte la ripartizione',
+  c4.length===1&&c4[0].chi==='col',c4);
+
+let c5=contr({id:'x',project_id:'p',status:'completato',completed_by:'s1',responsabile_id:'s2'});
+t('chi verifica non prende anche la quota di chi lavora',
+  c5.filter(x=>x.chi==='s2').length===1,c5.map(x=>x.chi));
+t('e i soci che lavorano diventano tre',c5.length===4,c5.length);
+
+ctx.S.profs=[];
+let c6=contr({id:'x',project_id:'p',status:'completato',completed_by:'s1'});
+t('senza soci contrassegnati resta chi ha spuntato',
+  c6.length===1&&c6[0].chi==='s1',c6);
 
 console.log('\n— IL COSTO NON FINISCE TUTTO SU CHI SPUNTA —');
 /* Il caso vero: attività non assegnate, spuntate dall'amministratore.

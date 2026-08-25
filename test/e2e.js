@@ -1569,12 +1569,15 @@ function launchOpts(){
         completed_by:'u-me',assignee_id:'u-due',responsabile_id:'u-me'}).eq('id',a.id);
       await loadAll(true);
       const c=costoCommessa(data.id);
-      return {pid:data.id,pesi:partecipantiFase(f),
+      const pesi={}; contributiTask(byId(S.tasks,a.id),f).forEach(x=>pesi[x.chi]=x.peso);
+      return {pid:data.id,pesi,
               lavora:c.perPersona['u-due']&&c.perPersona['u-due'].giorni,
               verifica:c.perPersona['u-me']&&c.perPersona['u-me'].giorni};
     });
     /* Le quote esatte le verifica logic.js su dati isolati: qui interessa che la
-       regola arrivi fino in fondo con un database pieno di altre commesse. */
+       regola arrivi fino in fondo con un database pieno di altre commesse.
+       Si guarda l'attività, non la fase: nella fase ci sono anche attività non
+       assegnate, che seguono un'altra regola. */
     must(g.pesi['u-due']===0.7,'chi svolge non pesa il 70%: '+g.pesi['u-due']);
     must(g.pesi['u-me']===0.3,'chi verifica non pesa il 30%: '+g.pesi['u-me']);
     must(g.lavora>0,'chi ha svolto il lavoro non ha ricevuto giorni');
@@ -1594,6 +1597,66 @@ function launchOpts(){
     must(chi.includes('u-due'),'chi ha svolto il lavoro non compare');
     must(chi.includes('u-me'),'chi ha verificato non compare');
   });
+  // --- PIÙ FASI INSIEME ---
+  await t('le fasi si possono spuntare per cambiarle in blocco',async()=>{
+    await p.evaluate(()=>{ S.selFasi=[];
+      S.projId=S.projects.find(x=>/Palazzo Bianchi/.test(x.name)).id;
+      S.tab='avanzamento'; go('project'); });
+    await p.waitForTimeout(500);
+    must(await p.locator('#page [data-selfase]').count()>3,'nessuna casella sulle fasi');
+    must(/per cambiarne lo stato tutte insieme/.test(await p.textContent('#page')),
+         'non spiega a cosa servono le caselle');
+    await p.locator('#page [data-selfase]').nth(0).click(); await p.waitForTimeout(250);
+    await p.locator('#page [data-selfase]').nth(1).click(); await p.waitForTimeout(250);
+    const h=await p.textContent('#page');
+    must(/2 fasi selezionate/.test(h),'non conta le fasi selezionate: '+h.slice(0,120));
+    must(await p.locator('#page [data-fasistato="completata"]').count()===1,'manca il pulsante Completata');
+  });
+  await t('cambiare stato in blocco tocca solo le fasi spuntate',async()=>{
+    const g=await p.evaluate(async()=>{
+      const scelte=S.selFasi.slice();
+      const altre=fasiOf(S.projId).filter(f=>scelte.indexOf(f.id)<0).map(f=>f.stato);
+      await cambiaStatoFasi('completata');
+      await loadAll(true);
+      return {scelte,
+              stati:scelte.map(id=>byId(S.fasi,id).stato),
+              date:scelte.map(id=>!!byId(S.fasi,id).data_completamento),
+              altrePrima:altre,
+              altreDopo:fasiOf(S.projId).filter(f=>scelte.indexOf(f.id)<0).map(f=>f.stato),
+              restaSelezione:S.selFasi.length};
+    });
+    await p.waitForTimeout(800);
+    must(g.stati.every(x=>x==='completata'),'non tutte sono state chiuse: '+g.stati);
+    must(g.date.every(Boolean),'manca la data di completamento');
+    must(JSON.stringify(g.altrePrima)===JSON.stringify(g.altreDopo),'ha toccato fasi non selezionate');
+    must(g.restaSelezione===0,'la selezione non è stata azzerata dopo l operazione');
+  });
+  await t('una fase già chiusa tiene la sua data di completamento',async()=>{
+    const g=await p.evaluate(async()=>{
+      const f=fasiOf(S.projId).find(x=>x.stato==='completata');
+      await SB.from('commessa_fasi').update({data_completamento:'2026-02-10'}).eq('id',f.id);
+      await loadAll(true);
+      S.selFasi=[f.id];
+      await cambiaStatoFasi('completata');
+      await loadAll(true);
+      return byId(S.fasi,f.id).data_completamento;
+    });
+    await p.waitForTimeout(700);
+    must(g==='2026-02-10','la data è stata spostata a oggi: '+g);
+  });
+  await t('si può anche riportarle indietro',async()=>{
+    const g=await p.evaluate(async()=>{
+      const scelte=fasiOf(S.projId).filter(f=>f.stato==='completata').slice(0,2).map(f=>f.id);
+      S.selFasi=scelte;
+      await cambiaStatoFasi('non_avviata');
+      await loadAll(true);
+      return scelte.map(id=>({s:byId(S.fasi,id).stato,d:byId(S.fasi,id).data_completamento}));
+    });
+    await p.waitForTimeout(700);
+    must(g.every(x=>x.s==='non_avviata'),'non sono tornate indietro: '+JSON.stringify(g));
+    must(g.every(x=>!x.d),'la data di completamento è rimasta appesa');
+  });
+
   // --- CONTRATTO E INTEGRAZIONI ---
   await t('la scheda Fatturazione mostra il riquadro degli atti',async()=>{
     await p.evaluate(async()=>{
