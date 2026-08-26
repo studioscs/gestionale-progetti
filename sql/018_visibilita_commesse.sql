@@ -158,9 +158,27 @@ end $$;
 -- Lettura, modifica e cancellazione le governa questo file; l'inserimento
 -- resta com'era: chiunque sia staff puo' creare una commessa, e la vede perche'
 -- created_by e' fra gli agganci.
+--
+-- PERCHE' I TRE CONTROLLI DIRETTI PRIMA DELLA FUNZIONE
+-- Non sono un doppione: commesse_visibili() li contiene gia' tutti e tre. Ma
+-- quando si crea una commessa, l'applicazione la inserisce e nella STESSA
+-- istruzione si rilegge la riga appena scritta (le serve l'id per generare
+-- fasi e attivita'). PostgreSQL, su un "insert ... returning", applica anche la
+-- politica di lettura - e commesse_visibili() e' stable, cioe' guarda il
+-- database com'era all'inizio dell'istruzione: la riga che si sta scrivendo
+-- proprio adesso li' dentro non c'e' ancora, quindi la funzione risponde di no
+-- e l'inserimento viene rifiutato con "permessi insufficienti".
+--
+-- I confronti diretti su colonna invece si valutano sulla riga nuova, senza
+-- guardare nessuna fotografia: passano subito. Non allargano la visibilita' di
+-- una virgola, la rendono solo possibile nel momento in cui la commessa nasce.
+--
 select public.togli_politiche('projects', 'r');
 create policy "vis_read_projects" on public.projects for select to authenticated
-  using (id in (select public.commesse_visibili()));
+  using (public.vede_tutte_commesse()
+         or created_by = auth.uid()
+         or owner_id   = auth.uid()
+         or id in (select public.commesse_visibili()));
 
 select public.togli_politiche('projects', 'w');
 create policy "vis_update_projects" on public.projects for update to authenticated

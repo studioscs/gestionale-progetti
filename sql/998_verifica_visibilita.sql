@@ -121,7 +121,24 @@ union all select 'fatture di prova', count(*) from public.commessa_fatture where
 reset role;
 
 \echo ''
-\echo '=== 4. PULIZIA dei dati di prova ==='
+\echo '=== 4. CREARE UNA COMMESSA E RILEGGERLA SUBITO ==='
+-- L applicazione inserisce la commessa e nella STESSA istruzione si rilegge la
+-- riga appena scritta, perche le serve l id per generare fasi e attivita.
+-- PostgreSQL su un "insert ... returning" applica anche la politica di lettura,
+-- e commesse_visibili() e stable: guarda il database com era all inizio della
+-- istruzione, quando la riga nuova non c e ancora. Se la politica si affidasse
+-- solo a quella funzione, creare una commessa fallirebbe con "permessi
+-- insufficienti". Qui si controlla che non succeda.
+set role authenticated;
+set "test.uid" = '22222222-2222-2222-2222-222222222222';
+insert into public.projects(name, status, created_by, codice)
+values ('PROVA rilettura', 'attivo', '22222222-2222-2222-2222-222222222222', 'PRV_99')
+returning name as riletta_subito;
+\echo '-- se sopra si legge "PROVA rilettura", creare una commessa funziona'
+reset role;
+
+\echo ''
+\echo '=== 5. PULIZIA dei dati di prova ==='
 delete from public.commessa_fatture where descrizione like 'PROVA%';
 delete from public.tasks where title like 'PROVA%';
 delete from public.commessa_fasi where fase_key = 'pv1';
