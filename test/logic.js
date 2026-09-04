@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,daFare,inCarico,titolare,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -740,6 +740,56 @@ const veroA=ctx.costoCommessa('pA');
 t('le ore registrate vincono sulla stima',veroA.ore===3&&veroA.lordo===150,[veroA.ore,veroA.lordo]);
 t('e non vengono marcate come stimate',veroA.perPersona.u1.stimato===false,null);
 ctx.S.time=[]; ctx.S.tasks=[]; ctx.S.fasi=[]; ctx.S.projects=[]; ctx.S.costi=[];
+
+
+console.log('\n— UNA SCADENZA SI SEGNALA SOLO SE È DI QUALCUNO —');
+/* Generare una commessa produce centinaia di attività con una data presa dal
+   template e nessun nome sopra: quelle non devono comparire da nessuna parte. */
+const IERI='2020-01-01';
+ctx.S.projects=[{id:'pS',name:'S'}];
+ctx.S.profs=[{id:'u1',full_name:'Anna',attivo:true},{id:'u2',full_name:'Bruno',attivo:true}];
+ctx.S.pratiche=[];
+const fLibera={id:'fL',project_id:'pS',fase_key:'a',nome:'Fase libera',stato:'non_avviata'};
+const fAnna  ={id:'fA',project_id:'pS',fase_key:'b',nome:'Fase di Anna',stato:'non_avviata',responsabile_id:'u1'};
+ctx.S.fasi=[fLibera,fAnna]; ctx.scordaImpegno();
+
+const nuda   ={id:'x1',project_id:'pS',commessa_fase_id:'fL',status:'da_fare',due_date:IERI};
+const assegn ={id:'x2',project_id:'pS',commessa_fase_id:'fL',status:'da_fare',due_date:IERI,assignee_id:'u2'};
+const verific={id:'x3',project_id:'pS',commessa_fase_id:'fL',status:'da_fare',due_date:IERI,responsabile_id:'u2'};
+const perFase={id:'x4',project_id:'pS',commessa_fase_id:'fA',status:'da_fare',due_date:IERI};
+const senzaD ={id:'x5',project_id:'pS',commessa_fase_id:'fA',status:'da_fare'};
+ctx.S.tasks=[nuda,assegn,verific,perFase,senzaD];
+
+t('un attività senza nessuno non è in carico',ctx.inCarico(nuda)===false,null);
+t('assegnarla la mette in carico',ctx.inCarico(assegn)===true,null);
+t('anche solo chi la verifica la mette in carico',ctx.inCarico(verific)===true,null);
+t('assegnare la FASE mette in carico ciò che contiene',ctx.inCarico(perFase)===true,null);
+t('il nome viene dalla fase, ed è dichiarato',
+  (()=>{const c=ctx.titolare(perFase);return c&&c.id==='u1'&&c.viaFase===true;})(),null);
+t('assegnata a mano, il nome non viene dalla fase',
+  ctx.titolare(assegn).viaFase===false,null);
+
+t('una data senza nessuno non è una scadenza',ctx.scadenzaViva(nuda)===false,null);
+t('ma resta contata fra quelle sospese',ctx.scadenzaSospesa(nuda)===true,null);
+t('senza data non è né una cosa né l altra',
+  ctx.scadenzaViva(senzaD)===false&&ctx.scadenzaSospesa(senzaD)===false,null);
+
+const viste=ctx.scadenze(null);
+t('lo scadenzario mostra solo le tre di qualcuno',viste.length===3,viste.map(v=>v.id));
+t('e quella nuda non c è',viste.every(v=>v.id!=='x1'),null);
+
+/* Filtrando per persona esce anche il lavoro che le tocca perché è sua la fase */
+t('il filtro per Anna trova quella della sua fase',
+  ctx.scadenze('u1').map(v=>v.id).join()==='x4',ctx.scadenze('u1').map(v=>v.id));
+t('il filtro per Bruno trova le sue due',
+  ctx.scadenze('u2').length===2,ctx.scadenze('u2').map(v=>v.id));
+
+/* Chiudendo la fase, quello che contiene smette di essere una scadenza */
+fAnna.stato='completata'; ctx.scordaImpegno(); ctx._MAPFASI=null;
+t('chiusa la fase, la sua attività sparisce dallo scadenzario',
+  ctx.scadenze(null).every(v=>v.id!=='x4'),ctx.scadenze(null).map(v=>v.id));
+fAnna.stato='non_avviata';
+ctx.S.tasks=[]; ctx.S.fasi=[]; ctx.S.projects=[]; ctx.S.profs=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

@@ -1796,6 +1796,50 @@ function launchOpts(){
     }),global.__FIDCAS);
     must(g.inScadenzario===0,'restano '+g.inScadenzario+' attività della fase chiusa nello scadenzario');
   });
+  await t('una commessa appena generata non riempie lo scadenzario',async()=>{
+    /* Le attività nascono con una data presa dal template e nessun nome sopra:
+       finché non sono di qualcuno non sono scadenze, altrimenti generare una
+       commessa seppellirebbe lo scadenzario sotto centinaia di date. */
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'SCA_01',name:'Scadenze mute',
+        status:'attivo',start_date:'2020-01-02'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2020-01-02');
+      await loadAll(true);
+      const ids=tasksOf(data.id).map(t=>t.id);
+      return {pid:data.id, conData:tasksOf(data.id).filter(t=>t.due_date).length,
+              inScadenzario:scadenze(null).filter(s=>ids.indexOf(s.id)>=0).length,
+              sospese:tasksOf(data.id).filter(scadenzaSospesa).length};
+    });
+    must(g.conData>3,'la commessa di prova non ha attività con una data ('+g.conData+')');
+    must(g.inScadenzario===0,'compaiono già '+g.inScadenzario+' scadenze senza che sia assegnato niente');
+    must(g.sospese===g.conData,'le sospese ('+g.sospese+') non tornano con le date ('+g.conData+')');
+    global.__PIDSCA=g.pid;
+  });
+  await t('assegnando la FASE le sue attività diventano scadenze',async()=>{
+    const g=await p.evaluate(async pid=>{
+      const f=fasiOf(pid).find(x=>tasksFase(x.id).some(t=>t.due_date));
+      const attese=tasksFase(f.id).filter(t=>t.due_date&&isOpen(t)).length;
+      await SB.from('commessa_fasi').update({responsabile_id:S.me.id}).eq('id',f.id);
+      await loadAll(true);
+      const ids=tasksFase(f.id).map(t=>t.id);
+      const uscite=scadenze(null).filter(s=>ids.indexOf(s.id)>=0);
+      return {attese, uscite:uscite.length,
+              mie:scadenze(S.me.id).filter(s=>ids.indexOf(s.id)>=0).length,
+              viaFase:uscite.length?titolare(byId(S.tasks,uscite[0].id)).viaFase:null};
+    },global.__PIDSCA);
+    must(g.attese>0,'la fase scelta non aveva attività con una data');
+    must(g.uscite===g.attese,'assegnata la fase compaiono '+g.uscite+' scadenze invece di '+g.attese);
+    must(g.mie===g.attese,'il filtro per persona ne trova '+g.mie+' invece di '+g.attese);
+    must(g.viaFase===true,'il nome non risulta arrivare dalla fase');
+  });
+  await t('e le altre fasi restano mute',async()=>{
+    const g=await p.evaluate(pid=>{
+      const mute=fasiOf(pid).filter(f=>!f.responsabile_id);
+      const ids=[].concat(...mute.map(f=>tasksFase(f.id).map(t=>t.id)));
+      return {inScadenzario:scadenze(null).filter(s=>ids.indexOf(s.id)>=0).length};
+    },global.__PIDSCA);
+    must(g.inScadenzario===0,'restano '+g.inScadenzario+' scadenze su fasi non assegnate');
+  });
   await t('lo scadenzario ignora anche le fasi chiuse prima di questa regola',async()=>{
     /* commesse vecchie: fase chiusa a mano nel database, attività lasciate
        aperte. Non devono più comparire, senza dover toccare i dati. */

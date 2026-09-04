@@ -1086,7 +1086,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.08.06.6';
+const VERSIONE = '2026.09.04.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2690,6 +2690,38 @@ function faseChiusa(t) {
   return !!f && (f.stato === 'completata' || f.stato === 'non_applicabile');
 }
 const daFare = t => isOpen(t) && !faseChiusa(t);
+/* Una scadenza si segnala solo quando qualcuno se ne sta occupando: chi ha
+   l'attivita' assegnata, chi la verifica, o il responsabile della fase che la
+   contiene. Generare una commessa crea centinaia di attivita' con una data
+   calcolata dal template: segnalarle tutte riempirebbe lo scadenzario di date
+   che non riguardano ancora nessuno, e chi lo guarda smetterebbe di fidarsene.
+   La data resta scritta - serve a pianificare - ma non diventa una scadenza
+   finche' non ha un nome sopra. */
+/* Chi ha in mano l'attivita'. Se non e' assegnata a nessuno in particolare e'
+   di chi ha in carico la fase: assegnare la fase basta, non serve ripassare
+   sulle sue attivita' una per una. Restituisce anche da dove viene il nome,
+   perche' "Anna (fase)" e "Anna" non vogliono dire la stessa cosa. */
+function titolare(t) {
+  if (t.assignee_id)     return { id: t.assignee_id,     viaFase: false };
+  if (t.responsabile_id) return { id: t.responsabile_id, viaFase: false };
+  const f = faseDi(t.commessa_fase_id);
+  return f && f.responsabile_id ? { id: f.responsabile_id, viaFase: true } : null;
+}
+const inCarico = t => !!titolare(t);
+/* Da segnalare: aperta, dentro una fase aperta, con una data, e di qualcuno. */
+const scadenzaViva = t => daFare(t) && !!t.due_date && inCarico(t);
+/* Ha una data ma nessuno che se ne occupi: non si segnala, ma si conta, perche'
+   nascondere del lavoro senza dirlo sarebbe peggio del rumore che si evita. */
+const scadenzaSospesa = t => daFare(t) && !!t.due_date && !inCarico(t);
+/* Di chi e' un'attivita': stesso criterio con cui si decide se segnalarla, cosi'
+   filtrando lo scadenzario per persona escono anche le attivita' che le
+   toccano perche' e' sua la fase, non solo quelle assegnate una per una. */
+function riguarda(t, uid) {
+  if (!uid) return true;
+  if (t.assignee_id === uid || t.responsabile_id === uid) return true;
+  const f = faseDi(t.commessa_fase_id);
+  return !!(f && f.responsabile_id === uid);
+}
 const activeProfs = () => S.profs.filter(p => p.attivo !== false);
 
 function progressOf(pid) {
@@ -2708,8 +2740,8 @@ function praticaOpen(p) {
 function scadenze(userId) {
   const out = [];
   S.tasks.forEach(t => {
-    if (!daFare(t) || !t.due_date) return;
-    if (userId && t.assignee_id !== userId && t.responsabile_id !== userId) return;
+    if (!scadenzaViva(t)) return;
+    if (userId && !riguarda(t, userId)) return;
     out.push({ kind:'task', id:t.id, date:t.due_date, title:t.title, pid:t.project_id, obj:t });
   });
   S.pratiche.forEach(p => {
@@ -3344,7 +3376,7 @@ function updBadges() {
   const nf = firmeAperte().length;
   el('b-firme').textContent = nf;
   el('b-firme').classList.toggle('alert', S.tasks.some(t =>
-    t.categoria === 'firma_cliente' && daFare(t) && isLate(t.due_date)));
+    t.categoria === 'firma_cliente' && scadenzaViva(t) && isLate(t.due_date)));
 
   const pr = S.pratiche.filter(praticaOpen).length;
   el('b-prat').textContent = pr;
@@ -3437,7 +3469,7 @@ function pickDue(anchor, taskId) {
 function itemRow(t, showProj) {
   const done = t.status === 'completato';
   const wip  = t.status === 'in_corso' || t.status === 'revisione';
-  const late = !done && isLate(t.due_date);
+  const late = !done && inCarico(t) && isLate(t.due_date);
   const sub  = [];
   if (showProj) sub.push('<span>' + esc(pn(t.project_id)) + '</span>');
   if (t.categoria === 'piattaforma')   sub.push('<span>💻 portale telematico</span>');
@@ -3484,7 +3516,7 @@ function checklist(pid) {
     const obb  = list.filter(t => !t.opzionale);
     const done = obb.filter(t => t.status === 'completato').length;
     const pct  = obb.length ? Math.round(done / obb.length * 100) : 0;
-    const late = list.filter(t => daFare(t) && isLate(t.due_date)).length;
+    const late = list.filter(t => scadenzaViva(t) && isLate(t.due_date)).length;
     const open = S.openGrp.has(f.id);
     const col  = f.stato === 'completata' ? 'var(--grn)' : f.stato === 'in_corso' ? 'var(--blue)' : 'var(--bord2)';
     const prat = praticheOf(pid).filter(p => p.fase_id === f.id);
@@ -3721,7 +3753,7 @@ function praticaLine(p) {
 
 function projCard(p) {
   const pr = progressOf(p.id);
-  const late = tasksOf(p.id).filter(t => daFare(t) && isLate(t.due_date)).length;
+  const late = tasksOf(p.id).filter(t => scadenzaViva(t) && isLate(t.due_date)).length;
   const pl   = praticheOf(p.id).filter(praticaLate).length;
   return '<div class="card" style="cursor:pointer' + (p.archiviato ? ';opacity:.65' : '') + '" data-proj="' + p.id + '">'
     + '<div class="spread mb8"><span style="font-weight:700;font-size:14px">'
@@ -3797,6 +3829,17 @@ function kpi(l, v, s, pct, col) {
 /* ===========================================================================
    PAGINA: SCADENZARIO
    =========================================================================== */
+/* Chi se ne occupa, in una cella: il nome, e se arriva dalla fase lo dice, cosi'
+   si capisce perche' quella riga e' li' anche senza un assegnatario suo. */
+function chiTd(t) {
+  const chi = titolare(t);
+  if (!chi) return '<span style="font-size:11px;color:var(--mut2)">non assegnata</span>';
+  return '<span class="row">' + av(chi.id, 20)
+    + '<span style="font-size:11px">' + esc(un(chi.id))
+    + (chi.viaFase ? '<span style="color:var(--mut2)"> · fase</span>' : '')
+    + '</span></span>';
+}
+
 function rScadenzario() {
   const solo = S.scadFiltro || '';
   el('top-act').innerHTML =
@@ -3805,8 +3848,21 @@ function rScadenzario() {
     + '</select>';
   el('sc-who').onchange = e => { S.scadFiltro = e.target.value; render(); };
 
+  /* Le attivita' con una data ma senza nessuno che se ne occupi non compaiono:
+     non sono ancora scadenze di qualcuno. Si dice pero' quante sono e come
+     farle comparire, altrimenti una pagina vuota farebbe credere che non ci sia
+     niente da fare. */
+  const sospese = S.tasks.filter(scadenzaSospesa).length;
+  const nota = sospese
+    ? '<div class="ibox mb16">Ci sono <b>' + sospese + ' attività con una data ma senza nessuno che se ne occupi</b>: '
+      + 'non sono elencate qui perché non sono ancora una scadenza di qualcuno. '
+      + 'Compaiono appena assegni la fase a una persona (⚙ sulla fase) oppure la singola attività.</div>'
+    : '';
+
   const list = scadenze(solo || null);
-  if (!list.length) return el('page').innerHTML = '<div class="card"><div class="empty"><i>📅</i><p>Nessuna scadenza aperta.</p></div></div>';
+  if (!list.length) return el('page').innerHTML = nota
+    + '<div class="card"><div class="empty"><i>📅</i><p>Nessuna scadenza aperta'
+    + (solo ? ' per ' + esc(un(solo)) : '') + '.</p></div></div>';
 
   const grp = { scaduto:[], oggi:[], settimana:[], mese:[], oltre:[] };
   list.forEach(s => {
@@ -3821,7 +3877,7 @@ function rScadenzario() {
               settimana:['📆 Entro 7 giorni','var(--blue)'], mese:['🗓️ Entro 30 giorni','var(--mut)'],
               oltre:['⏳ Oltre 30 giorni','var(--mut)'] };
 
-  el('page').innerHTML = Object.keys(grp).filter(k => grp[k].length).map(k =>
+  el('page').innerHTML = nota + Object.keys(grp).filter(k => grp[k].length).map(k =>
     '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:' + T[k][1] + '">'
     + T[k][0] + ' <span class="chip">' + grp[k].length + '</span></span></div>'
     + '<div class="tw"><table class="tsm"><tbody>'
@@ -3830,8 +3886,7 @@ function rScadenzario() {
         + '<td style="width:28px">' + (s.kind === 'pratica' ? '🏛️' : '☑') + '</td>'
         + '<td>' + esc(s.title) + '</td>'
         + '<td style="font-size:12px;color:var(--mut)" data-proj2="' + s.pid + '">' + esc(pn(s.pid)) + '</td>'
-        + '<td style="width:120px">' + (s.kind === 'task'
-            ? (s.obj.assignee_id ? '<span class="row">' + av(s.obj.assignee_id,20) + '<span style="font-size:11px">' + esc(un(s.obj.assignee_id)) + '</span></span>' : '<span style="font-size:11px;color:var(--mut2)">non assegnata</span>')
+        + '<td style="width:120px">' + (s.kind === 'task' ? chiTd(s.obj)
             : '<span style="font-size:11px">' + esc(un(s.obj.responsabile_id)) + '</span>') + '</td>'
         + '<td class="ac">' + (s.kind === 'task' ? bdg(s.obj.status) : bdg(s.obj.stato, ST_PRAT)) + '</td>'
       + '</tr>').join('')
@@ -5227,7 +5282,7 @@ function rFirme() {
     + Object.keys(per).map(pid => {
         const p = byId(S.projects, pid) || {};
         const aperte = per[pid].filter(isOpen).length;
-        const late = per[pid].some(t => daFare(t) && isLate(t.due_date));
+        const late = per[pid].some(t => scadenzaViva(t) && isLate(t.due_date));
         return '<div class="card mb16">'
           + '<div class="card-h"><span class="card-t" data-proj="' + pid + '" style="cursor:pointer">'
             + esc(pn(pid)) + (p.referente ? ' <span style="font-weight:400;color:var(--mut)">— ' + esc(p.referente) + '</span>' : '')
@@ -5406,7 +5461,7 @@ const COL_PROG = [
   { k:'owner',   l:'Responsabile', v:p => p.owner_id ? un(p.owner_id) : '' },
   { k:'amount',  l:'Importo',    v:p => Number(p.amount || 0),  num:1 },
   { k:'end',     l:'Fine prevista', v:p => p.end_date || '' },
-  { k:'late',    l:'In ritardo', v:p => tasksOf(p.id).filter(t => daFare(t) && isLate(t.due_date)).length
+  { k:'late',    l:'In ritardo', v:p => tasksOf(p.id).filter(t => scadenzaViva(t) && isLate(t.due_date)).length
                                       + praticheOf(p.id).filter(praticaLate).length, num:1 }
 ];
 
@@ -6283,7 +6338,7 @@ function drawKanban() {
     return '<div class="kcol" data-col="' + st + '"><div class="kch"><span class="kct">' + ST_TASK[st][0] + '</span>'
       + '<span class="kcn">' + col.length + '</span></div>'
       + col.map(t => {
-          const late = isOpen(t) && isLate(t.due_date);
+          const late = isOpen(t) && inCarico(t) && isLate(t.due_date);
           return '<div class="kcard" draggable="' + (canW() ? 'true' : 'false') + '" data-kid="' + t.id + '" data-ed="' + t.id + '">'
             + '<div class="row" style="align-items:flex-start;margin-bottom:5px">'
             + '<span class="prdot ' + pcls(t.priority) + '" style="margin-top:5px"></span>'

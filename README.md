@@ -1141,6 +1141,37 @@ Per le commesse **chiuse prima di questa regola** non serve toccare nulla:
 Scadenzario, Oggi, Firme e i contatori dei ritardi **ignorano le attività di una
 fase completata o non applicabile**, anche se nel database sono rimaste aperte.
 
+### Una scadenza è tale solo se è di qualcuno
+
+Generare una commessa crea più di cento attività, ognuna con una data calcolata
+dal template. Se comparissero tutte, lo Scadenzario diventerebbe un muro di date
+che non riguardano ancora nessuno — e chi lo guarda smetterebbe di fidarsene,
+che è il modo peggiore di perdere una scadenza vera.
+
+Quindi **una data diventa una scadenza solo quando qualcuno se ne sta
+occupando**. Basta uno di questi tre:
+
+| Cosa fai | Effetto |
+|---|---|
+| Assegni la **fase** a una persona (⚙ sulla fase) | tutte le sue attività diventano scadenze di quella persona |
+| Assegni la **singola attività** | diventa una scadenza sua |
+| Metti qualcuno a **verificarla** | idem |
+
+Assegnare la fase è la strada normale: una mossa e l'intero blocco entra nello
+Scadenzario, senza passare sulle attività una per una. Filtrando per persona
+escono anche le attività che le toccano *perché è sua la fase*, non solo quelle
+assegnate a mano — nella colonna di destra il nome porta la dicitura `· fase`,
+così si distingue da un'assegnazione puntuale.
+
+La data intanto **resta scritta e visibile** sull'attività: serve a pianificare.
+Semplicemente non viene segnata in rosso, non entra nei contatori «in ritardo» e
+non accende il pallino nel menu.
+
+Il lavoro nascosto non sparisce in silenzio: in cima allo Scadenzario c'è
+sempre scritto **quante attività hanno una data ma nessuno che se ne occupi**, e
+come farle comparire. Se la pagina è vuota, quella riga dice se è vuota perché
+non c'è niente da fare o perché non è ancora stato assegnato niente.
+
 ### Più fasi insieme
 
 A fine commessa si chiudono cinque fasi in fila, e aprire cinque volte la stessa
