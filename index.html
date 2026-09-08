@@ -1102,7 +1102,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.2';
+const VERSIONE = '2026.09.08.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4034,19 +4034,36 @@ const ascii = (v, max) => String(v === null || v === undefined ? '' : v)
 
 /* Il Causale sta in 200 caratteri per elemento, ma puo' ripetersi: una dicitura
    lunga si spezza su piu' elementi invece di essere troncata. */
-function causaleSpezzata(testo, maxPezzi) {
+const causaleSpezzata = (testo, maxPezzi) => spezza(testo, 200, maxPezzi || 5);
+
+/* Spezza un testo lungo in pezzi da `max` caratteri, tagliando su uno spazio
+   invece che in mezzo a una parola. Serve alla causale (200 caratteri per
+   elemento) e alla premessa in fattura (1000 per descrizione di riga). */
+function spezza(testo, max, maxPezzi) {
   const s = latin(testo);
   if (!s) return [];
   const out = [];
   let resto = s;
   while (resto && out.length < (maxPezzi || 5)) {
-    if (resto.length <= 200) { out.push(resto); break; }
-    let taglio = resto.lastIndexOf(' ', 200);
-    if (taglio < 120) taglio = 200;
+    if (resto.length <= max) { out.push(resto); break; }
+    let taglio = resto.lastIndexOf(' ', max);
+    if (taglio < max * 0.6) taglio = max;
     out.push(resto.slice(0, taglio).trim());
     resto = resto.slice(taglio).trim();
   }
   return out;
+}
+
+/* Le righe descrittive da mettere in testa al documento, senza importo. Solo
+   quando i servizi sono elencati: con la riga unica l'oggetto ce l'ha gia'
+   dentro, e ripeterlo sarebbe il difetto da cui siamo partiti. Salta anche il
+   caso in cui la premessa direbbe la stessa cosa dell'unico servizio. */
+function premesseDaOggetto(d, linee) {
+  if (!(d.righe && d.righe.length)) return [];
+  const testo = (d.oggetto || d.descrizione || '').trim();
+  if (!testo) return [];
+  if (linee.length === 1 && latin(linee[0].descrizione) === latin(testo)) return [];
+  return spezza(testo, 1000, 4);
 }
 
 /* --------------------------------------------------------------------------
@@ -4238,6 +4255,25 @@ function xmlDaDati(d) {
     : [{ descrizione: d.oggetto || d.descrizione, importo: c.imponibile }];
   const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
+
+  /* LA PREMESSA
+     Elencando i servizi uno per uno, l'oggetto dell'incarico spariva dal
+     documento: il committente si trovava tre voci con i loro importi e nessuna
+     riga che dicesse di che lavoro si tratta e su quale immobile. Va rimesso in
+     testa, come premessa: una riga descrittiva a ZERO, prima di quelle che
+     costano.
+
+     Perche' a zero e non senza prezzo: nel tracciato FatturaPA PrezzoUnitario e
+     PrezzoTotale sono obbligatori su ogni riga, non si possono omettere. Zero e'
+     il modo previsto per dire "questa riga non e' un addebito", e non sposta
+     niente perche' resta sulla stessa aliquota delle altre: il riepilogo IVA
+     continua a tornare.
+
+     Se e' lunga viene spezzata su piu' righe da mille caratteri invece di
+     essere tagliata: una premessa contrattuale troncata a meta' frase e' peggio
+     che non averla. */
+  const premessa = premesseDaOggetto(d, linee);
+  premessa.reverse().forEach(testo => linee.unshift({ descrizione: testo, importo: 0 }));
 
   const dest = String(d.destinatario || '').toUpperCase() || '0000000';
   const sede = (ind, civ, cap, com, pr) =>
@@ -5257,14 +5293,29 @@ function disegnaRevisione() {
             + '<input class="fc" value="' + feuro(d.imponibile) + '" disabled>'
             + '<div class="hint">somma dei ' + d.righe.length + ' servizi</div></div>'
           : t('Imponibile €', 'imponibile', '', 'number')) + '</div>'
+    /* Le righe esattamente come usciranno nel file: prima la premessa senza
+       importo, poi i servizi. Vederle qui e' l'ultimo momento utile per
+       accorgersi che l'oggetto e' sbagliato o che manca un importo. */
     + (d.righe && d.righe.length
-        ? '<div class="fg"><label class="fl">Servizi in fattura</label>'
-          + '<div style="font-size:12.5px;line-height:1.8;border:1px solid var(--bord);'
-            + 'border-radius:6px;padding:8px 10px">'
-          + d.righe.map((r, i) => '<div class="spread"><span>' + (i + 1) + '. '
-              + esc(r.descrizione) + '</span><b>' + feuro(r.importo) + '</b></div>').join('')
-          + '</div><div class="hint">Ognuno diventa una riga della fattura elettronica. '
-          + 'Per cambiarli chiudi e riapri lo scaglione dalla scheda Fatturazione.</div></div>'
+        ? (() => {
+            const pre = premesseDaOggetto(d, d.righe.map(r => ({ descrizione:r.descrizione })));
+            const tutte = pre.map(x => ({ descrizione:x, premessa:true }))
+                             .concat(d.righe.map(r => ({ descrizione:r.descrizione, importo:r.importo })));
+            return '<div class="fg"><label class="fl">Righe della fattura</label>'
+              + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
+                + 'border-radius:6px;padding:8px 10px">'
+              + tutte.map((r, i) => '<div class="spread" style="gap:12px;align-items:flex-start'
+                  + (r.premessa ? ';color:var(--mut)' : '') + '">'
+                  + '<span>' + (i + 1) + '. ' + esc(r.descrizione) + '</span>'
+                  + '<b style="white-space:nowrap">'
+                  + (r.premessa ? '<span style="font-weight:400">premessa</span>' : feuro(r.importo))
+                  + '</b></div>').join('')
+              + '</div><div class="hint">'
+              + (pre.length ? 'La prima riga riporta l’oggetto del servizio <b>senza importo</b>: '
+                  + 'serve al committente per sapere di che lavoro si tratta. La cambi qui sotto. '
+                : '')
+              + 'I servizi si modificano dallo scaglione, nella scheda Fatturazione.</div></div>';
+          })()
         : '')
     + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'

@@ -567,6 +567,38 @@ Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
 
+### La premessa: l'oggetto dell'incarico, senza importo
+
+Elencando i servizi uno per uno c'era un effetto collaterale: **l'oggetto
+dell'incarico spariva dal documento**. Il committente si trovava tre voci con i
+loro importi e nessuna riga che dicesse di che lavoro si tratta e su quale
+immobile.
+
+Quando ci sono servizi elencati, la **prima riga della fattura riporta l'oggetto
+del servizio a importo zero**, come premessa, e i servizi vengono dopo con i loro
+importi:
+
+```
+1. Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN…      0,00
+2. A. Accesso e acquisizione documentale presso gli archivi           0,00
+3. B. Rilievo geometrico confermativo, verifica di conformità       462,00
+4. C. Progetto preliminare: pianta, prospetti, sezioni            2.415,00
+```
+
+Il testo è quello del campo **Oggetto del servizio**, che si corregge nella
+finestra di revisione — dove le righe si vedono esattamente come usciranno,
+premessa compresa.
+
+*Perché a zero e non senza prezzo*: nel tracciato FatturaPA `PrezzoUnitario` e
+`PrezzoTotale` sono obbligatori su ogni riga, non si possono omettere. Zero è il
+modo previsto per dire «questa riga non è un addebito», e resta sulla stessa
+aliquota delle altre, quindi il riepilogo IVA continua a tornare al centesimo.
+
+Una premessa lunga viene **spezzata su più righe** da mille caratteri (il massimo
+che lo schema ammette per descrizione), tagliando sugli spazi: una clausola
+contrattuale troncata a metà frase è peggio che non averla. Con la fattura a voce
+unica la premessa non compare: l'oggetto è già nella riga.
+
 ### Esportazione XML per FatturaElettronica APP
 
 Il gestionale genera il file **FatturaPA 1.2 (FPR12)** da trascinare nella
