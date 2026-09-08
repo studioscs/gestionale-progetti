@@ -779,6 +779,67 @@ function launchOpts(){
     must(/Imponibile/.test(txt)&&/IVA/.test(txt)&&/totale/i.test(txt),txt);
     await p.keyboard.press('Escape');
   });
+  await t('più servizi nella stessa fattura',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
+    /* nessun servizio: la finestra lo dice invece di mostrare un elenco vuoto */
+    must(/voce unica/i.test(await p.textContent('#fa-righe')),'non spiega il caso a voce unica');
+    for(const [d,v] of [['Rilievo e restituzione grafica','1500'],
+                        ['Pratica edilizia (SCIA)','2200.50'],
+                        ['Deposito sismico','1299.50']]){
+      await p.click('#fa-addriga');
+      await p.fill('#fa-righe [data-fk="descrizione"] >> nth=-1',d);
+      await p.fill('#fa-righe [data-fk="importo"] >> nth=-1',v);
+    }
+    await p.waitForTimeout(200);
+    must(/5\.?000/.test(await p.textContent('#fa-righe')),
+      'il totale dei servizi non torna: '+await p.textContent('#fa-righe'));
+    /* con i servizi elencati percentuale e importo fisso non contano piu' */
+    must(await p.isDisabled('#fa-perc')&&await p.isDisabled('#fa-imp'),
+      'percentuale e importo fisso restano modificabili');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>{
+      const rr=__DB.commessa_fattura_righe;
+      const f=__DB.commessa_fatture.find(x=>rr.some(r=>r.fattura_id===x.id));
+      return {n:rr.length, imponibile:f&&f.imponibile, ordini:rr.map(r=>r.ordine).join(),
+              inApp:f?impFattura(f):null};
+    });
+    must(g.n===3,'salvate '+g.n+' righe invece di 3');
+    must(g.imponibile===5000,'l imponibile dello scaglione è '+g.imponibile+' invece di 5000');
+    must(g.ordini==='0,1,2','l ordine delle righe non è quello scritto: '+g.ordini);
+    must(g.inApp===5000,'l app calcola '+g.inApp+' invece di 5000');
+  });
+  await t('riaprendo, i servizi ci sono ancora e se ne può togliere uno',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
+    must(await p.locator('#fa-righe [data-fk="descrizione"]').count()===3,'i servizi non sono stati ricaricati');
+    must(await p.inputValue('#fa-righe [data-fk="descrizione"] >> nth=0')==='Rilievo e restituzione grafica',
+      'il primo servizio non è quello salvato');
+    await p.click('#fa-righe [data-frigdel] >> nth=2');
+    await p.waitForTimeout(150);
+    must(await p.locator('#fa-righe [data-fk="descrizione"]').count()===2,'la riga non è stata tolta');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>{
+      const rr=__DB.commessa_fattura_righe;
+      const f=__DB.commessa_fatture.find(x=>rr.some(r=>r.fattura_id===x.id));
+      return {n:rr.length, imponibile:f&&f.imponibile};
+    });
+    must(g.n===2,'nel database restano '+g.n+' righe invece di 2');
+    must(g.imponibile===3700.5,'l imponibile non ha seguito: '+g.imponibile);
+  });
+  await t('un servizio senza descrizione non si salva',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
+    await p.click('#fa-addriga');
+    await p.fill('#fa-righe [data-fk="importo"] >> nth=-1','300');
+    await p.click('#fa-save2'); await p.waitForTimeout(500);
+    must(await p.isVisible('#m-fatt'),'la finestra si è chiusa nonostante la riga senza nome');
+    must(await p.evaluate(()=>__DB.commessa_fattura_righe.length)===2,'ha salvato una riga senza descrizione');
+    await p.click('#fa-righe [data-frigdel] >> nth=-1');
+    await p.keyboard.press('Escape');
+  });
+  await t('i servizi si leggono nell elenco della commessa',async()=>{
+    const txt=await p.textContent('#page');
+    must(/Rilievo e restituzione grafica/.test(txt)&&/Pratica edilizia/.test(txt),
+      'i servizi non compaiono sotto lo scaglione');
+  });
   await t('la generazione passa dalla finestra di revisione',async()=>{
     await p.locator('[data-fxml]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});

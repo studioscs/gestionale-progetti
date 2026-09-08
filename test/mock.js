@@ -8,7 +8,7 @@
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
-    commessa_contratti:[]
+    commessa_contratti:[], commessa_fattura_righe:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -33,6 +33,7 @@
     time_entries:['entry_date','hours'],
     commessa_contratti:['project_id','numero','tipo','oggetto','importo','stato'],
     commessa_fatture:['project_id','descrizione','stato'],
+    commessa_fattura_righe:['fattura_id','descrizione','importo'],
     profili_costi:['profile_id','valido_dal']
   };
   let seq=0; const uid=()=>'id'+(++seq);
@@ -78,6 +79,16 @@
       .reduce((a,c)=>a+Number(c.importo||0),0));
     const p=DB.projects.find(x=>x.id===pid);
     if(p) p.amount=tot;
+  }
+  /* Trigger della migrazione 024: l'imponibile dello scaglione e' la somma
+     delle sue righe. Senza righe resta quello scritto a mano, come fa il
+     database. */
+  function ricalcolaImponibile(fid){
+    const rr=DB.commessa_fattura_righe.filter(r=>r.fattura_id===fid);
+    if(!rr.length) return;
+    const tot=r2(rr.reduce((a,r)=>a+Number(r.importo||0),0));
+    const f=DB.commessa_fatture.find(x=>x.id===fid);
+    if(f) f.imponibile=tot;
   }
   function applicaVariante(v){
     if(v.stato!=='approvata'||v._applicata||!v.aggiorna_importo||v.importo==null) return;
@@ -129,6 +140,7 @@
         if(table==='commessa_sal') made.forEach(percSal), made.forEach(maturaDL);
         if(table==='commessa_varianti') made.forEach(applicaVariante);
         if(table==='commessa_contratti') made.forEach(c=>ricalcolaImporto(c.project_id));
+        if(table==='commessa_fattura_righe') made.forEach(r=>ricalcolaImponibile(r.fattura_id));
         api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];
@@ -157,6 +169,8 @@
           .forEach(applicaVariante);
         if(table==='commessa_contratti') DB.commessa_contratti.filter(r=>flt.every(f=>f(r)))
           .forEach(c=>ricalcolaImporto(c.project_id));
+        if(table==='commessa_fattura_righe') DB.commessa_fattura_righe.filter(r=>flt.every(f=>f(r)))
+          .forEach(r=>ricalcolaImponibile(r.fattura_id));
       },
       delete(){ api._del=true; return api; },
       then(res,rej){
@@ -168,6 +182,10 @@
           if(api._del){ const tolti=DB[table].filter(r=>flt.every(f=>f(r)));
             DB[table]=DB[table].filter(r=>!flt.every(f=>f(r)));
             if(table==='commessa_contratti') tolti.forEach(c=>ricalcolaImporto(c.project_id));
+            if(table==='commessa_fattura_righe') tolti.forEach(r=>ricalcolaImponibile(r.fattura_id));
+            /* cascade: cancellando lo scaglione spariscono le sue righe */
+            if(table==='commessa_fatture') tolti.forEach(f=>{ DB.commessa_fattura_righe=
+              DB.commessa_fattura_righe.filter(r=>r.fattura_id!==f.id); });
             return res({data:null,error:null}); }
           if(api._res!==undefined){ const d=api._res; return res({data:single||maybe?d[0]||null:d,error:null}); }
           let d=rows().filter(r=>flt.every(f=>f(r)));

@@ -694,10 +694,23 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
     <div class="mb">
       <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="fa-desc" placeholder="Es. Acconto 30% alla sottoscrizione dell'incarico"></div>
-      <div class="fg2">
+      <div class="fg2" id="fa-box-imp">
         <div class="fg"><label class="fl">Percentuale dell'importo commessa</label><input type="number" class="fc" id="fa-perc" step="0.5" min="0" max="100"></div>
         <div class="fg"><label class="fl">oppure importo fisso €</label><input type="number" class="fc" id="fa-imp" step="0.01" min="0"></div>
       </div>
+
+      <div class="fg">
+        <div class="spread" style="margin-bottom:6px">
+          <label class="fl" style="margin:0">Servizi in questa fattura</label>
+          <button class="btn btn-xs" id="fa-addriga" type="button">&#43; Aggiungi servizio</button>
+        </div>
+        <div id="fa-righe"></div>
+        <div class="hint">Elenca le prestazioni che vanno nello stesso documento, una per riga con
+          il suo importo: in fattura elettronica diventano righe distinte e il committente legge
+          quanto costa ciascuna. Quando c&rsquo;&egrave; almeno un servizio, il totale delle righe
+          sostituisce percentuale e importo fisso. Lascia vuoto per una fattura a voce unica.</div>
+      </div>
+
       <div class="hint" id="fa-calc" style="margin:-8px 0 14px"></div>
       <div class="fg2">
         <div class="fg"><label class="fl">Matura alla chiusura della fase</label><select class="fc" id="fa-fase"></select></div>
@@ -1086,7 +1099,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.04.1';
+const VERSIONE = '2026.09.08.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1095,7 +1108,7 @@ const SB = supabase.createClient(SURL, SKEY);
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [],
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1265,7 +1278,8 @@ const MIGRAZIONI = {
   '020_codice_commessa':     ['uq_projects_codice'],
   '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento'],
   '022_ripartizione_soci':   ['ripartisce'],
-  '023_ore_esterni':         ['esterno','costo_totale']
+  '023_ore_esterni':         ['esterno','costo_totale'],
+  '024_righe_fattura':       ['commessa_fattura_righe','fattura_id']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2591,7 +2605,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2607,7 +2621,8 @@ async function loadAll(silent) {
       SB.from('commessa_sal').select('*').order('numero'),
       SB.from('commessa_varianti').select('*').order('numero'),
       SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300),
-      SB.from('commessa_contratti').select('*').order('numero')
+      SB.from('commessa_contratti').select('*').order('numero'),
+      SB.from('commessa_fattura_righe').select('*').order('ordine')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2629,6 +2644,7 @@ async function loadAll(silent) {
     S.sal       = rsa.error ? [] : (rsa.data || []);
     S.varianti  = rva.error ? [] : (rva.data || []);
     S.contratti = rct.error ? [] : (rct.data || []);
+    S.fattRighe = rfr.error ? [] : (rfr.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2637,7 +2653,8 @@ async function loadAll(silent) {
     controllaSchema([[rfa, 'commessa_fatture'], [rcl, 'clienti'],
                      [rco, 'profili_costi'],    [ren, 'enti_pa'],
                      [rsa, 'commessa_sal'],     [rva, 'commessa_varianti'],
-                     [rms, 'task_messaggi'],   [rct, 'commessa_contratti']]);
+                     [rms, 'task_messaggi'],   [rct, 'commessa_contratti'],
+                     [rfr, 'commessa_fattura_righe']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -3909,7 +3926,29 @@ const fattureOf = pid => S.fatture.filter(f => f.project_id === pid)
 const r2 = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 /* Importo dello scaglione: valore fisso oppure percentuale dell'importo commessa */
+/* Le righe di uno scaglione: i servizi che finiscono nello stesso documento,
+   uno per riga. Tenute in una mappa perche' l'imponibile lo chiedono in tanti
+   posti - situazione economica, "Da fatturare", redditivita', XML - e scorrere
+   ogni volta l'elenco intero sarebbe una scansione per ogni cella. */
+let _MAPRIG = null, _MAPRIG_SRC = null;
+function righeFattura(fid) {
+  if (!fid) return [];
+  if (!_MAPRIG || _MAPRIG_SRC !== S.fattRighe) {
+    _MAPRIG = {}; _MAPRIG_SRC = S.fattRighe;
+    S.fattRighe.forEach(r => (_MAPRIG[r.fattura_id] = _MAPRIG[r.fattura_id] || []).push(r));
+    for (const k in _MAPRIG) _MAPRIG[k].sort((a, b) => (a.ordine || 0) - (b.ordine || 0));
+  }
+  return _MAPRIG[fid] || [];
+}
+const totRighe = rr => r2(rr.reduce((a, r) => a + Number(r.importo || 0), 0));
+
+/* Con le righe l'imponibile e' la loro somma, e vince su tutto: e' il database
+   stesso a tenerlo allineato, qui si legge lo stesso numero senza aspettare il
+   ricaricamento. Senza righe vale l'importo fisso, e in mancanza di quello la
+   percentuale sull'importo di commessa: come ha sempre funzionato. */
 function impFattura(f) {
+  const rr = righeFattura(f.id);
+  if (rr.length) return totRighe(rr);
   if (f.imponibile !== null && f.imponibile !== undefined && f.imponibile !== '') return r2(f.imponibile);
   const p = byId(S.projects, f.project_id);
   if (!p || !p.amount || !f.percentuale) return 0;
@@ -4050,6 +4089,16 @@ function datiFattura(f) {
     oggetto     : p.oggetto_servizio || f.descrizione || '',
     descrizione : f.descrizione || 'Prestazioni professionali',
     commessa    : p.name || '',
+    codice      : p.codice || '',
+    /* Quello che il tecnico ha scritto a mano nelle note dello scaglione, e la
+       nota della richiesta di fatturazione: sono le uniche cose che meritano di
+       finire nella causale del documento. */
+    note        : (f.note || '').trim(),
+    noteRich    : (f.richiesta_note || '').trim(),
+    /* I servizi elencati nella stessa fattura: uno per riga, con il suo importo.
+       Vuoto = fattura a riga unica, come prima. */
+    righe       : righeFattura(f.id).map(r => ({
+                    descrizione: r.descrizione || '', importo: r2(r.importo || 0) })),
 
     /* Imposte */
     aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
@@ -4101,6 +4150,20 @@ function validaFattura(d) {
   if (!STUDIO.denominazione) e.push('Manca la denominazione dello studio.');
   if (!/^\d{5}$/.test(STUDIO.cap || '')) e.push('Il CAP dello studio deve essere di 5 cifre.');
   if (!STUDIO.indirizzo || !STUDIO.comune) e.push('Manca l’indirizzo o il comune dello studio.');
+
+  /* I servizi elencati: una voce senza descrizione uscirebbe come riga vuota in
+     fattura, e una somma che non torna la fa scartare dallo SdI. */
+  if (d.righe && d.righe.length) {
+    const senzaNome = d.righe.filter(r => !String(r.descrizione || '').trim()).length;
+    if (senzaNome) e.push(senzaNome === 1
+      ? 'Un servizio è senza descrizione: in fattura uscirebbe una riga vuota.'
+      : senzaNome + ' servizi sono senza descrizione: in fattura uscirebbero righe vuote.');
+    const somma = r2(d.righe.reduce((a, r) => a + Number(r.importo || 0), 0));
+    if (somma !== r2(d.imponibile))
+      e.push('I servizi sommano ' + feuro(somma) + ' ma l’imponibile del documento è '
+        + feuro(d.imponibile) + ': la fattura verrebbe scartata. Correggi gli importi delle righe.');
+    if (!somma) e.push('I servizi elencati sommano zero: indica gli importi.');
+  }
 
   if (!d.cliente)                       e.push('Manca il nome del committente.');
   if (!d.clientePiva && !d.clienteCf)   e.push('Il committente non ha né partita IVA né codice fiscale.');
@@ -4160,6 +4223,19 @@ function xmlDaDati(d) {
   const elL = (tag, v, max) => '<' + tag + '>' + x(latin(v, max)) + '</' + tag + '>';
   const elA = (tag, v, max) => '<' + tag + '>' + x(ascii(v, max).toUpperCase()) + '</' + tag + '>';
 
+  /* LE RIGHE DEL DOCUMENTO
+     Con i servizi elencati va una riga per servizio; senza, la riga unica di
+     sempre. La somma delle righe DEVE fare l'imponibile del documento: se non
+     tornasse, il Sistema di Interscambio scarterebbe la fattura. L'imponibile
+     e' gia' la somma delle righe, ma se qualcuno lo forza a mano in revisione
+     lo scarto lo si mette sull'ultima riga invece di lasciar partire un
+     documento che non quadra. */
+  const linee = (d.righe && d.righe.length)
+    ? d.righe.map(r => ({ descrizione: r.descrizione || d.descrizione, importo: r2(r.importo || 0) }))
+    : [{ descrizione: d.oggetto || d.descrizione, importo: c.imponibile }];
+  const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
+  if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
+
   const dest = String(d.destinatario || '').toUpperCase() || '0000000';
   const sede = (ind, civ, cap, com, pr) =>
       elL('Indirizzo', ind, 60)
@@ -4210,7 +4286,18 @@ function xmlDaDati(d) {
 
   /* Causale: la dicitura dell'incarico, spezzata su piu' elementi se supera i
      200 caratteri ammessi da ciascuno. */
-  const causali = causaleSpezzata((d.commessa ? 'Commessa: ' + d.commessa + '. ' : '') + d.oggetto);
+  /* LA CAUSALE NON RIPETE LA DESCRIZIONE DELLA RIGA.
+     Prima ci finiva l'oggetto, che in mancanza di una dicitura di incarico e'
+     la descrizione dello scaglione: la stessa frase compariva due volte nel
+     documento, una in <Causale> - che i programmi di fatturazione mostrano
+     come "note" - e una in <Descrizione>. Sembrava che il gestionale scrivesse
+     da solo delle note che nessuno aveva scritto.
+     Nella causale va il riferimento alla commessa, che la riga non porta, e
+     solo quello che qualcuno ha davvero scritto a mano. */
+  const causali = causaleSpezzata([
+    d.commessa ? 'Commessa: ' + d.commessa + (d.codice ? ' (' + d.codice + ')' : '') : '',
+    d.note, d.noteRich
+  ].filter(x => x).join('. '));
 
   /* CIG e CUP viaggiano dentro il blocco del documento correlato; il tipo di
      blocco dipende dall'atto con cui l'incarico e' stato affidato. */
@@ -4248,12 +4335,14 @@ function xmlDaDati(d) {
     +   '</DatiGeneraliDocumento>'
     +   bloccoRif
     +   '</DatiGenerali>'
-    +   '<DatiBeniServizi><DettaglioLinee>'
-    +     '<NumeroLinea>1</NumeroLinea>'
-    +     elL('Descrizione', d.oggetto || d.descrizione, 1000)
-    +     el2('PrezzoUnitario', n2(c.imponibile)) + el2('PrezzoTotale', n2(c.imponibile))
-    +     el2('AliquotaIVA', n2(d.aliquotaIva))
-    +   '</DettaglioLinee><DatiRiepilogo>'
+    +   '<DatiBeniServizi>' + linee.map((r, i) =>
+          '<DettaglioLinee>'
+          + '<NumeroLinea>' + (i + 1) + '</NumeroLinea>'
+          + elL('Descrizione', r.descrizione, 1000)
+          + el2('PrezzoUnitario', n2(r.importo)) + el2('PrezzoTotale', n2(r.importo))
+          + el2('AliquotaIVA', n2(d.aliquotaIva))
+          + '</DettaglioLinee>').join('')
+    +   '<DatiRiepilogo>'
     +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
     +     el2('EsigibilitaIVA', d.split ? 'S' : 'I')
@@ -4759,8 +4848,12 @@ function fatturePanel(pid) {
   const righe = list.map(f => {
     const c = calcolaFattura(impFattura(f));
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
+    const rr = righeFattura(f.id);
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
       + '<td><b>' + esc(f.descrizione) + '</b>'
+        + (rr.length ? '<div style="font-size:11px;color:var(--mut);margin-top:2px">'
+            + rr.map(r => '· ' + esc(r.descrizione) + ' <span style="color:var(--mut2)">'
+                + feuro(r.importo) + '</span>').join('<br>') + '</div>' : '')
         + (fa ? '<div style="font-size:11px;color:var(--mut)">matura con: ' + esc(fa.nome) + '</div>' : '')
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600">'
             + '📣 fatturazione chiesta da ' + esc(un(f.richiesta_da)) + ' il '
@@ -4940,21 +5033,56 @@ function openFatt(id, presetPid) {
   fillSel('fa-fase', fasiOf(pid).map(x => ({v:x.id, l:x.nome})), f ? f.fase_id : '', '- Nessuna: maturazione manuale -');
   el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
   el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
-  aggiornaCalcolo();
+  FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo }));
+  disegnaRigheFatt();
   openM('m-fatt');
 }
 let FATT_PID = null;
+
+/* I SERVIZI DELLA FATTURA, MENTRE SI MODIFICANO
+   Stanno qui e non nel database finche' non si preme Salva: aggiungere una riga
+   per sbaglio e chiudere la finestra non deve lasciare traccia, e uno scaglione
+   nuovo un id da collegare non ce l'ha ancora. Al salvataggio si allinea il
+   database a questo elenco. */
+let FATT_RIGHE = [];
+
+function disegnaRigheFatt() {
+  const box = el('fa-righe');
+  box.innerHTML = FATT_RIGHE.length
+    ? FATT_RIGHE.map((r, i) =>
+        '<div class="row" style="gap:8px;margin-bottom:6px;align-items:center">'
+        + '<input class="fc" style="flex:1" data-frig="' + i + '" data-fk="descrizione" '
+          + 'placeholder="Es. Pratica edilizia (SCIA)" value="' + esc(r.descrizione || '') + '">'
+        + '<input class="fc" type="number" step="0.01" style="width:130px" data-frig="' + i + '" '
+          + 'data-fk="importo" placeholder="€" value="' + (r.importo === '' || r.importo === null ? '' : r.importo) + '">'
+        + '<button class="btn btn-xs btn-d" type="button" data-frigdel="' + i + '" title="Togli">&#10005;</button>'
+        + '</div>').join('')
+      + '<div class="spread" style="font-size:13px;padding-top:6px;border-top:1px solid var(--bord)">'
+        + '<span>Totale dei servizi</span><b>' + feuro(totRighe(FATT_RIGHE)) + '</b></div>'
+    : '<div class="hint" style="margin:0">Nessun servizio elencato: la fattura esce a voce unica, '
+      + 'con la descrizione qui sopra.</div>';
+
+  /* Con i servizi elencati l'imponibile e' la loro somma: lasciare modificabili
+     percentuale e importo fisso farebbe credere che contino ancora. */
+  const conRighe = FATT_RIGHE.length > 0;
+  el('fa-box-imp').style.opacity = conRighe ? '0.45' : '';
+  ['fa-perc','fa-imp'].forEach(k => el(k).disabled = conRighe);
+  aggiornaCalcolo();
+}
 
 function aggiornaCalcolo() {
   const p = byId(S.projects, FATT_PID) || {};
   const fisso = parseFloat(el('fa-imp').value);
   const perc  = parseFloat(el('fa-perc').value);
   let imp = 0;
-  if (!isNaN(fisso) && fisso > 0) imp = fisso;
+  if (FATT_RIGHE.length) imp = totRighe(FATT_RIGHE);
+  else if (!isNaN(fisso) && fisso > 0) imp = fisso;
   else if (!isNaN(perc) && p.amount) imp = r2(Number(p.amount) * perc / 100);
-  if (!imp) { el('fa-calc').textContent = p.amount
-      ? 'Importo di commessa: ' + feuro(p.amount) + '. Indica una percentuale oppure un importo fisso.'
-      : 'La commessa non ha un importo: usa un valore fisso.'; return; }
+  if (!imp) { el('fa-calc').textContent = FATT_RIGHE.length
+      ? 'I servizi elencati sommano zero: indica gli importi.'
+      : p.amount
+        ? 'Importo di commessa: ' + feuro(p.amount) + '. Indica una percentuale, un importo fisso o i servizi.'
+        : 'La commessa non ha un importo: usa un valore fisso o elenca i servizi.'; return; }
   const c = calcolaFattura(imp);
   el('fa-calc').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b>'
     + (c.cassa ? ' · cassa ' + STUDIO.aliquotaCassa + '% ' + feuro(c.cassa) : '')
@@ -4968,7 +5096,17 @@ async function saveFatt() {
   const desc = el('fa-desc').value.trim();
   if (!desc) return toast('La descrizione è obbligatoria.', 'error');
   const perc = el('fa-perc').value, imp = el('fa-imp').value;
-  if (!perc && !imp) return toast('Indica una percentuale oppure un importo fisso.', 'error');
+  /* Con i servizi elencati l'importo lo danno loro: percentuale e importo fisso
+     non servono, e pretenderli costringerebbe a scrivere due volte lo stesso
+     numero - con il rischio che i due non tornino. */
+  const senzaNome = FATT_RIGHE.filter(r => !String(r.descrizione || '').trim()).length;
+  if (senzaNome) return toast(senzaNome === 1
+    ? 'Un servizio è senza descrizione: scrivila o togli la riga.'
+    : senzaNome + ' servizi sono senza descrizione: scrivile o togli le righe.', 'error');
+  if (FATT_RIGHE.length && !totRighe(FATT_RIGHE))
+    return toast('I servizi elencati sommano zero: indica gli importi.', 'error');
+  if (!FATT_RIGHE.length && !perc && !imp)
+    return toast('Indica una percentuale, un importo fisso, oppure elenca i servizi.', 'error');
   const id = el('fa-id2').value;
   const pay = {
     project_id: FATT_PID, descrizione: desc,
@@ -4984,13 +5122,45 @@ async function saveFatt() {
     note: el('fa-note2').value.trim() || null
   };
   setLoading('fa-save2', true);
-  const { error } = id
-    ? await SB.from('commessa_fatture').update(pay).eq('id', id)
-    : await SB.from('commessa_fatture').insert(Object.assign({
-        created_by:S.me.id, ordine: fattureOf(FATT_PID).length }, pay));
+  let fid = id;
+  if (id) {
+    const { error } = await SB.from('commessa_fatture').update(pay).eq('id', id);
+    if (error) { setLoading('fa-save2', false); return sbErr(error, 'scaglione'); }
+  } else {
+    const { data, error } = await SB.from('commessa_fatture').insert(Object.assign({
+      created_by:S.me.id, ordine: fattureOf(FATT_PID).length }, pay)).select().single();
+    if (error) { setLoading('fa-save2', false); return sbErr(error, 'scaglione'); }
+    fid = data.id;
+  }
+  const eRighe = await salvaRigheFatt(fid);
   setLoading('fa-save2', false);
-  if (error) return sbErr(error, 'scaglione');
+  if (eRighe) return sbErr(eRighe, 'servizi della fattura');
   closeM('m-fatt'); await loadAll(true); render(); toast('Scaglione salvato', 'success');
+}
+
+/* Allinea le righe del database a quelle della finestra: toglie quelle
+   cancellate, aggiorna quelle cambiate, inserisce le nuove. Un solo giro, e
+   nell'ordine in cui l'utente le ha messe - l'ordine e' quello che poi si
+   rilegge in fattura. */
+async function salvaRigheFatt(fid) {
+  const prima = righeFattura(fid);
+  const restano = FATT_RIGHE.filter(r => r.id).map(r => r.id);
+  const daTogliere = prima.filter(r => restano.indexOf(r.id) < 0).map(r => r.id);
+  if (daTogliere.length) {
+    const { error } = await SB.from('commessa_fattura_righe').delete().in('id', daTogliere);
+    if (error) return error;
+  }
+  for (let i = 0; i < FATT_RIGHE.length; i++) {
+    const r = FATT_RIGHE[i];
+    const riga = { descrizione: String(r.descrizione).trim(),
+                   importo: Number(r.importo) || 0, ordine: i };
+    const { error } = r.id
+      ? await SB.from('commessa_fattura_righe').update(riga).eq('id', r.id)
+      : await SB.from('commessa_fattura_righe')
+          .insert(Object.assign({ fattura_id: fid, created_by: S.me.id }, riga));
+    if (error) return error;
+  }
+  return null;
 }
 
 async function delFatt(id) {
@@ -5067,7 +5237,23 @@ function disegnaRevisione() {
       sez('Documento')
     + '<div class="fg3">' + t('Numero *', 'numero', '2026/014')
       + t('Data *', 'data', '', 'date')
-      + t('Imponibile €', 'imponibile', '', 'number') + '</div>'
+      /* Con i servizi elencati l'imponibile e' la loro somma e non si tocca da
+         qui: forzarlo lo farebbe divergere dalle righe, e una fattura le cui
+         righe non sommano al totale viene scartata dallo SdI. */
+      + (d.righe && d.righe.length
+          ? '<div class="fg"><label class="fl">Imponibile €</label>'
+            + '<input class="fc" value="' + feuro(d.imponibile) + '" disabled>'
+            + '<div class="hint">somma dei ' + d.righe.length + ' servizi</div></div>'
+          : t('Imponibile €', 'imponibile', '', 'number')) + '</div>'
+    + (d.righe && d.righe.length
+        ? '<div class="fg"><label class="fl">Servizi in fattura</label>'
+          + '<div style="font-size:12.5px;line-height:1.8;border:1px solid var(--bord);'
+            + 'border-radius:6px;padding:8px 10px">'
+          + d.righe.map((r, i) => '<div class="spread"><span>' + (i + 1) + '. '
+              + esc(r.descrizione) + '</span><b>' + feuro(r.importo) + '</b></div>').join('')
+          + '</div><div class="hint">Ognuno diventa una riga della fattura elettronica. '
+          + 'Per cambiarli chiudi e riapri lo scaglione dalla scheda Fatturazione.</div></div>'
+        : '')
     + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
       + '<div class="hint">Finisce nell’oggetto della fattura e nella descrizione della riga. '
@@ -8944,6 +9130,30 @@ document.addEventListener('DOMContentLoaded', () => {
   el('rev-body').addEventListener('change', revIn);
   el('fa-perc').oninput  = aggiornaCalcolo;
   el('fa-imp').oninput   = aggiornaCalcolo;
+
+  /* I servizi della fattura. Scrivendo si aggiorna solo il totale e non si
+     ridisegna l'elenco: ridisegnarlo farebbe perdere il cursore a ogni tasto. */
+  el('fa-addriga').onclick = () => {
+    FATT_RIGHE.push({ descrizione:'', importo:'' });
+    disegnaRigheFatt();
+    const campi = el('fa-righe').querySelectorAll('[data-fk="descrizione"]');
+    if (campi.length) campi[campi.length - 1].focus();
+  };
+  el('fa-righe').addEventListener('input', e => {
+    const i = e.target.dataset.frig; if (i === undefined) return;
+    const r = FATT_RIGHE[Number(i)]; if (!r) return;
+    r[e.target.dataset.fk] = e.target.dataset.fk === 'importo'
+      ? (e.target.value === '' ? '' : Number(e.target.value))
+      : e.target.value;
+    const tot = el('fa-righe').querySelector('.spread b');
+    if (tot) tot.textContent = feuro(totRighe(FATT_RIGHE));
+    aggiornaCalcolo();
+  });
+  el('fa-righe').addEventListener('click', e => {
+    const b = e.target.closest('[data-frigdel]'); if (!b) return;
+    FATT_RIGHE.splice(Number(b.dataset.frigdel), 1);
+    disegnaRigheFatt();
+  });
   el('ste-btn').onclick = saveOre;
   el('te-p').onchange   = loadTeTasks;
   el('su-btn').onclick  = saveUser;

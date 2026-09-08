@@ -41,6 +41,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 20. [`sql/021_contratti_commessa.sql`](sql/021_contratti_commessa.sql) — contratto e integrazioni, con l'importo che si somma da solo
 21. [`sql/022_ripartizione_soci.sql`](sql/022_ripartizione_soci.sql) — il lavoro non assegnato si divide fra i soci tecnici
 22. [`sql/023_ore_esterni.sql`](sql/023_ore_esterni.sql) — costi dei collaboratori esterni, non solo ore
+23. [`sql/024_righe_fattura.sql`](sql/024_righe_fattura.sql) — più servizi nella stessa fattura, uno per riga
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -539,6 +540,33 @@ alle fasi giuste del template in uso.
 La pagina **Da fatturare** raccoglie tutto lo studio: pronte da emettere, in
 attesa di maturare, emesse non ancora incassate.
 
+### Più servizi nella stessa fattura
+
+Una fattura quasi mai copre una prestazione sola: rilievo, pratica edilizia e
+deposito sismico finiscono nello stesso documento, e il committente vuole
+leggere quanto costa ciascuno — a maggior ragione un ente pubblico, che liquida
+per voci.
+
+Nel modulo dello scaglione c'è **Servizi in questa fattura**: `+ Aggiungi
+servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
+
+- **Il totale delle righe è l'imponibile della fattura.** Appena c'è almeno un
+  servizio, percentuale e importo fisso si disattivano: comandano le righe, e
+  non c'è modo di far divergere i due numeri.
+- **In fattura elettronica ogni servizio diventa una riga sua** (`DettaglioLinee`
+  numerate da 1), con il suo importo. Chi riceve legge l'elenco, non un totale
+  da interpretare.
+- **La somma la tiene il database**, non solo l'app: l'imponibile dello scaglione
+  si riallinea da solo a ogni riga aggiunta, cambiata o tolta. Così la
+  situazione economica, la pagina *Da fatturare* e la redditività leggono tutte
+  lo stesso numero.
+- **Lasciare l'elenco vuoto va benissimo**: la fattura esce a voce unica, con la
+  descrizione dello scaglione, esattamente come prima.
+
+Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
+(uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
+— in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
 ### Esportazione XML per FatturaElettronica APP
 
 Il gestionale genera il file **FatturaPA 1.2 (FPR12)** da trascinare nella
@@ -548,10 +576,23 @@ funzione *"Importa e salva fatture"* di
 HTML, che è pubblico per costruzione.
 
 L'XML prodotto è validato contro lo **schema ufficiale dell'Agenzia delle
-Entrate** dalla suite `test/fattura.js` in sei varianti: con contributo cassa,
+Entrate** dalla suite `test/fattura.js` in sette varianti: con contributo cassa,
 con ritenuta d'acconto, con PEC al posto del codice destinatario, con l'IBAN nei
 dati di pagamento, verso la Pubblica Amministrazione con CIG/CUP e split payment,
-e con le modifiche fatte a mano in revisione.
+con più servizi elencati, e con le modifiche fatte a mano in revisione.
+
+### La causale non ripete la descrizione
+
+Nel documento, `Causale` — il campo che i programmi di fatturazione mostrano
+come «note» — porta il **riferimento alla commessa** (nome e codice, che le
+righe non hanno) e **solo quello che qualcuno ha scritto a mano**: le note dello
+scaglione e la nota della richiesta di fatturazione.
+
+Prima ci finiva l'oggetto del servizio, che in mancanza di una dicitura
+d'incarico è la descrizione dello scaglione: la stessa frase compariva due
+volte nello stesso documento, una in `Causale` e una in `Descrizione`, e
+sembrava che il gestionale scrivesse da solo delle note che nessuno aveva
+scritto.
 
 ### Il gestionale non trasmette allo SdI
 

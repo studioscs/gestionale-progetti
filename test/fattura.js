@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,byId,pd,iso,addD,esc});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -240,6 +240,91 @@ if(!rMod.errori){
   catch(e){out=(e.stdout||'')+(e.stderr||'');}
   t('anche la fattura modificata e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
 }
+
+
+console.log('\n— PIÙ SERVIZI NELLA STESSA FATTURA —');
+ctx.S.projects=[{id:'pR',name:'Recupero Palazzo Vitelli',codice:'2026_07',
+  client:'Immobiliare Vitelli S.r.l.',amount:60000,cliente_piva:'02345670541',
+  cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+  cliente_prov:'PG',cliente_sdi:'ABCDEF1'}];
+/* imponibile volutamente vecchio: e' il caso reale del momento in cui si
+   modificano le righe e il trigger del database non ha ancora scritto la
+   somma. Le righe devono vincere comunque, subito. */
+const FR={id:'fR',project_id:'pR',descrizione:'Primo acconto',imponibile:999,stato:'pronta',note:null};
+ctx.S.fatture=[FR];
+ctx.S.fattRighe=[
+ {id:'r3',fattura_id:'fR',ordine:2,descrizione:'Deposito sismico',importo:1299.50},
+ {id:'r1',fattura_id:'fR',ordine:0,descrizione:'Rilievo e restituzione grafica',importo:1500},
+ {id:'r2',fattura_id:'fR',ordine:1,descrizione:'Pratica edilizia (SCIA)',importo:2200.50}];
+
+t('le righe escono nell ordine indicato, non in quello di arrivo',
+  ctx.righeFattura('fR').map(r=>r.ordine).join()==='0,1,2',ctx.righeFattura('fR').map(r=>r.ordine));
+t('i servizi vincono sull imponibile vecchio dello scaglione',
+  ctx.impFattura(FR)===5000,ctx.impFattura(FR));
+t('senza righe vale l importo scritto a mano',
+  ctx.impFattura({id:'ignota',project_id:'pR',imponibile:800})===800,null);
+t('senza righe e senza importo vale la percentuale',
+  ctx.impFattura({id:'ignota',project_id:'pR',percentuale:10})===6000,null);
+
+const dR=ctx.datiFattura(FR); dR.numero='2026/030'; dR.data='2026-09-08'; dR.progressivo=7;
+const rR=ctx.xmlDaDati(dR);
+t('l XML si genera',!rR.errori,rR.errori);
+if(!rR.errori){
+  const linee=rR.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g)||[];
+  t('una riga di fattura per ogni servizio',linee.length===3,linee.length);
+  t('le righe sono numerate da 1 in su',
+    linee.map((l,i)=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]===String(i+1)).every(Boolean),
+    linee.map(l=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]));
+  t('ogni riga porta la sua descrizione',
+    /Rilievo e restituzione grafica/.test(rR.xml)&&/Pratica edilizia \(SCIA\)/.test(rR.xml)
+    &&/Deposito sismico/.test(rR.xml),null);
+  const somma=ctx.r2(linee.map(l=>Number((l.match(/<PrezzoTotale>([\d.]+)/)||[])[1])).reduce((a,b)=>a+b,0));
+  t('le righe sommano esattamente l imponibile',somma===5000,somma);
+  /* Lo SdI scarta il documento se il riepilogo non torna con le righe:
+     ImponibileImporto = somma delle righe + contributo cassa. */
+  const riep=Number((rR.xml.match(/<ImponibileImporto>([\d.]+)/)||[])[1]);
+  t('il riepilogo IVA torna con le righe più la cassa',riep===ctx.r2(somma*1.04),[riep,somma]);
+  fs.writeFileSync('/tmp/fatt-righe.xml',rR.xml);
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-righe.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('la fattura a più righe e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
+  let wf=''; try{execSync('xmllint --noout /tmp/fatt-righe.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
+  t('ed e XML ben formato',wf==='',wf.slice(0,300));
+}
+
+console.log('\n— LE NOTE NON RIPETONO PIÙ LA DESCRIZIONE —');
+/* Prima la <Causale> - che i programmi di fatturazione mostrano come "note" -
+   riportava l'oggetto, cioe' la stessa frase gia' scritta in <Descrizione>:
+   sembrava che il gestionale scrivesse note che nessuno aveva scritto. */
+const cau=(rR.errori?[]:rR.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
+t('la causale non ripete la descrizione della riga',
+  cau.every(c=>!/Rilievo e restituzione grafica|Primo acconto/.test(c)),cau);
+t('ma porta il riferimento alla commessa, che le righe non hanno',
+  cau.some(c=>/Recupero Palazzo Vitelli/.test(c)&&/2026_07/.test(c)),cau);
+
+/* Quello che si scrive a mano nelle note, invece, ci deve finire */
+const FN=Object.assign({},FR,{id:'fN',note:'Pagamento a 60 giorni come da accordo del 12/03'});
+ctx.S.fatture=[FN]; ctx.S.fattRighe=ctx.S.fattRighe.map(r=>Object.assign({},r,{fattura_id:'fN'}));
+const dN=ctx.datiFattura(FN); dN.numero='2026/031'; dN.data='2026-09-08'; dN.progressivo=8;
+const rN=ctx.xmlDaDati(dN);
+t('le note scritte a mano finiscono nella causale',
+  !rN.errori&&/Pagamento a 60 giorni/.test(rN.xml),rN.errori);
+t('e la descrizione della riga resta fuori dalla causale',
+  !rN.errori&&(rN.xml.match(/<Causale>([^<]*)<\/Causale>/g)||[])
+    .every(c=>!/Rilievo e restituzione/.test(c)),null);
+
+console.log('\n— UNA FATTURA CHE NON QUADRA NON SI GENERA —');
+const rotta=Object.assign({},dR,{righe:[{descrizione:'Voce A',importo:1000},
+                                        {descrizione:'Voce B',importo:500}],imponibile:5000});
+t('somma delle righe diversa dall imponibile: bloccata',
+  ctx.validaFattura(rotta).some(x=>/sommano/.test(x)),ctx.validaFattura(rotta));
+const vuota=Object.assign({},dR,{righe:[{descrizione:'',importo:5000}],imponibile:5000});
+t('un servizio senza descrizione: bloccato',
+  ctx.validaFattura(vuota).some(x=>/senza descrizione/.test(x)),ctx.validaFattura(vuota));
+const zero=Object.assign({},dR,{righe:[{descrizione:'Voce',importo:0}],imponibile:0});
+t('servizi che sommano zero: bloccati',
+  ctx.validaFattura(zero).some(x=>/zero/.test(x)),ctx.validaFattura(zero));
+ctx.S.fattRighe=[]; ctx.S.fatture=[];
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);
