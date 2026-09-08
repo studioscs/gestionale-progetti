@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,daFare,inCarico,titolare,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -790,6 +790,63 @@ t('chiusa la fase, la sua attività sparisce dallo scadenzario',
   ctx.scadenze(null).every(v=>v.id!=='x4'),ctx.scadenze(null).map(v=>v.id));
 fAnna.stato='non_avviata';
 ctx.S.tasks=[]; ctx.S.fasi=[]; ctx.S.projects=[]; ctx.S.profs=[];
+
+
+console.log('\n— LA FINE DELLA COMMESSA SEGUE LE SUE FASI —');
+/* Caso vero: commessa PIERUCCI, fine prevista 04/09 segnata in rosso come
+   scaduta, mentre la fase era già stata riportata all'11/09. */
+const PIE={id:'pPie',name:'PIERUCCI - APE E VISURA',codice:'2026_25',
+  status:'attivo',start_date:'2026-08-26',end_date:'2026-09-04'};
+ctx.S.projects=[PIE];
+ctx.S.fasi=[{id:'fPie',project_id:'pPie',fase_key:'att',nome:'Attività',ordine:0,
+  data_inizio:'2026-08-26',data_fine_prevista:'2026-09-11',stato:'non_avviata'}];
+ctx.scordaImpegno();
+t('la commessa finiva prima della sua fase',PIE.end_date<'2026-09-11',PIE.end_date);
+t('e viene portata alla fine della fase',
+  ctx.allineaFineCommessa('pPie')===true&&PIE.end_date==='2026-09-11',PIE.end_date);
+t('e da lì non risulta più scaduta il 05/09',
+  !(PIE.end_date<'2026-09-05'),PIE.end_date);
+t('rifarlo non cambia più niente',ctx.allineaFineCommessa('pPie')===false,PIE.end_date);
+
+/* Solo in avanti: il margine dopo l'ultima fase è una scelta, non un errore */
+PIE.end_date='2026-12-31';
+t('se le fasi finiscono prima non si accorcia niente',
+  ctx.allineaFineCommessa('pPie')===false&&PIE.end_date==='2026-12-31',PIE.end_date);
+
+/* Vince la fase più lontana, non l'ultima inserita */
+ctx.S.fasi=ctx.S.fasi.concat([
+  {id:'f2',project_id:'pPie',fase_key:'b',nome:'B',ordine:1,data_fine_prevista:'2027-03-01'},
+  {id:'f3',project_id:'pPie',fase_key:'c',nome:'C',ordine:2,data_fine_prevista:'2027-01-15'}]);
+ctx.scordaImpegno();
+t('vince la fase più lontana, non l ultima aggiunta',
+  ctx.allineaFineCommessa('pPie')===true&&PIE.end_date==='2027-03-01',PIE.end_date);
+
+/* Le fasi senza data non spostano niente */
+ctx.S.projects=[{id:'pX',name:'X',status:'attivo',end_date:'2026-05-05'}];
+ctx.S.fasi=[{id:'fx',project_id:'pX',fase_key:'a',nome:'A',ordine:0,data_fine_prevista:null}];
+ctx.scordaImpegno();
+t('una fase senza fine prevista non sposta la commessa',
+  ctx.allineaFineCommessa('pX')===false&&ctx.S.projects[0].end_date==='2026-05-05',null);
+
+/* Una commessa senza fine prevista la prende dalle fasi */
+ctx.S.projects=[{id:'pY',name:'Y',status:'attivo',end_date:null}];
+ctx.S.fasi=[{id:'fy',project_id:'pY',fase_key:'a',nome:'A',ordine:0,data_fine_prevista:'2026-07-07'}];
+ctx.scordaImpegno();
+t('una commessa senza fine prevista la prende dalle fasi',
+  ctx.allineaFineCommessa('pY')===true&&ctx.S.projects[0].end_date==='2026-07-07',null);
+
+/* Le commesse chiuse sono storia: non si riscrivono */
+ctx.S.projects=[{id:'pZ',name:'Z',status:'completato',end_date:'2025-12-31'}];
+ctx.S.fasi=[{id:'fz',project_id:'pZ',fase_key:'a',nome:'A',ordine:0,data_fine_prevista:'2026-12-31'}];
+ctx.scordaImpegno();
+t('una commessa completata non si tocca',
+  ctx.allineaFineCommessa('pZ')===false&&ctx.S.projects[0].end_date==='2025-12-31',null);
+ctx.S.projects=[{id:'pW',name:'W',status:'attivo',archiviato:true,end_date:'2025-06-30'}];
+ctx.S.fasi=[{id:'fw',project_id:'pW',fase_key:'a',nome:'A',ordine:0,data_fine_prevista:'2026-12-31'}];
+ctx.scordaImpegno();
+t('nemmeno una archiviata',
+  ctx.allineaFineCommessa('pW')===false&&ctx.S.projects[0].end_date==='2025-06-30',null);
+ctx.S.projects=[]; ctx.S.fasi=[]; ctx.scordaImpegno();
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

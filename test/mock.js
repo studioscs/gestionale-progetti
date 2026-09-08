@@ -90,6 +90,16 @@
     const f=DB.commessa_fatture.find(x=>x.id===fid);
     if(f) f.imponibile=tot;
   }
+  /* Trigger della migrazione 025: la fine prevista della commessa segue le sue
+     fasi. Solo in avanti, e mai su una commessa chiusa o archiviata. */
+  function allineaFine(pid){
+    const p=DB.projects.find(x=>x.id===pid);
+    if(!p||p.status==='completato'||p.archiviato) return;
+    const date=DB.commessa_fasi.filter(f=>f.project_id===pid)
+      .map(f=>f.data_fine_prevista).filter(Boolean).sort();
+    const ultima=date[date.length-1];
+    if(ultima&&(!p.end_date||ultima>p.end_date)) p.end_date=ultima;
+  }
   function applicaVariante(v){
     if(v.stato!=='approvata'||v._applicata||!v.aggiorna_importo||v.importo==null) return;
     const p=DB.projects.find(x=>x.id===v.project_id);
@@ -141,12 +151,14 @@
         if(table==='commessa_varianti') made.forEach(applicaVariante);
         if(table==='commessa_contratti') made.forEach(c=>ricalcolaImporto(c.project_id));
         if(table==='commessa_fattura_righe') made.forEach(r=>ricalcolaImponibile(r.fattura_id));
+        if(table==='commessa_fasi') made.forEach(f=>allineaFine(f.project_id));
         api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];
         arr.forEach(x=>{ const dup=keys.length&&DB[table].some(r=>keys.every(k=>r[k]===x[k]));
           if(dup&&opt&&opt.ignoreDuplicates)return;
           const rec=Object.assign({id:uid(),created_at:new Date().toISOString()},x); DB[table].push(rec); made.push(rec); });
+        if(table==='commessa_fasi') made.forEach(f=>allineaFine(f.project_id));
         api._res=made; return api; },
       update(v){ const err=verificaColonne(v); if(err){ api._err=err; return api; }
         api._upd=v; return api; },
@@ -171,6 +183,8 @@
           .forEach(c=>ricalcolaImporto(c.project_id));
         if(table==='commessa_fattura_righe') DB.commessa_fattura_righe.filter(r=>flt.every(f=>f(r)))
           .forEach(r=>ricalcolaImponibile(r.fattura_id));
+        if(table==='commessa_fasi') DB.commessa_fasi.filter(r=>flt.every(f=>f(r)))
+          .forEach(f=>allineaFine(f.project_id));
       },
       delete(){ api._del=true; return api; },
       then(res,rej){

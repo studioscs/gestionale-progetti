@@ -42,6 +42,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 21. [`sql/022_ripartizione_soci.sql`](sql/022_ripartizione_soci.sql) — il lavoro non assegnato si divide fra i soci tecnici
 22. [`sql/023_ore_esterni.sql`](sql/023_ore_esterni.sql) — costi dei collaboratori esterni, non solo ore
 23. [`sql/024_righe_fattura.sql`](sql/024_righe_fattura.sql) — più servizi nella stessa fattura, uno per riga
+24. [`sql/025_fine_commessa.sql`](sql/025_fine_commessa.sql) — la fine prevista della commessa segue le sue fasi
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1266,6 +1267,42 @@ Il lavoro nascosto non sparisce in silenzio: in cima allo Scadenzario c'è
 sempre scritto **quante attività hanno una data ma nessuno che se ne occupi**, e
 come farle comparire. Se la pagina è vuota, quella riga dice se è vuota perché
 non c'è niente da fare o perché non è ancora stato assegnato niente.
+
+### La fine della commessa segue le sue fasi
+
+La fine prevista si scriveva una volta, all'apertura della commessa, e poi
+restava lì. Ma il lavoro si ripianifica: si sposta la fine di una fase, se ne
+aggiunge una che va oltre, il committente chiede una variante. La commessa
+continuava a dire la data vecchia e — peggio — **a segnalarsi come scaduta in
+rosso subito dopo che avevi aggiornato le fasi**.
+
+Una data rossa che rossa non è costa più di quanto sembri: chi guarda l'elenco
+impara a ignorare il rosso, e il giorno che una commessa è davvero in ritardo
+non se ne accorge nessuno.
+
+Ora **una commessa non può finire prima del lavoro che contiene**: la fine
+prevista viene portata avanti fino all'ultima fase, ogni volta che una fase
+nasce, cambia data, o viene generata da un template. Il gestionale te lo dice
+quando succede.
+
+Con tre limiti, tutti voluti:
+
+- **Solo in avanti, mai indietro.** Se le fasi finiscono *prima* della data di
+  commessa non si tocca niente: quel margine — il tempo per la consegna, per il
+  collaudo, per il committente che deve firmare — è una scelta di chi l'ha
+  scritta, e non spetta al gestionale toglierlo. Si corregge solo la
+  contraddizione.
+- **Le commesse chiuse non si toccano.** Su una commessa completata o
+  archiviata la fine prevista è un dato storico: sistemare un'ora o una nota su
+  una fase di un lavoro finito non deve riscriverne la data di chiusura.
+- **Togliere una fase non accorcia la commessa**, per la stessa ragione del
+  primo punto.
+
+La regola sta nel database (trigger della migrazione 025), quindi vale per
+chiunque scriva — e la migrazione **sistema una volta sola le commesse già in
+contraddizione**, elencandole mentre lo fa. L'app applica la stessa regola in
+memoria, così la data si aggiorna sotto gli occhi senza aspettare un
+ricaricamento.
 
 ### Più fasi insieme
 

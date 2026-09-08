@@ -1102,7 +1102,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.4';
+const VERSIONE = '2026.09.08.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1282,7 +1282,8 @@ const MIGRAZIONI = {
   '021_contratti_commessa':  ['commessa_contratti','contratto_id','oggetto','riferimento'],
   '022_ripartizione_soci':   ['ripartisce'],
   '023_ore_esterni':         ['esterno','costo_totale'],
-  '024_righe_fattura':       ['commessa_fattura_righe','fattura_id']
+  '024_righe_fattura':       ['commessa_fattura_righe','fattura_id'],
+  '025_fine_commessa':       ['allinea_fine_commessa']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2744,6 +2745,25 @@ function riguarda(t, uid) {
 }
 const activeProfs = () => S.profs.filter(p => p.attivo !== false);
 
+/* LA FINE PREVISTA DELLA COMMESSA SEGUE LE SUE FASI
+   Stessa regola del trigger della migrazione 025, ripetuta in memoria perche'
+   la data si aggiorni sotto gli occhi invece che al prossimo ricaricamento:
+   spostare la fine di una fase e vedere la commessa restare rossa, scaduta,
+   e' il modo migliore per non fidarsi piu' del rosso.
+
+   Solo in avanti: se le fasi finiscono prima, il margine che c'e' e' una
+   scelta di chi l'ha scritto e non lo tocchiamo. E mai su una commessa chiusa
+   o archiviata, dove la fine prevista e' ormai un dato storico. */
+function allineaFineCommessa(pid) {
+  const p = byId(S.projects, pid);
+  if (!p || p.status === 'completato' || p.archiviato) return false;
+  /* le date sono in formato aaaa-mm-gg: l'ordine alfabetico e' quello giusto */
+  const ultima = fasiOf(pid).map(f => f.data_fine_prevista).filter(Boolean).sort().pop();
+  if (!ultima || (p.end_date && ultima <= p.end_date)) return false;
+  p.end_date = ultima;
+  return true;
+}
+
 function progressOf(pid) {
   const list = tasksOf(pid).filter(t => !t.opzionale);
   const done = list.filter(t => t.status === 'completato').length;
@@ -3027,6 +3047,17 @@ async function applicaStruttura(projectId, tplKey, conds, dataInizio, rimuovi) {
       const ids = diff.fasiObsolete.map(f => f.id);
       const { error } = await SB.from('commessa_fasi').delete().in('id', ids);
       if (error) sbErr(error, 'rimuovi fasi');
+    }
+  }
+
+  /* Le fasi generate dal template possono finire oltre la fine scritta sulla
+     commessa: se succede, e' la commessa a doversi spostare, non le fasi. */
+  if (nuoveFasi.length) {
+    nuoveFasi.forEach(f => { if (!byId(S.fasi, f.id)) S.fasi.push(f); });
+    if (allineaFineCommessa(projectId)) {
+      const p = byId(S.projects, projectId);
+      const { error } = await SB.from('projects').update({ end_date: p.end_date }).eq('id', projectId);
+      if (error) sbErr(error, 'fine prevista della commessa');
     }
   }
 
@@ -3661,8 +3692,10 @@ async function salvaPiano(fid) {
   if (error) return sbErr(error, 'salva fase');
   const f = byId(S.fasi, fid);
   if (f) Object.assign(f, pay);
+  const spostata = allineaFineCommessa(f ? f.project_id : S.projId);
   scordaImpegno(); render();
-  toast('Fase aggiornata', 'success');
+  toast(spostata ? 'Fase aggiornata. La fine prevista della commessa è stata portata al '
+        + fdate(byId(S.projects, f.project_id).end_date) : 'Fase aggiornata', 'success');
 }
 
 /* ---------------------------------------------------------------------------
@@ -8887,7 +8920,12 @@ async function saveFase() {
   setLoading('fa-save', false);
   const f = byId(S.fasi, id);
   const era = f ? f.stato : null;
-  closeM('m-fase'); await loadAll(true); render();
+  const pid = f ? f.project_id : S.projId;
+  closeM('m-fase'); await loadAll(true);
+  /* Il trigger della 025 l'ha gia' fatto lato database; qui si ripete perche'
+     valga anche a chi non ha ancora eseguito la migrazione. */
+  allineaFineCommessa(pid);
+  render();
   if (stato === 'completata' && era !== 'completata') notificaFaseCompletata(byId(S.fasi, id));
   toast('Fase aggiornata' + (aperte ? ', ' + aperte + ' attività spuntate' : ''), 'success');
 }

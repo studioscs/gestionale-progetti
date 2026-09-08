@@ -1614,6 +1614,66 @@ function launchOpts(){
     must(f!=='2026-05-01','una fine prima dell inizio è stata salvata');
   });
 
+  await t('spostando la fine di una fase la commessa la segue',async()=>{
+    /* Caso vero: commessa PIERUCCI, fine 04/09 segnata in rosso come scaduta
+       mentre la fase era già stata riportata all'11/09. */
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'FIN_01',name:'Fine che segue',
+        status:'attivo',start_date:'2026-08-26',end_date:'2026-09-04'}).select().single();
+      await SB.from('commessa_fasi').insert({project_id:data.id,fase_key:'att',nome:'Attività',
+        ordine:0,stato:'non_avviata',data_inizio:'2026-08-26',data_fine_prevista:'2026-09-04'});
+      await loadAll(true);
+      return {pid:data.id,fid:fasiOf(data.id)[0].id,prima:byId(S.projects,data.id).end_date};
+    });
+    must(g.prima==='2026-09-04','la commessa di prova non parte dal 04/09: '+g.prima);
+    global.__PIDFIN=g.pid; global.__FIDFIN=g.fid;
+    /* si sposta la fine della fase dall'interfaccia, come fa una persona */
+    await p.evaluate(x=>{ S.projId=x.pid; S.tab='avanzamento'; go('project');
+                          S.openGrp.add(x.fid); render(); },{pid:g.pid,fid:g.fid});
+    await p.waitForTimeout(500);
+    const box='[data-piano="'+g.fid+'"]';
+    must(await p.locator(box).count()===1,'riquadro della fase non aperto');
+    await p.fill(box+' [data-pf="df"]','2026-09-11');
+    await p.click('[data-psave="'+g.fid+'"]');
+    await p.waitForTimeout(700);
+    const d=await p.evaluate(pid=>({
+      inApp:byId(S.projects,pid).end_date,
+      nelDb:__DB.projects.find(x=>x.id===pid).end_date
+    }),g.pid);
+    must(d.inApp==='2026-09-11','la commessa mostra ancora '+d.inApp+' invece del 11/09');
+    must(d.nelDb==='2026-09-11','nel database è rimasta '+d.nelDb);
+  });
+  await t('e non risulta più scaduta',async()=>{
+    const g=await p.evaluate(pid=>{
+      const pr=byId(S.projects,pid);
+      return {rossa:isLate(pr.end_date)&&pr.status!=='completato', fine:pr.end_date};
+    },global.__PIDFIN);
+    must(g.rossa===false,'la commessa resta segnata come scaduta con fine '+g.fine);
+  });
+  await t('ma una fase che finisce prima non accorcia la commessa',async()=>{
+    const g=await p.evaluate(async pid=>{
+      await SB.from('commessa_fasi').insert({project_id:pid,fase_key:'pre',nome:'Preliminare',
+        ordine:1,stato:'non_avviata',data_fine_prevista:'2026-08-30'});
+      await loadAll(true);
+      return byId(S.projects,pid).end_date;
+    },global.__PIDFIN);
+    must(g==='2026-09-11','la commessa si è accorciata a '+g);
+  });
+  await t('generando fasi da template la fine si sposta se serve',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data}=await SB.from('projects').insert({codice:'FIN_02',name:'Template oltre la fine',
+        status:'attivo',start_date:'2026-01-05',end_date:'2026-01-20'}).select().single();
+      await generaStruttura(data.id,'interno',['catasto'],'2026-01-05');
+      await loadAll(true);
+      const date=fasiOf(data.id).map(f=>f.data_fine_prevista).filter(Boolean).sort();
+      return {fine:byId(S.projects,data.id).end_date, ultima:date[date.length-1],
+              nelDb:__DB.projects.find(x=>x.id===data.id).end_date};
+    });
+    must(g.ultima>'2026-01-20','il template di prova non sfora la fine della commessa');
+    must(g.fine===g.ultima,'la commessa dice '+g.fine+' ma l ultima fase è '+g.ultima);
+    must(g.nelDb===g.ultima,'nel database è rimasta '+g.nelDb);
+  });
+
   // --- CHI LAVORA E CHI VERIFICA ---
   await t('il lavoro va al 70% a chi lo svolge e al 30% a chi lo verifica',async()=>{
     const g=await p.evaluate(async()=>{
