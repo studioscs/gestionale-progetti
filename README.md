@@ -567,37 +567,46 @@ Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
 
-### La premessa: l'oggetto dell'incarico, senza importo
+### La premessa: l'oggetto dell'incarico, come testo
 
 Elencando i servizi uno per uno c'era un effetto collaterale: **l'oggetto
 dell'incarico spariva dal documento**. Il committente si trovava tre voci con i
 loro importi e nessuna riga che dicesse di che lavoro si tratta e su quale
 immobile.
 
-Quando ci sono servizi elencati, la **prima riga della fattura riporta l'oggetto
-del servizio a importo zero**, come premessa, e i servizi vengono dopo con i loro
-importi:
+Quando ci sono servizi elencati, l'oggetto del servizio **apre le note del
+documento** — il campo `Causale`, che i programmi di fatturazione mostrano come
+«Note»:
 
 ```
-1. Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN…      0,00
-2. A. Accesso e acquisizione documentale presso gli archivi           0,00
-3. B. Rilievo geometrico confermativo, verifica di conformità       462,00
-4. C. Progetto preliminare: pianta, prospetti, sezioni            2.415,00
+DESCRIZIONE                                       IMPORTO   IVA     TOTALE
+A. Accesso e acquisizione documentale              0,00 €   22%     0,00 €
+B. Rilievo geometrico confermativo               462,00 €   22%   563,64 €
+C. Progetto preliminare: pianta, prospetti…    2.415,00 €   22% 2.946,30 €
+
+NOTE  Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA
+      CONTRADA FONTEZUCCA A MACERATA. Commessa: RINALDELLI - VILLA (2026_16)
 ```
+
+**Testo e basta: nessun importo, nessuna quantità, nessuna aliquota.**
+
+*Perché non una riga in cima*: nel tracciato FatturaPA `PrezzoUnitario`,
+`PrezzoTotale` e `AliquotaIVA` sono obbligatori su **ogni** riga — una riga di
+solo testo non esiste. Al massimo esiste una riga che costa zero, e nel
+documento si legge appunto `0,00 €` con tanto di quantità e aliquota, come fosse
+una voce che non si paga. Per l'oggetto dell'incarico è sbagliato. `Causale` è
+l'unico campo del tracciato che è testo libero.
+
+In cambio si perde la posizione: le note stanno **sotto** le righe, perché a
+deciderlo è il foglio di stile dell'Agenzia delle Entrate, non il gestionale.
 
 Il testo è quello del campo **Oggetto del servizio**, che si corregge nella
-finestra di revisione — dove le righe si vedono esattamente come usciranno,
-premessa compresa.
-
-*Perché a zero e non senza prezzo*: nel tracciato FatturaPA `PrezzoUnitario` e
-`PrezzoTotale` sono obbligatori su ogni riga, non si possono omettere. Zero è il
-modo previsto per dire «questa riga non è un addebito», e resta sulla stessa
-aliquota delle altre, quindi il riepilogo IVA continua a tornare al centesimo.
-
-Una premessa lunga viene **spezzata su più righe** da mille caratteri (il massimo
-che lo schema ammette per descrizione), tagliando sugli spazi: una clausola
-contrattuale troncata a metà frase è peggio che non averla. Con la fattura a voce
-unica la premessa non compare: l'oggetto è già nella riga.
+finestra di revisione — dove un riquadro *Note del documento* mostra
+esattamente quello che uscirà. Una nota lunga continua sull'elemento successivo
+(il tracciato ne accetta quanti ne servono, 200 caratteri l'uno) tagliando sugli
+spazi: una clausola contrattuale troncata a metà frase è peggio che non averla.
+Con la fattura a voce unica la premessa non compare: l'oggetto è già nella riga,
+e ripeterlo era il difetto da cui si era partiti.
 
 ### Esportazione XML per FatturaElettronica APP
 

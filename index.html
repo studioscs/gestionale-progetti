@@ -1102,7 +1102,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.3';
+const VERSIONE = '2026.09.08.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4054,16 +4054,38 @@ function spezza(testo, max, maxPezzi) {
   return out;
 }
 
-/* Le righe descrittive da mettere in testa al documento, senza importo. Solo
-   quando i servizi sono elencati: con la riga unica l'oggetto ce l'ha gia'
-   dentro, e ripeterlo sarebbe il difetto da cui siamo partiti. Salta anche il
-   caso in cui la premessa direbbe la stessa cosa dell'unico servizio. */
-function premesseDaOggetto(d, linee) {
-  if (!(d.righe && d.righe.length)) return [];
+/* LA PREMESSA E' TESTO, NON UNA RIGA DI FATTURA
+   Nel tracciato FatturaPA PrezzoUnitario, PrezzoTotale e AliquotaIVA sono
+   obbligatori su OGNI riga: una riga descrittiva non esiste, al massimo esiste
+   una riga che costa zero - e nel documento si legge appunto "0,00 EUR", con
+   tanto di quantita' e aliquota. Per l'oggetto dell'incarico e' sbagliato: non
+   e' una voce che non si paga, e' il testo che dice di che lavoro si tratta.
+
+   Il posto per il testo libero e' la <Causale> del documento, che i programmi
+   mostrano come "Note": nessuna colonna, nessun importo, nessuna aliquota.
+   Sta sotto le righe invece che sopra - la posizione la decide il foglio di
+   stile dell'Agenzia, non noi - ma e' l'unico modo di avere testo e basta.
+
+   Vale solo quando i servizi sono elencati: con la riga unica l'oggetto ce
+   l'ha gia' dentro, e ripeterlo sarebbe il difetto da cui siamo partiti. */
+function premessaDa(d) {
+  if (!(d.righe && d.righe.length)) return '';
   const testo = (d.oggetto || d.descrizione || '').trim();
-  if (!testo) return [];
-  if (linee.length === 1 && latin(linee[0].descrizione) === latin(testo)) return [];
-  return spezza(testo, 1000, 4);
+  if (!testo) return '';
+  if (d.righe.length === 1 && latin(d.righe[0].descrizione) === latin(testo)) return '';
+  return testo;
+}
+
+/* Il testo che finisce nelle note del documento, composto una volta sola:
+   l'oggetto dell'incarico, il riferimento alla commessa, e quello che e' stato
+   scritto apposta in revisione. La usano sia la generazione del file sia
+   l'anteprima, cosi' non possono raccontare due cose diverse. */
+function anteprimaCausale(d) {
+  return [
+    premessaDa(d),
+    d.commessa ? 'Commessa: ' + d.commessa + (d.codice ? ' (' + d.codice + ')' : '') : '',
+    d.causale
+  ].filter(x => x).join('. ');
 }
 
 /* --------------------------------------------------------------------------
@@ -4256,24 +4278,6 @@ function xmlDaDati(d) {
   const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
 
-  /* LA PREMESSA
-     Elencando i servizi uno per uno, l'oggetto dell'incarico spariva dal
-     documento: il committente si trovava tre voci con i loro importi e nessuna
-     riga che dicesse di che lavoro si tratta e su quale immobile. Va rimesso in
-     testa, come premessa: una riga descrittiva a ZERO, prima di quelle che
-     costano.
-
-     Perche' a zero e non senza prezzo: nel tracciato FatturaPA PrezzoUnitario e
-     PrezzoTotale sono obbligatori su ogni riga, non si possono omettere. Zero e'
-     il modo previsto per dire "questa riga non e' un addebito", e non sposta
-     niente perche' resta sulla stessa aliquota delle altre: il riepilogo IVA
-     continua a tornare.
-
-     Se e' lunga viene spezzata su piu' righe da mille caratteri invece di
-     essere tagliata: una premessa contrattuale troncata a meta' frase e' peggio
-     che non averla. */
-  const premessa = premesseDaOggetto(d, linee);
-  premessa.reverse().forEach(testo => linee.unshift({ descrizione: testo, importo: 0 }));
 
   const dest = String(d.destinatario || '').toUpperCase() || '0000000';
   const sede = (ind, civ, cap, com, pr) =>
@@ -4342,10 +4346,12 @@ function xmlDaDati(d) {
      Resta il riferimento alla commessa, che le righe non portano, e la causale
      scritta apposta per il documento nella finestra di revisione: e' l'unico
      campo che dichiara di essere letto dal cliente. */
-  const causali = causaleSpezzata([
-    d.commessa ? 'Commessa: ' + d.commessa + (d.codice ? ' (' + d.codice + ')' : '') : '',
-    d.causale
-  ].filter(x => x).join('. '));
+  /* L'oggetto dell'incarico apre la causale, poi il riferimento alla commessa e
+     infine quello che e' stato scritto apposta per il documento. Spezzata in
+     elementi da 200 caratteri, che e' il massimo che lo schema ammette per
+     ciascuno: il tracciato ne accetta quanti ne servono, quindi una premessa
+     lunga non viene tagliata ma continua sull'elemento successivo. */
+  const causali = causaleSpezzata(anteprimaCausale(d), 20);
 
   /* CIG e CUP viaggiano dentro il blocco del documento correlato; il tipo di
      blocco dipende dall'atto con cui l'incarico e' stato affidato. */
@@ -5293,30 +5299,31 @@ function disegnaRevisione() {
             + '<input class="fc" value="' + feuro(d.imponibile) + '" disabled>'
             + '<div class="hint">somma dei ' + d.righe.length + ' servizi</div></div>'
           : t('Imponibile €', 'imponibile', '', 'number')) + '</div>'
-    /* Le righe esattamente come usciranno nel file: prima la premessa senza
-       importo, poi i servizi. Vederle qui e' l'ultimo momento utile per
+    /* Le righe esattamente come usciranno nel file, e sotto il testo che finira'
+       nelle note del documento. Vederli qui e' l'ultimo momento utile per
        accorgersi che l'oggetto e' sbagliato o che manca un importo. */
     + (d.righe && d.righe.length
-        ? (() => {
-            const pre = premesseDaOggetto(d, d.righe.map(r => ({ descrizione:r.descrizione })));
-            const tutte = pre.map(x => ({ descrizione:x, premessa:true }))
-                             .concat(d.righe.map(r => ({ descrizione:r.descrizione, importo:r.importo })));
-            return '<div class="fg"><label class="fl">Righe della fattura</label>'
-              + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
-                + 'border-radius:6px;padding:8px 10px">'
-              + tutte.map((r, i) => '<div class="spread" style="gap:12px;align-items:flex-start'
-                  + (r.premessa ? ';color:var(--mut)' : '') + '">'
-                  + '<span>' + (i + 1) + '. ' + esc(r.descrizione) + '</span>'
-                  + '<b style="white-space:nowrap">'
-                  + (r.premessa ? '<span style="font-weight:400">premessa</span>' : feuro(r.importo))
-                  + '</b></div>').join('')
-              + '</div><div class="hint">'
-              + (pre.length ? 'La prima riga riporta l’oggetto del servizio <b>senza importo</b>: '
-                  + 'serve al committente per sapere di che lavoro si tratta. La cambi qui sotto. '
-                : '')
-              + 'I servizi si modificano dallo scaglione, nella scheda Fatturazione.</div></div>';
-          })()
+        ? '<div class="fg"><label class="fl">Righe della fattura</label>'
+          + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
+            + 'border-radius:6px;padding:8px 10px">'
+          + d.righe.map((r, i) => '<div class="spread" style="gap:12px;align-items:flex-start">'
+              + '<span>' + (i + 1) + '. ' + esc(r.descrizione) + '</span>'
+              + '<b style="white-space:nowrap">' + feuro(r.importo) + '</b></div>').join('')
+          + '</div><div class="hint">Si modificano dallo scaglione, nella scheda '
+          + 'Fatturazione.</div></div>'
         : '')
+    + (() => {
+        const testo = anteprimaCausale(d);
+        return testo
+          ? '<div class="fg"><label class="fl">Note del documento '
+            + '<span style="font-weight:400;color:var(--mut)">— testo, senza importi</span></label>'
+            + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
+              + 'border-radius:6px;padding:8px 10px;color:var(--mut)">' + esc(testo) + '</div>'
+            + '<div class="hint">È quello che il committente legge sotto le righe, nel campo che i '
+            + 'programmi di fatturazione chiamano «note»: <b>solo testo, nessun importo e nessuna '
+            + 'aliquota</b>. Lo componi con l’oggetto del servizio e la causale qui sotto.</div></div>'
+          : '';
+      })()
     + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
       + '<div class="hint">Finisce nell’oggetto della fattura e nella descrizione della riga. '

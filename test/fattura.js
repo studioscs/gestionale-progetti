@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,premesseDaOggetto,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,premessaDa,anteprimaCausale,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -272,7 +272,7 @@ t('l XML si genera',!rR.errori,rR.errori);
 if(!rR.errori){
   const linee=rR.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g)||[];
   /* una premessa senza importo piu' i tre servizi */
-  t('una riga di fattura per ogni servizio, piu la premessa',linee.length===4,linee.length);
+  t('una riga di fattura per ogni servizio',linee.length===3,linee.length);
   t('le righe sono numerate da 1 in su',
     linee.map((l,i)=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]===String(i+1)).every(Boolean),
     linee.map(l=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]));
@@ -294,18 +294,18 @@ if(!rR.errori){
 }
 
 
-console.log('\n— L OGGETTO DELL INCARICO IN PREMESSA, SENZA IMPORTO —');
-/* Elencando i servizi uno per uno, l'oggetto dell'incarico spariva: il
-   committente si trovava tre voci e nessuna riga che dicesse di che lavoro si
-   tratta e su quale immobile. Caso reale, commessa Rinaldelli. */
-const OGG='Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA CONTRADA '
-  +'SAN GIULIANO N. 14, MACERATA, DISTINTO AL CATASTO FABBRICATI AL FOGLIO 21 PARTICELLA 338 SUB 4';
-/* Si mette da parte quello che c'era: i controlli che vengono dopo lavorano
-   ancora sulla commessa di prima, e sostituirgliela sotto li farebbe fallire
-   per un motivo che non c'entra niente con quello che verificano. */
+console.log('\n— L OGGETTO DELL INCARICO, COME TESTO SENZA IMPORTI —');
+/* Elencando i servizi uno per uno l'oggetto dell'incarico spariva dal documento.
+   Rimetterlo come riga a zero non andava bene: nel documento si leggeva
+   "0,00 EUR" con quantita' e aliquota, come fosse una voce che non si paga. Il
+   posto per il testo libero e' la <Causale>, che i programmi mostrano come
+   "Note": nessuna colonna, nessun importo. Caso reale, commessa Rinaldelli. */
 const PRIMA={projects:ctx.S.projects,fatture:ctx.S.fatture,righe:ctx.S.fattRighe};
-ctx.S.projects=ctx.S.projects.concat([{id:'pP',name:'Rinaldelli',codice:'2026_11',client:'Rinaldelli Mario',amount:9590,
-  cliente_cf:'RNLMRA70A01D488X',cliente_indirizzo:'Via Roma 1',cliente_cap:'62100',
+const OGG='Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA CONTRADA '
+  +'FONTEZUCCA A MACERATA';
+ctx.S.projects=ctx.S.projects.concat([{id:'pP',name:'RINALDELLI - VILLA',codice:'2026_16',
+  client:'RINALDELLI ALESSANDRO',amount:9590,cliente_cf:'RNLLSN76P29E783Q',
+  cliente_indirizzo:'Contrada Fontezucca 18',cliente_cap:'62100',
   cliente_comune:'Macerata',cliente_prov:'MC',cliente_sdi:'0000000'}]);
 const FP={id:'fP',project_id:'pP',descrizione:OGG,imponibile:2877,stato:'pronta'};
 ctx.S.fatture=[FP];
@@ -319,21 +319,23 @@ t('l XML si genera',!rP.errori,rP.errori);
 const lP=(rP.errori?[]:rP.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
 const desc=l=>(l.match(/<Descrizione>([^<]*)/)||[])[1]||'';
 const prez=l=>(l.match(/<PrezzoTotale>([\d.]+)/)||[])[1];
-t('la premessa e la prima riga',/Art\. 1 OGGETTO DEL SERVIZIO/.test(desc(lP[0])),desc(lP[0]).slice(0,60));
-t('e non ha importo',prez(lP[0])==='0.00',prez(lP[0]));
-t('dice su quale immobile',/VIA CONTRADA SAN GIULIANO/.test(desc(lP[0]))
-  &&/FOGLIO 21 PARTICELLA 338/.test(desc(lP[0])),desc(lP[0]).length);
-t('i servizi vengono dopo, con i loro importi',
-  lP.length===4&&/A\. Accesso/.test(desc(lP[1]))&&prez(lP[2])==='462.00'&&prez(lP[3])==='2415.00',
-  lP.map(l=>[desc(l).slice(0,14),prez(l)]));
-t('la numerazione resta consecutiva da 1',
-  lP.map((l,i)=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]===String(i+1)).every(Boolean),
-  lP.map(l=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]));
-/* la premessa a zero non deve spostare un centesimo: e' il punto su cui lo SdI
-   scarta i documenti costruiti male */
+const cauP=(rP.errori?[]:rP.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
+
+t('le righe di fattura sono SOLO i servizi',lP.length===3,lP.map(l=>desc(l).slice(0,14)));
+t('nessuna riga descrittiva fra di esse',
+  !lP.some(l=>/Art\. 1 OGGETTO DEL SERVIZIO/.test(desc(l))),lP.map(l=>desc(l).slice(0,24)));
+t('l oggetto sta nelle note del documento',
+  cauP.some(c=>/Art\. 1 OGGETTO DEL SERVIZIO/.test(c)),cauP);
+t('dice su quale immobile',
+  cauP.join(' ').indexOf('VIA CONTRADA FONTEZUCCA A MACERATA')>=0,cauP);
+t('le note non hanno importi ne aliquote',
+  cauP.every(c=>!/PrezzoTotale|AliquotaIVA|Quantita/.test(c)),cauP);
+t('accanto c e il riferimento alla commessa',
+  cauP.join(' ').indexOf('RINALDELLI - VILLA (2026_16)')>=0,cauP);
+/* niente e' cambiato negli importi: le righe restano quelle e basta */
 const sommaP=ctx.r2(lP.map(l=>Number(prez(l))).reduce((a,b)=>a+b,0));
-t('la premessa non sposta gli importi',sommaP===2877,sommaP);
-t('il riepilogo IVA torna lo stesso',
+t('i servizi sommano l imponibile',sommaP===2877,sommaP);
+t('il riepilogo IVA torna',
   Number((rP.xml.match(/<ImponibileImporto>([\d.]+)/)||[])[1])===ctx.r2(2877*1.04),
   (rP.xml.match(/<ImponibileImporto>([\d.]+)/)||[])[1]);
 t('e il totale documento e quello atteso',
@@ -343,44 +345,44 @@ if(!rP.errori){
   fs.writeFileSync('/tmp/fatt-premessa.xml',rP.xml);
   let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-premessa.xml 2>&1').toString();}
   catch(e){out=(e.stdout||'')+(e.stderr||'');}
-  t('la fattura con premessa e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
+  t('la fattura e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
   let wf=''; try{execSync('xmllint --noout /tmp/fatt-premessa.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
   t('ed e XML ben formato',wf==='',wf.slice(0,300));
 }
+/* l'anteprima in revisione deve dire esattamente quello che finisce nel file */
+t('l anteprima coincide con il file',
+  ctx.causaleSpezzata(ctx.anteprimaCausale(dP),20).join('')===cauP.map(c=>c.replace(/<\/?Causale>/g,'')).join(''),
+  ctx.anteprimaCausale(dP));
 
-/* Una premessa lunghissima non va troncata a meta' frase */
-const LUNGA=Array(60).fill('clausola contrattuale di dettaglio numero uno').join(', ');
-t('una premessa lunga viene spezzata, non tagliata',
-  (()=>{const pz=ctx.premesseDaOggetto({righe:[{}],oggetto:LUNGA},[{descrizione:'x'},{descrizione:'y'}]);
-        return pz.length>1 && pz.every(x=>x.length<=1000)
-               && pz.join(' ').length>=ctx.latin(LUNGA).length-10;})(),
-  ctx.premesseDaOggetto({righe:[{}],oggetto:LUNGA},[{descrizione:'x'},{descrizione:'y'}]).map(x=>x.length));
-/* Rimettendo insieme i pezzi si deve rileggere il testo di partenza, parola per
-   parola: e' la prova che il taglio e' caduto su uno spazio e non dentro una
-   parola, e che non si e' perso niente per strada. */
+/* Una premessa lunghissima continua sull elemento successivo, non viene tagliata */
+const LUNGA=Array(40).fill('clausola contrattuale di dettaglio numero uno').join(', ');
+const pezzi=ctx.causaleSpezzata(LUNGA,20);
+t('una nota lunga viene spezzata, non tagliata',
+  pezzi.length>1&&pezzi.every(x=>x.length<=200),pezzi.map(x=>x.length));
 t('rimettendo insieme i pezzi si rilegge tutto il testo',
-  (()=>{const pz=ctx.premesseDaOggetto({righe:[{}],oggetto:LUNGA},[{descrizione:'x'},{descrizione:'y'}]);
-        return pz.join(' ')===ctx.latin(LUNGA);})(),
-  ctx.premesseDaOggetto({righe:[{}],oggetto:LUNGA},[{descrizione:'x'},{descrizione:'y'}]).join(' ').length
-  +' vs '+ctx.latin(LUNGA).length);
+  pezzi.join(' ')===ctx.latin(LUNGA),pezzi.join(' ').length+' vs '+ctx.latin(LUNGA).length);
 
 /* Senza servizi elencati la premessa non serve: l'oggetto e' gia' nella riga */
 t('con la fattura a voce unica non compare nessuna premessa',
-  ctx.premesseDaOggetto({righe:[],oggetto:OGG},[{descrizione:OGG}]).length===0,null);
+  ctx.premessaDa({righe:[],oggetto:OGG})==='',null);
 t('ne quando direbbe la stessa cosa dell unico servizio',
-  ctx.premesseDaOggetto({righe:[{descrizione:OGG,importo:100}],oggetto:OGG},
-                        [{descrizione:OGG}]).length===0,null);
+  ctx.premessaDa({righe:[{descrizione:OGG,importo:100}],oggetto:OGG})==='',null);
 t('senza oggetto non si inventa niente',
-  ctx.premesseDaOggetto({righe:[{descrizione:'a'}],oggetto:'',descrizione:''},[{descrizione:'a'}]).length===0,null);
+  ctx.premessaDa({righe:[{descrizione:'a'}],oggetto:'',descrizione:''})==='',null);
 ctx.S.projects=PRIMA.projects; ctx.S.fatture=PRIMA.fatture; ctx.S.fattRighe=PRIMA.righe;
 
 console.log('\n— IN FATTURA NON ESCE NIENTE DI SCRITTO PER USO INTERNO —');
-/* Prima la <Causale> - che i programmi di fatturazione mostrano come "note" -
-   riportava l'oggetto, cioe' la stessa frase gia' scritta in <Descrizione>:
-   sembrava che il gestionale scrivesse note che nessuno aveva scritto. */
+/* Il difetto di partenza era la RIPETIZIONE: con una riga sola, la causale
+   riportava la stessa identica frase gia' scritta in <Descrizione>, e la si
+   leggeva due volte nello stesso documento. Con i servizi elencati non e' cosi':
+   la causale porta l'oggetto dell'incarico, che nessuna riga dice. Quello che
+   non deve succedere e' che ripeta le descrizioni dei SERVIZI. */
 const cau=(rR.errori?[]:rR.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
-t('la causale non ripete la descrizione della riga',
-  cau.every(c=>!/Rilievo e restituzione grafica|Primo acconto/.test(c)),cau);
+t('la causale non ripete le descrizioni dei servizi',
+  cau.every(c=>!/Rilievo e restituzione grafica|Pratica edilizia|Deposito sismico/.test(c)),cau);
+/* e con una riga sola non si ripete affatto */
+t('con una riga sola la causale non la ripete',
+  ctx.premessaDa({righe:[{descrizione:'Primo acconto'}],oggetto:'Primo acconto'})==='',null);
 t('ma porta il riferimento alla commessa, che le righe non hanno',
   cau.some(c=>/Recupero Palazzo Vitelli/.test(c)&&/2026_07/.test(c)),cau);
 
