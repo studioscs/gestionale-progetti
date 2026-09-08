@@ -581,18 +581,31 @@ con ritenuta d'acconto, con PEC al posto del codice destinatario, con l'IBAN nei
 dati di pagamento, verso la Pubblica Amministrazione con CIG/CUP e split payment,
 con più servizi elencati, e con le modifiche fatte a mano in revisione.
 
-### La causale non ripete la descrizione
+### In fattura non esce niente di scritto per uso interno
 
-Nel documento, `Causale` — il campo che i programmi di fatturazione mostrano
-come «note» — porta il **riferimento alla commessa** (nome e codice, che le
-righe non hanno) e **solo quello che qualcuno ha scritto a mano**: le note dello
-scaglione e la nota della richiesta di fatturazione.
+`Causale` è il campo che i programmi di fatturazione mostrano come «note»: **lo
+legge il committente**. Ci va il riferimento alla commessa (nome e codice, che
+le righe non portano) e nient'altro, a meno che tu non scriva qualcosa nel campo
+**Causale in fattura** della finestra di revisione — l'unico campo del
+gestionale che dichiara di essere letto dal cliente, e che nasce vuoto a ogni
+fattura.
 
-Prima ci finiva l'oggetto del servizio, che in mancanza di una dicitura
-d'incarico è la descrizione dello scaglione: la stessa frase compariva due
-volte nello stesso documento, una in `Causale` e una in `Descrizione`, e
-sembrava che il gestionale scrivesse da solo delle note che nessuno aveva
-scritto.
+Restano fuori, per costruzione:
+
+| Campo | Dove si scrive | Chi lo legge |
+|---|---|---|
+| **Note interne** | modulo dello scaglione | solo voi |
+| **Nota per l'amministrazione** | «Chiedi di fatturare» | solo voi e chi fattura |
+| **Causale in fattura** | finestra di revisione | il committente |
+
+Sono due bug corretti, non una precauzione teorica. Nel primo ci finiva
+l'oggetto del servizio, che in mancanza di una dicitura d'incarico è la
+descrizione dello scaglione: la stessa frase usciva due volte nello stesso
+documento. Nel secondo — introdotto nel correggere il primo — ci finivano le
+note dello scaglione e la nota della richiesta di fatturazione: su una commessa
+reale è arrivato al documento un «chiedi a Giorgio le spese catastali» scritto
+per l'amministrazione. **Nessun campo pensato per parlare fra colleghi finisce
+in fattura da solo.**
 
 ### Il gestionale non trasmette allo SdI
 

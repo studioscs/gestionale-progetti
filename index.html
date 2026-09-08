@@ -681,7 +681,8 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="fg"><label class="fl">Nota per l&rsquo;amministrazione</label>
         <textarea class="fc" id="ch-note" rows="3"
           placeholder="Es. SAL n. 2 approvato il 12/03, fatturare con riferimento al CIG in commessa"></textarea>
-        <div class="hint">Riferimenti, SAL, prescrizioni sul documento. Finisce nella mail e resta sullo scaglione.</div>
+        <div class="hint">Riferimenti, SAL, prescrizioni sul documento. Finisce nella mail all&rsquo;amministrazione
+          e resta sullo scaglione. <b>Non finisce in fattura</b>: e&rsquo; una nota fra colleghi.</div>
       </div>
     </div>
     <div class="mf"><button class="btn" data-close="m-chiedi">Annulla</button>
@@ -731,7 +732,9 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
       </div>
       <div class="fg"><label class="fl">Importo incassato €</label><input type="number" class="fc" id="fa-incimp" step="0.01"></div>
-      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="fa-note2" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">Note interne</label>
+        <textarea class="fc" id="fa-note2" rows="2"></textarea>
+        <div class="hint">Promemoria per voi. <b>Non finiscono in fattura</b>: quello che deve leggere il committente si scrive nella finestra di revisione, prima di generare il file.</div></div>
       <input type="hidden" id="fa-id2">
     </div>
     <div class="mf">
@@ -1099,7 +1102,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.1';
+const VERSIONE = '2026.09.08.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4090,11 +4093,11 @@ function datiFattura(f) {
     descrizione : f.descrizione || 'Prestazioni professionali',
     commessa    : p.name || '',
     codice      : p.codice || '',
-    /* Quello che il tecnico ha scritto a mano nelle note dello scaglione, e la
-       nota della richiesta di fatturazione: sono le uniche cose che meritano di
-       finire nella causale del documento. */
-    note        : (f.note || '').trim(),
-    noteRich    : (f.richiesta_note || '').trim(),
+    /* La causale del documento nasce VUOTA e la si scrive, se serve, nella
+       finestra di revisione. Le note dello scaglione e la nota della richiesta
+       di fatturazione NON entrano qui: si scrivono per l'amministrazione, non
+       per il committente. Restano dove sono, e in fattura non ci vanno. */
+    causale     : '',
     /* I servizi elencati nella stessa fattura: uno per riga, con il suo importo.
        Vuoto = fattura a riga unica, come prima. */
     righe       : righeFattura(f.id).map(r => ({
@@ -4286,17 +4289,26 @@ function xmlDaDati(d) {
 
   /* Causale: la dicitura dell'incarico, spezzata su piu' elementi se supera i
      200 caratteri ammessi da ciascuno. */
-  /* LA CAUSALE NON RIPETE LA DESCRIZIONE DELLA RIGA.
-     Prima ci finiva l'oggetto, che in mancanza di una dicitura di incarico e'
-     la descrizione dello scaglione: la stessa frase compariva due volte nel
-     documento, una in <Causale> - che i programmi di fatturazione mostrano
-     come "note" - e una in <Descrizione>. Sembrava che il gestionale scrivesse
-     da solo delle note che nessuno aveva scritto.
-     Nella causale va il riferimento alla commessa, che la riga non porta, e
-     solo quello che qualcuno ha davvero scritto a mano. */
+  /* NELLA CAUSALE NON FINISCE NIENTE CHE SIA STATO SCRITTO PER USO INTERNO.
+     La <Causale> e' cio' che i programmi di fatturazione mostrano come "note":
+     la legge il committente. Ci sono finite due cose che non dovevano starci.
+
+     La prima era l'oggetto, che in mancanza di una dicitura d'incarico e' la
+     descrizione dello scaglione: la stessa frase usciva due volte nello stesso
+     documento, una in <Causale> e una in <Descrizione>.
+
+     La seconda erano le note dello scaglione e la nota della richiesta di
+     fatturazione. Quelle si scrivono per l'amministrazione - "chiedi a Giorgio
+     le spese catastali" - e mandarle al committente e' peggio che inutile.
+     Nessun campo pensato per parlare fra colleghi puo' finire qui dentro per
+     conto suo.
+
+     Resta il riferimento alla commessa, che le righe non portano, e la causale
+     scritta apposta per il documento nella finestra di revisione: e' l'unico
+     campo che dichiara di essere letto dal cliente. */
   const causali = causaleSpezzata([
     d.commessa ? 'Commessa: ' + d.commessa + (d.codice ? ' (' + d.codice + ')' : '') : '',
-    d.note, d.noteRich
+    d.causale
   ].filter(x => x).join('. '));
 
   /* CIG e CUP viaggiano dentro il blocco del documento correlato; il tipo di
@@ -5258,6 +5270,16 @@ function disegnaRevisione() {
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
       + '<div class="hint">Finisce nell’oggetto della fattura e nella descrizione della riga. '
       + 'I caratteri non ammessi dallo schema vengono convertiti da soli.</div></div>'
+
+    /* L'unico campo che finisce nella causale del documento. Nasce vuoto a ogni
+       fattura: quello che il committente legge lo si scrive qui, guardandolo. */
+    + '<div class="fg"><label class="fl">Causale in fattura <span style="font-weight:400;color:var(--mut)">'
+      + '— la legge il committente</span></label>'
+      + '<textarea class="fc" data-rev="causale" rows="2" placeholder="Di norma si lascia vuoto">'
+      + esc(d.causale || '') + '</textarea>'
+      + '<div class="hint">Compare accanto al riferimento della commessa, nel campo che i programmi '
+      + 'di fatturazione mostrano come «note». <b>Le note dello scaglione e la nota alla '
+      + 'amministrazione non finiscono qui</b>: quelle restano fra voi.</div></div>'
 
     + sez('Destinatario', d.pa ? 'ente pubblico: formato FPA12' : 'privato: formato FPR12')
     + '<div class="fg2">'

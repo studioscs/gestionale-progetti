@@ -292,7 +292,7 @@ if(!rR.errori){
   t('ed e XML ben formato',wf==='',wf.slice(0,300));
 }
 
-console.log('\n— LE NOTE NON RIPETONO PIÙ LA DESCRIZIONE —');
+console.log('\n— IN FATTURA NON ESCE NIENTE DI SCRITTO PER USO INTERNO —');
 /* Prima la <Causale> - che i programmi di fatturazione mostrano come "note" -
    riportava l'oggetto, cioe' la stessa frase gia' scritta in <Descrizione>:
    sembrava che il gestionale scrivesse note che nessuno aveva scritto. */
@@ -302,16 +302,36 @@ t('la causale non ripete la descrizione della riga',
 t('ma porta il riferimento alla commessa, che le righe non hanno',
   cau.some(c=>/Recupero Palazzo Vitelli/.test(c)&&/2026_07/.test(c)),cau);
 
-/* Quello che si scrive a mano nelle note, invece, ci deve finire */
-const FN=Object.assign({},FR,{id:'fN',note:'Pagamento a 60 giorni come da accordo del 12/03'});
+/* NIENTE DI QUELLO CHE SI SCRIVE FRA COLLEGHI ESCE IN FATTURA.
+   Il caso e' vero: sulla commessa Rinaldelli la nota per l'amministrazione
+   ("chiedi a giorgio le spese catastali") e' arrivata dentro il documento. Le
+   note dello scaglione e la nota della richiesta di fatturazione servono a
+   parlarsi in studio, e in fattura non ci devono andare per conto loro. */
+const FN=Object.assign({},FR,{id:'fN',
+  note:'ricordarsi il bollo',
+  richiesta_note:'chiedi a giorgio le spese catastali'});
 ctx.S.fatture=[FN]; ctx.S.fattRighe=ctx.S.fattRighe.map(r=>Object.assign({},r,{fattura_id:'fN'}));
 const dN=ctx.datiFattura(FN); dN.numero='2026/031'; dN.data='2026-09-08'; dN.progressivo=8;
 const rN=ctx.xmlDaDati(dN);
-t('le note scritte a mano finiscono nella causale',
-  !rN.errori&&/Pagamento a 60 giorni/.test(rN.xml),rN.errori);
+t('la nota per l amministrazione NON esce in fattura',
+  !rN.errori&&!/spese catastali/.test(rN.xml),rN.errori||'trovata nel documento');
+t('nemmeno le note interne dello scaglione',
+  !rN.errori&&!/ricordarsi il bollo/.test(rN.xml),rN.errori||'trovate nel documento');
+t('la causale nasce vuota',ctx.datiFattura(FN).causale==='',ctx.datiFattura(FN).causale);
 t('e la descrizione della riga resta fuori dalla causale',
   !rN.errori&&(rN.xml.match(/<Causale>([^<]*)<\/Causale>/g)||[])
     .every(c=>!/Rilievo e restituzione/.test(c)),null);
+
+/* Quello che il committente deve leggere lo si scrive apposta in revisione */
+const dC=Object.assign({},dN,{causale:'Prestazioni rese come da disciplinare del 12/03/2026'});
+const rC=ctx.xmlDaDati(dC);
+t('la causale scritta in revisione ci finisce',
+  !rC.errori&&/disciplinare del 12\/03\/2026/.test(rC.xml),rC.errori);
+t('accanto al riferimento della commessa',
+  !rC.errori&&(rC.xml.match(/<Causale>([^<]*)<\/Causale>/g)||[])
+    .some(c=>/Recupero Palazzo Vitelli/.test(c)),null);
+t('e continua a non tirarsi dietro le note interne',
+  !rC.errori&&!/spese catastali|ricordarsi il bollo/.test(rC.xml),null);
 
 console.log('\n— UNA FATTURA CHE NON QUADRA NON SI GENERA —');
 const rotta=Object.assign({},dR,{righe:[{descrizione:'Voce A',importo:1000},
