@@ -225,7 +225,10 @@
     return f.progressivo_invio;
   }
 
-  window.supabase={createClient:()=>({
+  window.supabase={createClient:function(url,key,opts){
+    /* i test controllano che l'app chieda esplicitamente il flusso implicit */
+    window.__CLIENTOPTS=opts;
+    return {
     from:t=>Q(t),
     rpc:(nome,args)=>{
       if(nome==='assegna_progressivo')
@@ -241,6 +244,14 @@
       getUser:()=>Promise.resolve({data:{user:{id:UID,email:'f@scs.it',
         user_metadata:{pwd_da_scegliere:!!window.__PWDDASCEGLIERE}}}}),
       onAuthStateChange:(cb)=>{ window.__AUTHCB=cb; return {data:{subscription:{unsubscribe(){}}}}; },
+      /* __EXCHFAIL fa fallire lo scambio del codice, come capiterebbe aprendo
+         il link da un dispositivo diverso da quello con cui e' stato chiesto
+         il recupero - il caso vero che ha causato il bug segnalato. */
+      exchangeCodeForSession:(code)=>{ window.__EXCHANGED=code;
+        if(window.__EXCHFAIL) return Promise.resolve({data:null,
+          error:{message:'invalid request: both auth code and code verifier should be non-empty'}});
+        window.__NOSESSION=false; window.__PWDDASCEGLIERE=window.__PWDDASCEGLIERE||false;
+        return Promise.resolve({data:{session:{user:{id:UID,email:'f@scs.it'}}},error:null}); },
       updateUser:(attrs)=>{ window.__UPDATED=attrs;
         if(attrs.password==='VecchiaPass1') return Promise.resolve({data:null,error:{message:'New password should be different from the old password.'}});
         /* come Supabase: il contrassegno viaggia con l'utente */
@@ -256,5 +267,6 @@
       remove:(ps)=>{ window.__STORAGE=(window.__STORAGE||[]).filter(x=>!ps.includes(x)); return Promise.resolve({data:{},error:null}); },
       createSignedUrl:()=>Promise.resolve({data:{signedUrl:'#'},error:null})
     })}
-  })};
+  };  // fine dell'oggetto client restituito
+  }};  // fine di createClient e dell'oggetto window.supabase
 })();

@@ -89,6 +89,57 @@ function launchOpts(){
     await p.close();
   });
 
+  await t('il client chiede esplicitamente il flusso implicit',async()=>{
+    /* La causa del bug segnalato: senza questa scelta esplicita, le versioni
+       recenti della libreria generano link "?code=..." che vanno scambiati
+       esplicitamente, e funzionano SOLO dallo stesso browser che ha chiesto
+       il recupero. Aprirli da un altro dispositivo - il caso piu' comune,
+       mail sul telefono e richiesta fatta dal computer - non fa niente, e
+       senza questa impostazione l'app non se ne accorgerebbe nemmeno. */
+    const p=await nuova('');
+    const opts=await p.evaluate(()=>window.__CLIENTOPTS);
+    must(opts&&opts.auth&&opts.auth.flowType==='implicit',
+      'la app non forza il flusso implicit: '+JSON.stringify(opts));
+    await p.close();
+  });
+  await t('un link "?code=" viene comunque scambiato, come difesa in più',async()=>{
+    /* Anche forzando implicit, se un ?code= comparisse lo stesso - un
+       progetto Supabase configurato diversamente - non deve più sparire nel
+       nulla come faceva prima: va scambiato, ed è il caso in cui riesce. */
+    const p=await b.newPage({viewport:{width:900,height:900}});
+    await p.goto(URL0+'?code=un-codice-valido'); await p.waitForTimeout(900);
+    must(await p.evaluate(()=>window.__EXCHANGED)==='un-codice-valido',
+      'il codice non è mai stato scambiato: il link sembra non fare niente, come nel bug segnalato');
+    must(await p.isVisible('#resetpanel'),'scambiato il codice, non porta comunque alla scelta della password');
+    must(!(await p.isVisible('#app')),'è entrato nell app senza passare dalla password');
+    await p.close();
+  });
+  await t('un "?code=" aperto dal dispositivo sbagliato mostra un errore, non una pagina muta',async()=>{
+    /* Questo È il bug segnalato dal collaboratore, riprodotto: il link si
+       apre e "non succede niente" perché lo scambio fallisce in silenzio.
+       Deve invece comparire un messaggio che dice perché e cosa fare. */
+    const p=await b.newPage({viewport:{width:900,height:900}});
+    await p.addInitScript(()=>{ window.__EXCHFAIL=true; });
+    await p.goto(URL0+'?code=un-codice-di-un-altro-dispositivo'); await p.waitForTimeout(900);
+    must(!(await p.isVisible('#resetpanel')),'mostra comunque il form della password nonostante l errore');
+    must(!(await p.isVisible('#app')),'è entrato nell app nonostante lo scambio fallito');
+    must(await p.isVisible('#loginpanel'),'non torna nemmeno al login');
+    const err=await p.textContent('#aerr');
+    must(/dispositivo diverso|non è più valido/i.test(err),
+      'non spiega il motivo più comune (dispositivo diverso): '+err);
+    must(/Password dimenticata/i.test(err),'non indica come richiederne un altro: '+err);
+    await p.close();
+  });
+  await t('il codice si toglie dall url anche quando lo scambio fallisce',async()=>{
+    /* Altrimenti un refresh della pagina ritenterebbe con un codice già
+       consumato, riproponendo lo stesso errore in un loop silenzioso. */
+    const p=await b.newPage({viewport:{width:900,height:900}});
+    await p.addInitScript(()=>{ window.__EXCHFAIL=true; });
+    await p.goto(URL0+'?code=xyz'); await p.waitForTimeout(900);
+    must(!/code=xyz/.test(await p.evaluate(()=>location.href)),'l url mostra ancora il codice consumato');
+    await p.close();
+  });
+
   await t('stesso comportamento con parametri in query',async()=>{
     const p=await b.newPage(); await p.goto(URL0+'?type=recovery&code=xyz'); await p.waitForTimeout(900);
     must(await p.isVisible('#resetpanel'),'query non riconosciuta');

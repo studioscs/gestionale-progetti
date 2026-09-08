@@ -1102,11 +1102,25 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.6';
+const VERSIONE = '2026.09.08.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
-const SB = supabase.createClient(SURL, SKEY);
+/* Il flusso di autenticazione e' scelto qui, esplicitamente, e non lasciato
+   al valore di default della libreria. Le versioni recenti di supabase-js
+   generano di default link "PKCE": non un frammento autosufficiente
+   (#access_token=...) ma un codice (?code=...) che va scambiato con una
+   chiamata dal browser, e quello scambio funziona SOLO se avviene nello
+   stesso browser che ha chiesto il recupero - la chiave per completarlo resta
+   nella memoria locale di quel browser e in nessun altro posto.
+   Chi chiede "password dimenticata" dal computer dello studio e apre la mail
+   sul telefono - il caso piu' comune - con quel flusso non riesce: il link si
+   apre, non succede niente, e non compare nessun errore perche' la libreria
+   fallisce lo scambio in silenzio. E' il bug segnalato.
+   'implicit' riporta al frammento autosufficiente: il link porta gia' tutto
+   il necessario, funziona aprendolo da qualunque dispositivo, ed e' il
+   formato per cui e' scritta tutta la schermata di recupero qui sotto. */
+const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } });
 
 /* --------------------------------- STORE --------------------------------- */
 const S = {
@@ -9410,7 +9424,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === '/') { e.preventDefault(); const s = qs('.srch'); if (s) s.focus(); }
   });
 
-  /* Sessione */
+  /* Sessione. Ci si mette in ascolto PRIMA di processare l'URL: registrarlo
+     dopo avrebbe un difetto sottile, lo scambio di un ?code= puo' generare
+     l'evento di autenticazione prima che il nostro codice arrivi a mettersi
+     in ascolto, e quell'evento andrebbe perso - un altro modo in cui il link
+     "non fa niente". */
+  SB.auth.onAuthStateChange((ev, sess) => {
+    const chi = sess && sess.user ? sess.user.email : '';
+    if (ev === 'PASSWORD_RECOVERY') return mostraReset(chi, RECMOTIVO === 'invito' ? 'invito' : 'recovery');
+    if (ev === 'SIGNED_IN' && RECOVERY) return mostraReset(chi, RECMOTIVO);
+    if (ev === 'SIGNED_IN' && sess && deveSceglierePassword(sess.user))
+      return mostraReset(chi, 'invito');
+    if (ev === 'SIGNED_OUT') {
+      if (S.pollTimer) clearInterval(S.pollTimer);
+      S.me = null; S.prof = null;
+      el('app').classList.remove('show');
+      el('auth').classList.remove('hide');
+    }
+  });
+
   /* Il link di recupero puo' arrivare come frammento (#type=recovery) oppure
      come query (?type=recovery) a seconda del flusso configurato su Supabase:
      controlliamo entrambi, e in piu' ascoltiamo l'evento PASSWORD_RECOVERY. */
@@ -9423,9 +9455,36 @@ document.addEventListener('DOMContentLoaded', () => {
      entrerebbe al posto suo. Vanno trattati come il recupero. */
   if (tipo === 'recovery') { RECOVERY = true; RECMOTIVO = 'recovery'; }
   if (LINK_SENZA_PASSWORD.indexOf(tipo) >= 0) { RECOVERY = true; RECMOTIVO = 'invito'; }
-  if (errDesc || RECOVERY) pulisciUrl();
 
-  SB.auth.getSession().then(({data}) => {
+  (async () => {
+    /* DIFESA IN PROFONDITA'. La riga sopra su SB forza il flusso "implicit"
+       apposta perche' non si arrivi mai fin qui: ma se un ?code= comparisse
+       comunque - un progetto Supabase configurato diversamente, una versione
+       della libreria che lo impone lo stesso - non lo si lascia cadere in
+       silenzio. E' esattamente il buco che ha causato il bug segnalato:
+       prima nessuno guardava questo parametro, e il link sembrava non fare
+       niente perche' l'errore non veniva mai mostrato. */
+    const code = P.get('code');
+    if (code) {
+      pulisciUrl();
+      const { error } = await SB.auth.exchangeCodeForSession(code);
+      if (error) {
+        return showErr('Il link non è più valido: se lo hai aperto da un dispositivo diverso da '
+          + 'quello con cui hai chiesto il recupero, è per questo — riprova sullo stesso telefono o '
+          + 'computer. Altrimenti richiedine uno nuovo da "Password dimenticata?".');
+      }
+      /* Un ?code= su questa pagina non puo' essere altro che un recupero,
+         un invito o un link magico: l'app non usa PKCE per nient'altro. Il
+         parametro "type" con questo flusso puo' mancare, quindi si forza
+         comunque la scelta della password anche senza saperne il motivo
+         esatto - meglio chiederla una volta di troppo che lasciare entrare
+         un account che non ne ha mai avuta una. */
+      if (!RECOVERY) { RECOVERY = true; RECMOTIVO = RECMOTIVO || 'recovery'; }
+    } else if (errDesc || RECOVERY) {
+      pulisciUrl();
+    }
+
+    const { data } = await SB.auth.getSession();
     const sess = data && data.session;
     if (RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '', RECMOTIVO);
     /* Nessun link, ma l'account e' rimasto senza password da un invito aperto e
@@ -9441,20 +9500,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (sess) boot();
-  });
-  SB.auth.onAuthStateChange((ev, sess) => {
-    const chi = sess && sess.user ? sess.user.email : '';
-    if (ev === 'PASSWORD_RECOVERY') return mostraReset(chi, 'recovery');
-    if (ev === 'SIGNED_IN' && RECOVERY) return mostraReset(chi, RECMOTIVO);
-    if (ev === 'SIGNED_IN' && sess && deveSceglierePassword(sess.user))
-      return mostraReset(chi, 'invito');
-    if (ev === 'SIGNED_OUT') {
-      if (S.pollTimer) clearInterval(S.pollTimer);
-      S.me = null; S.prof = null;
-      el('app').classList.remove('show');
-      el('auth').classList.remove('hide');
-    }
-  });
+  })();
 });
 </script>
 
