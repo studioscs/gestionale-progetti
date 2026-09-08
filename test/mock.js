@@ -233,11 +233,18 @@
       return Promise.resolve({data:null,error:{message:'rpc sconosciuta: '+nome}});
     },
     auth:{
-      getSession:()=>Promise.resolve({data:{session:window.__NOSESSION?null:{user:{id:UID,email:'f@scs.it'}}}}),
-      getUser:()=>Promise.resolve({data:{user:{id:UID,email:'f@scs.it'}}}),
+      /* __PWDDASCEGLIERE riproduce l'account invitato che non ha ancora scelto
+         una password: su Supabase e' un dato dell'utente, qui e' un
+         interruttore che i test accendono. */
+      getSession:()=>Promise.resolve({data:{session:window.__NOSESSION?null:{user:{id:UID,email:'f@scs.it',
+        user_metadata:{pwd_da_scegliere:!!window.__PWDDASCEGLIERE}}}}}),
+      getUser:()=>Promise.resolve({data:{user:{id:UID,email:'f@scs.it',
+        user_metadata:{pwd_da_scegliere:!!window.__PWDDASCEGLIERE}}}}),
       onAuthStateChange:(cb)=>{ window.__AUTHCB=cb; return {data:{subscription:{unsubscribe(){}}}}; },
       updateUser:(attrs)=>{ window.__UPDATED=attrs;
         if(attrs.password==='VecchiaPass1') return Promise.resolve({data:null,error:{message:'New password should be different from the old password.'}});
+        /* come Supabase: il contrassegno viaggia con l'utente */
+        if(attrs.data&&'pwd_da_scegliere' in attrs.data) window.__PWDDASCEGLIERE=attrs.data.pwd_da_scegliere;
         return Promise.resolve({data:{user:{id:'u-me'}},error:null}); },
       resetPasswordForEmail:(em,o)=>{ window.__RESET={email:em,opts:o}; return Promise.resolve({data:{},error:null}); },
       signOut:()=>Promise.resolve({error:null})

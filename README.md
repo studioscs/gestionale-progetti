@@ -149,7 +149,19 @@ recupero password ricevuto per email rimanda a una pagina che Supabase rifiuta.
 
 ### 5. Utenti
 
-Invita da Supabase → Authentication → Users, oppure fai usare "Registrati".
+Due strade, e portano allo stesso punto:
+
+- **«Registrati»** dalla schermata di accesso: la persona sceglie da sé la
+  password, conferma la mail e aspetta che tu la abiliti. È la strada semplice.
+- **Invito** da Supabase → *Authentication → Users → Invite*: al primo accesso
+  il gestionale le chiede di **scegliere una password** prima di farla entrare.
+
+Il link dell'invito **autentica già chi lo apre**: senza quel passaggio si
+entrerebbe con un account che una password non ce l'ha, e chiunque arrivasse a
+quella mail entrerebbe al posto suo — per sempre, perché senza password non
+c'è nient'altro da indovinare. Finché la password non è scelta il gestionale
+riporta lì a ogni accesso, anche chiudendo la finestra e tornando il giorno
+dopo: la sessione resta valida, ma non basta per entrare.
 Chi si registra nasce **Viewer** (sola lettura): un admin lo promuove a
 Collaboratore da *Amministrazione → Utenti*.
 
@@ -458,6 +470,7 @@ il problema si ripete, richiama il file con un parametro, ad esempio
 | Popover *(introdotto e corretto in questa versione)* | Si chiudeva sul `mousedown`, quindi il `click` sulla voce non arrivava mai |
 | Avanzamento fase *(idem)* | Stato salvato correttamente ma badge a schermo non aggiornato |
 | Barra superiore *(idem)* | I pulsanti azione erano fuori dall'area con delega eventi e non rispondevano |
+| Invito senza password | Il link di invito di Supabase **autentica già chi lo apre**: l'app lo trattava come un accesso normale e si entrava con un account che una password non aveva mai avuto. Chiunque fosse arrivato a quella mail entrava al posto suo, e non c'era niente da indovinare. Ora invito e link magico portano alla scelta della password, senza scorciatoia per saltarla, e l'account resta segnato finché una password non c'è |
 | Recupero password *(idem)* | Il link ricevuto per email autentica già l'utente: la sessione veniva trattata come un login normale e si entrava nell'app **senza mai poter cambiare la password**. Ora il link porta a una schermata dedicata; il link scaduto viene riconosciuto e spiegato |
 
 Correzioni trasversali: parsing date senza slittamento UTC (una scadenza *oggi* non

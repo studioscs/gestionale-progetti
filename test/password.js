@@ -26,6 +26,69 @@ function launchOpts(){
     must(/f@scs.it/.test(await p.textContent('#reswho')),'email non mostrata');
     await p.close();
   });
+  await t('link di INVITO: chiede la password, NON fa entrare',async()=>{
+    /* L'invito da Supabase (Authentication > Users > Invite) autentica gia'
+       l'utente: senza questo controllo si finiva dentro l'app con un account
+       che una password non ce l'ha, e chiunque avesse quella mail entrava. */
+    const p=await nuova('#access_token=abc&refresh_token=r&type=invite');
+    must(await p.isVisible('#resetpanel'),'non chiede di scegliere la password');
+    must(!(await p.isVisible('#app')),'e ENTRATO NELL APP senza password');
+    await p.close();
+  });
+  await t('e lo dice con le parole giuste: è la prima, non un recupero',async()=>{
+    const p=await nuova('#access_token=abc&refresh_token=r&type=invite');
+    const txt=await p.textContent('#reswho');
+    must(/scegli|prima password|benvenut/i.test(txt),'parla di reimpostare invece che di scegliere: '+txt);
+    await p.close();
+  });
+  await t('link magico: stessa cosa, la password va scelta',async()=>{
+    const p=await nuova('#access_token=abc&refresh_token=r&type=magiclink');
+    must(await p.isVisible('#resetpanel'),'non chiede la password');
+    must(!(await p.isVisible('#app')),'e entrato senza password');
+    await p.close();
+  });
+
+  await t('aprire l invito e chiudere la finestra non basta per entrare',async()=>{
+    /* La scorciatoia piu' ovvia: apro l'invito, non scelgo niente, chiudo. La
+       sessione resta valida - e senza contrassegno il giorno dopo si entrava. */
+    const p=await nuova('#access_token=abc&refresh_token=r&type=invite');
+    must(await p.isVisible('#resetpanel'),'primo giro: non chiede la password');
+    const segnato=await p.evaluate(()=>window.__UPDATED);
+    must(segnato&&segnato.data&&segnato.data.pwd_da_scegliere===true,
+      'l account non e stato segnato come senza password: '+JSON.stringify(segnato));
+    await p.close();
+    /* si riapre il gestionale, senza link, con la sessione ancora buona */
+    const q=await b.newPage({viewport:{width:900,height:900}});
+    await q.addInitScript(()=>{ window.__PWDDASCEGLIERE=true; });
+    await q.goto(URL0); await q.waitForTimeout(900);
+    must(await q.isVisible('#resetpanel'),'al secondo giro NON chiede la password');
+    must(!(await q.isVisible('#app')),'al secondo giro e ENTRATO senza password');
+    await q.close();
+  });
+  await t('scelta la password, il contrassegno se ne va e si entra',async()=>{
+    const p=await b.newPage({viewport:{width:900,height:900}});
+    await p.addInitScript(()=>{ window.__PWDDASCEGLIERE=true; });
+    await p.goto(URL0); await p.waitForTimeout(900);
+    must(await p.isVisible('#resetpanel'),'non chiede la password');
+    await p.fill('#np1','PasswordNuova1'); await p.fill('#np2','PasswordNuova1');
+    await p.click('#nbtn'); await p.waitForTimeout(900);
+    const u=await p.evaluate(()=>window.__UPDATED);
+    must(u&&u.password==='PasswordNuova1','password non inviata: '+JSON.stringify(u));
+    must(u&&u.data&&u.data.pwd_da_scegliere===false,
+      'il contrassegno non e stato tolto: '+JSON.stringify(u));
+    await p.close();
+  });
+  await t('al primo accesso non c e nessun "entra senza cambiarla"',async()=>{
+    const p=await nuova('#access_token=abc&refresh_token=r&type=invite');
+    must(!(await p.isVisible('#nskip')),'la scorciatoia per entrare senza password e ancora li');
+    await p.close();
+  });
+  await t('ma su un recupero resta, che la password ce l ha gia',async()=>{
+    const p=await nuova('#access_token=abc&refresh_token=r&type=recovery');
+    must(await p.isVisible('#nskip'),'tolta anche dove serviva');
+    await p.close();
+  });
+
   await t('stesso comportamento con parametri in query',async()=>{
     const p=await b.newPage(); await p.goto(URL0+'?type=recovery&code=xyz'); await p.waitForTimeout(900);
     must(await p.isVisible('#resetpanel'),'query non riconosciuta');

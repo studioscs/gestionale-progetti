@@ -345,7 +345,7 @@ tbody tr:hover td { background:#f0f4f9; }
 
     <!-- Schermata raggiunta cliccando il link di recupero ricevuto per email -->
     <div id="resetpanel" style="display:none">
-      <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px">Imposta una nuova password</div>
+      <div id="restit" style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px">Imposta una nuova password</div>
       <p class="hint" id="reswho" style="margin-bottom:14px"></p>
       <div class="aerr" id="reserr"></div>
       <div class="fg"><label class="fl">Nuova password *</label>
@@ -1102,7 +1102,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.5';
+const VERSIONE = '2026.09.08.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3311,6 +3311,26 @@ async function doForgot() {
    si finirebbe dentro l'app senza mai poter cambiare la password.
    =========================================================================== */
 let RECOVERY = false;
+/* PERCHE' SIAMO SULLA SCHERMATA DELLA PASSWORD
+   'recovery' e' un recupero chiesto da chi la password ce l'ha gia' e non se la
+   ricorda. 'invito' e' un account appena creato che una password non l'ha MAI
+   avuta: il link ricevuto per email lo autentica gia', e senza questa
+   distinzione si entrava nel gestionale con un account senza password - e chi
+   fosse arrivato a quella mail entrava al posto suo, per sempre.
+   Cambia cosa c'e' scritto e se si puo' rimandare, non come funziona. */
+let RECMOTIVO = 'recovery';
+
+/* I tipi di link che portano dentro un account SENZA che nessuno abbia mai
+   scelto una password. 'signup' non c'e': chi si registra dall'app la password
+   se la sceglie li', e confermare la mail non deve richiederne un'altra. */
+const LINK_SENZA_PASSWORD = ['invite', 'magiclink'];
+
+/* Il contrassegno resta sull'account finche' una password non c'e'. Serve a
+   chiudere la scorciatoia piu' ovvia: aprire l'invito, chiudere la finestra
+   senza scegliere niente, e riaprire il gestionale il giorno dopo trovandosi
+   dentro con la sessione ancora valida. */
+const deveSceglierePassword = u =>
+  !!(u && u.user_metadata && u.user_metadata.pwd_da_scegliere);
 
 function paramsUrl() {
   const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
@@ -3320,17 +3340,35 @@ function paramsUrl() {
 function pulisciUrl() {
   history.replaceState(null, '', location.origin + location.pathname);
 }
-function mostraReset(email) {
+function mostraReset(email, motivo) {
   RECOVERY = true;
+  RECMOTIVO = motivo || 'recovery';
+  const primaVolta = RECMOTIVO !== 'recovery';
   el('auth').classList.remove('hide');
   el('app').classList.remove('show');
   el('loginpanel').style.display = 'none';
   el('regpanel').style.display = 'none';
   el('aerr').style.display = 'none';
   el('resetpanel').style.display = 'block';
-  el('reswho').textContent = email
-    ? 'Stai reimpostando la password di ' + email + '.'
-    : 'Scegli la password che userai da adesso in poi.';
+  el('restit').textContent = primaVolta ? 'Scegli la tua password' : 'Imposta una nuova password';
+  el('reswho').textContent = primaVolta
+    ? 'Benvenuto' + (email ? ', ' + email : '') + '. Questo è il tuo primo accesso: '
+      + 'scegli la password con cui entrerai da qui in avanti. Senza, il link della mail '
+      + 'sarebbe l’unico modo di entrare — e varrebbe per chiunque ce l’abbia.'
+    : email
+      ? 'Stai reimpostando la password di ' + email + '.'
+      : 'Scegli la password che userai da adesso in poi.';
+  /* "Entra senza cambiarla" ha senso per un recupero: la password c'e' gia'.
+     Al primo accesso sarebbe la porta aperta, e va tolta. */
+  el('nskip').style.display = primaVolta ? 'none' : '';
+
+  /* Da qui in poi l'account e' segnato come "senza password" finche' non ne
+     sceglie una: se chiude la finestra adesso, la prossima volta si ritrova
+     qui invece che dentro. */
+  if (primaVolta) {
+    SB.auth.updateUser({ data: { pwd_da_scegliere: true } })
+      .catch(e => console.warn('contrassegno password', e));
+  }
   setTimeout(() => el('np1').focus(), 50);
 }
 function chiudiReset() {
@@ -3348,7 +3386,11 @@ async function salvaNuovaPassword() {
   if (p1 !== p2)     return fail('Le password non coincidono.');
 
   setLoading('nbtn', true);
-  const { error } = await SB.auth.updateUser({ password: p1 });
+  /* Password e contrassegno in un colpo solo: se andassero in due chiamate
+     separate, fallire la seconda lascerebbe un account con la password buona
+     ma ancora marcato da sistemare. */
+  const { error } = await SB.auth.updateUser({
+    password: p1, data: { pwd_da_scegliere: false } });
   setLoading('nbtn', false);
   if (error) {
     return fail(/same.*password|different from the old/i.test(error.message)
@@ -9374,12 +9416,22 @@ document.addEventListener('DOMContentLoaded', () => {
      controlliamo entrambi, e in piu' ascoltiamo l'evento PASSWORD_RECOVERY. */
   const P = paramsUrl();
   const errDesc = P.get('error_description');
-  if (P.get('type') === 'recovery') RECOVERY = true;
+  const tipo = P.get('type') || '';
+  /* Un invito e un link magico autenticano gia' chi li apre: se li lasciassimo
+     passare come un accesso normale, si entrerebbe nel gestionale con un
+     account che una password non ce l'ha, e chiunque avesse quella mail
+     entrerebbe al posto suo. Vanno trattati come il recupero. */
+  if (tipo === 'recovery') { RECOVERY = true; RECMOTIVO = 'recovery'; }
+  if (LINK_SENZA_PASSWORD.indexOf(tipo) >= 0) { RECOVERY = true; RECMOTIVO = 'invito'; }
   if (errDesc || RECOVERY) pulisciUrl();
 
   SB.auth.getSession().then(({data}) => {
     const sess = data && data.session;
-    if (RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '');
+    if (RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '', RECMOTIVO);
+    /* Nessun link, ma l'account e' rimasto senza password da un invito aperto e
+       poi abbandonato: si riparte da li' invece di entrare. */
+    if (sess && deveSceglierePassword(sess.user))
+      return mostraReset(sess.user.email, 'invito');
     if (errDesc) {
       /* Tipico link scaduto. Se una sessione valida c'e' gia', non ha senso
          bloccare l'accesso: entriamo e segnaliamo con un avviso. */
@@ -9391,8 +9443,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sess) boot();
   });
   SB.auth.onAuthStateChange((ev, sess) => {
-    if (ev === 'PASSWORD_RECOVERY') return mostraReset(sess && sess.user ? sess.user.email : '');
-    if (ev === 'SIGNED_IN' && RECOVERY) return mostraReset(sess && sess.user ? sess.user.email : '');
+    const chi = sess && sess.user ? sess.user.email : '';
+    if (ev === 'PASSWORD_RECOVERY') return mostraReset(chi, 'recovery');
+    if (ev === 'SIGNED_IN' && RECOVERY) return mostraReset(chi, RECMOTIVO);
+    if (ev === 'SIGNED_IN' && sess && deveSceglierePassword(sess.user))
+      return mostraReset(chi, 'invito');
     if (ev === 'SIGNED_OUT') {
       if (S.pollTimer) clearInterval(S.pollTimer);
       S.me = null; S.prof = null;
