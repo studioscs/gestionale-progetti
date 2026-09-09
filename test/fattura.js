@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,premessaDa,anteprimaCausale,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -201,7 +201,12 @@ if(!rPA.errori){
   t('riferimento all atto di affidamento',/<IdDocumento>DET-2026-118<\/IdDocumento>/.test(rPA.xml),null);
   t('esigibilita IVA in scissione',/<EsigibilitaIVA>S<\/EsigibilitaIVA>/.test(rPA.xml),null);
   t('importo pagamento al netto dell IVA',/<ImportoPagamento>24960\.00<\/ImportoPagamento>/.test(rPA.xml),null);
-  t('oggetto dell incarico in causale',/Causale>.*scuola primaria/.test(rPA.xml),null);
+  /* La causale non si riempie piu' da sola: l'oggetto sta nella descrizione
+     della riga, dove il committente lo legge, e le note restano vuote finche'
+     qualcuno non ci scrive dentro. */
+  t('l oggetto sta nella riga, non nelle note',
+    /<Descrizione>[^<]*scuola primaria/.test(rPA.xml)&&!/<Causale>/.test(rPA.xml),
+    (rPA.xml.match(/<Causale>[^<]*<\/Causale>/g)||[]).join(' | '));
   t('virgolette curve ripulite nell XML',!/[‘’“”—]/.test(rPA.xml),null);
   fs.writeFileSync('/tmp/fatt-pa.xml',rPA.xml);
   let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-pa.xml 2>&1').toString();}
@@ -294,97 +299,82 @@ if(!rR.errori){
 }
 
 
-console.log('\n— L OGGETTO DELL INCARICO, COME TESTO SENZA IMPORTI —');
-/* Elencando i servizi uno per uno l'oggetto dell'incarico spariva dal documento.
-   Rimetterlo come riga a zero non andava bene: nel documento si leggeva
-   "0,00 EUR" con quantita' e aliquota, come fosse una voce che non si paga. Il
-   posto per il testo libero e' la <Causale>, che i programmi mostrano come
-   "Note": nessuna colonna, nessun importo. Caso reale, commessa Rinaldelli. */
+console.log('\n— NELLE NOTE VA SOLO QUELLO CHE SCRIVE UNA PERSONA —');
+/* Il gestionale si componeva le note da solo - oggetto dell'incarico piu'
+   riferimento alla commessa - e in fattura compariva sempre una nota che
+   nessuno aveva scritto e nessuno poteva togliere. Caso reale, commessa
+   VIVIANA ZOPPI. */
 const PRIMA={projects:ctx.S.projects,fatture:ctx.S.fatture,righe:ctx.S.fattRighe};
-const OGG='Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA CONTRADA '
-  +'FONTEZUCCA A MACERATA';
-ctx.S.projects=ctx.S.projects.concat([{id:'pP',name:'RINALDELLI - VILLA',codice:'2026_16',
-  client:'RINALDELLI ALESSANDRO',amount:9590,cliente_cf:'RNLLSN76P29E783Q',
-  cliente_indirizzo:'Contrada Fontezucca 18',cliente_cap:'62100',
-  cliente_comune:'Macerata',cliente_prov:'MC',cliente_sdi:'0000000'}]);
-const FP={id:'fP',project_id:'pP',descrizione:OGG,imponibile:2877,stato:'pronta'};
-ctx.S.fatture=[FP];
+const OGG='Art. 1 OGGETTO DEL SERVIZIO DA REALIZZARE SU IMMOBILE SITO IN VIA LA FONTE 22 '
+  +'A SIROLO (AN)';
+ctx.S.projects=ctx.S.projects.concat([{id:'pZ',name:'VIVIANA ZOPPI',codice:'2026_33',
+  client:'Viviana Zoppi',amount:9000,cliente_cf:'ZPPVVN80A41E783Q',
+  cliente_indirizzo:'Via La Fonte 22',cliente_cap:'60020',
+  cliente_comune:'Sirolo',cliente_prov:'AN',cliente_sdi:'0000000'}]);
+const FZ={id:'fZ',project_id:'pZ',descrizione:OGG,imponibile:3000,stato:'pronta',
+  note:'promemoria interno',richiesta_note:'chiedi a giorgio'};
+ctx.S.fatture=[FZ];
 ctx.S.fattRighe=[
- {id:'p1',fattura_id:'fP',ordine:0,descrizione:'A. Accesso e acquisizione documentale',importo:0},
- {id:'p2',fattura_id:'fP',ordine:1,descrizione:'B. Rilievo geometrico confermativo',importo:462},
- {id:'p3',fattura_id:'fP',ordine:2,descrizione:'C. Progetto preliminare',importo:2415}];
-const dP=ctx.datiFattura(FP); dP.numero='50/FE'; dP.data='2026-09-08'; dP.progressivo=50;
-const rP=ctx.xmlDaDati(dP);
-t('l XML si genera',!rP.errori,rP.errori);
-const lP=(rP.errori?[]:rP.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
-const desc=l=>(l.match(/<Descrizione>([^<]*)/)||[])[1]||'';
-const prez=l=>(l.match(/<PrezzoTotale>([\d.]+)/)||[])[1];
-const cauP=(rP.errori?[]:rP.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
+ {id:'z1',fattura_id:'fZ',ordine:0,descrizione:'A. Rilievo',importo:1000},
+ {id:'z2',fattura_id:'fZ',ordine:1,descrizione:'B. Progetto',importo:2000}];
+const dZ=ctx.datiFattura(FZ); dZ.numero='2026/050'; dZ.data='2026-09-09'; dZ.progressivo=60;
+const rZ=ctx.xmlDaDati(dZ);
+t('l XML si genera',!rZ.errori,rZ.errori);
+const cauZ=(rZ.errori?[]:rZ.xml.match(/<Causale>[^<]*<\/Causale>/g))||[];
 
-t('le righe di fattura sono SOLO i servizi',lP.length===3,lP.map(l=>desc(l).slice(0,14)));
-t('nessuna riga descrittiva fra di esse',
-  !lP.some(l=>/Art\. 1 OGGETTO DEL SERVIZIO/.test(desc(l))),lP.map(l=>desc(l).slice(0,24)));
-t('l oggetto sta nelle note del documento',
-  cauP.some(c=>/Art\. 1 OGGETTO DEL SERVIZIO/.test(c)),cauP);
-t('dice su quale immobile',
-  cauP.join(' ').indexOf('VIA CONTRADA FONTEZUCCA A MACERATA')>=0,cauP);
-t('le note non hanno importi ne aliquote',
-  cauP.every(c=>!/PrezzoTotale|AliquotaIVA|Quantita/.test(c)),cauP);
-t('accanto c e il riferimento alla commessa',
-  cauP.join(' ').indexOf('RINALDELLI - VILLA (2026_16)')>=0,cauP);
-/* niente e' cambiato negli importi: le righe restano quelle e basta */
-const sommaP=ctx.r2(lP.map(l=>Number(prez(l))).reduce((a,b)=>a+b,0));
-t('i servizi sommano l imponibile',sommaP===2877,sommaP);
-t('il riepilogo IVA torna',
-  Number((rP.xml.match(/<ImponibileImporto>([\d.]+)/)||[])[1])===ctx.r2(2877*1.04),
-  (rP.xml.match(/<ImponibileImporto>([\d.]+)/)||[])[1]);
-t('e il totale documento e quello atteso',
-  (rP.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]==='3650.34',
-  (rP.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]);
-if(!rP.errori){
-  fs.writeFileSync('/tmp/fatt-premessa.xml',rP.xml);
-  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-premessa.xml 2>&1').toString();}
+t('senza note scritte, il documento non ha note',cauZ.length===0,cauZ);
+t('l oggetto dell incarico NON ci finisce piu da solo',
+  !/Art\. 1 OGGETTO DEL SERVIZIO/.test(rZ.xml),'oggetto trovato nel documento');
+t('e nemmeno il riferimento alla commessa',
+  !/VIVIANA ZOPPI|2026_33/.test(rZ.xml),'riferimento alla commessa trovato');
+t('le note interne restano fuori',!/promemoria interno/.test(rZ.xml),null);
+t('la nota all amministrazione pure',!/chiedi a giorgio/.test(rZ.xml),null);
+t('i servizi restano quelli, con i loro importi',
+  (rZ.xml.match(/<DettaglioLinee>/g)||[]).length===2
+  &&/A\. Rilievo/.test(rZ.xml)&&/B\. Progetto/.test(rZ.xml),null);
+
+/* Quello che si scrive nella casella, invece, ci finisce - e solo quello */
+const FN2=Object.assign({},FZ,{note_fattura:'Pagamento a 60 giorni come da disciplinare'});
+ctx.S.fatture=[FN2];
+const dN2=ctx.datiFattura(FN2); dN2.numero='2026/051'; dN2.data='2026-09-09'; dN2.progressivo=61;
+const rN2=ctx.xmlDaDati(dN2);
+const cauN2=(rN2.errori?[]:rN2.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
+t('la casella "Note in fattura" arriva al documento',
+  cauN2.some(c=>/Pagamento a 60 giorni/.test(c)),cauN2);
+t('e ci arriva SOLO quella',
+  cauN2.join(' ').replace(/<\/?Causale>/g,'').trim()==='Pagamento a 60 giorni come da disciplinare',
+  cauN2);
+t('l anteprima in revisione dice la stessa cosa del file',
+  ctx.anteprimaCausale(dN2)==='Pagamento a 60 giorni come da disciplinare',ctx.anteprimaCausale(dN2));
+if(!rN2.errori){
+  fs.writeFileSync('/tmp/fatt-note.xml',rN2.xml);
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-note.xml 2>&1').toString();}
   catch(e){out=(e.stdout||'')+(e.stderr||'');}
-  t('la fattura e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
-  let wf=''; try{execSync('xmllint --noout /tmp/fatt-premessa.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
+  t('la fattura con le note e VALIDA',haXsd?/validates/.test(out):true,out.slice(0,600));
+  let wf=''; try{execSync('xmllint --noout /tmp/fatt-note.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
   t('ed e XML ben formato',wf==='',wf.slice(0,300));
 }
-/* l'anteprima in revisione deve dire esattamente quello che finisce nel file */
-t('l anteprima coincide con il file',
-  ctx.causaleSpezzata(ctx.anteprimaCausale(dP),20).join('')===cauP.map(c=>c.replace(/<\/?Causale>/g,'')).join(''),
-  ctx.anteprimaCausale(dP));
 
-/* Una premessa lunghissima continua sull elemento successivo, non viene tagliata */
+/* Una nota lunga continua sull elemento successivo, non viene tagliata */
 const LUNGA=Array(40).fill('clausola contrattuale di dettaglio numero uno').join(', ');
 const pezzi=ctx.causaleSpezzata(LUNGA,20);
 t('una nota lunga viene spezzata, non tagliata',
   pezzi.length>1&&pezzi.every(x=>x.length<=200),pezzi.map(x=>x.length));
 t('rimettendo insieme i pezzi si rilegge tutto il testo',
   pezzi.join(' ')===ctx.latin(LUNGA),pezzi.join(' ').length+' vs '+ctx.latin(LUNGA).length);
-
-/* Senza servizi elencati la premessa non serve: l'oggetto e' gia' nella riga */
-t('con la fattura a voce unica non compare nessuna premessa',
-  ctx.premessaDa({righe:[],oggetto:OGG})==='',null);
-t('ne quando direbbe la stessa cosa dell unico servizio',
-  ctx.premessaDa({righe:[{descrizione:OGG,importo:100}],oggetto:OGG})==='',null);
-t('senza oggetto non si inventa niente',
-  ctx.premessaDa({righe:[{descrizione:'a'}],oggetto:'',descrizione:''})==='',null);
 ctx.S.projects=PRIMA.projects; ctx.S.fatture=PRIMA.fatture; ctx.S.fattRighe=PRIMA.righe;
 
 console.log('\n— IN FATTURA NON ESCE NIENTE DI SCRITTO PER USO INTERNO —');
 /* Il difetto di partenza era la RIPETIZIONE: con una riga sola, la causale
    riportava la stessa identica frase gia' scritta in <Descrizione>, e la si
-   leggeva due volte nello stesso documento. Con i servizi elencati non e' cosi':
-   la causale porta l'oggetto dell'incarico, che nessuna riga dice. Quello che
-   non deve succedere e' che ripeta le descrizioni dei SERVIZI. */
+   leggeva due volte nello stesso documento. Oggi non puo' piu' succedere in
+   nessun caso: le note le scrive una persona, e finche' non lo fa non c'e'
+   proprio nessun elemento <Causale> nel file. */
 const cau=(rR.errori?[]:rR.xml.match(/<Causale>([^<]*)<\/Causale>/g))||[];
-t('la causale non ripete le descrizioni dei servizi',
-  cau.every(c=>!/Rilievo e restituzione grafica|Pratica edilizia|Deposito sismico/.test(c)),cau);
-/* e con una riga sola non si ripete affatto */
-t('con una riga sola la causale non la ripete',
-  ctx.premessaDa({righe:[{descrizione:'Primo acconto'}],oggetto:'Primo acconto'})==='',null);
-t('ma porta il riferimento alla commessa, che le righe non hanno',
-  cau.some(c=>/Recupero Palazzo Vitelli/.test(c)&&/2026_07/.test(c)),cau);
+t('senza note scritte a mano non c e nessuna causale',cau.length===0,cau);
+t('e la descrizione della riga non compare da nessun altra parte',
+  !rR.errori&&(rR.xml.match(/Rilievo e restituzione grafica/g)||[]).length===1,
+  (rR.errori?[]:rR.xml.match(/Rilievo e restituzione grafica/g)||[]).length);
 
 /* NIENTE DI QUELLO CHE SI SCRIVE FRA COLLEGHI ESCE IN FATTURA.
    Il caso e' vero: sulla commessa Rinaldelli la nota per l'amministrazione
@@ -411,9 +401,10 @@ const dC=Object.assign({},dN,{causale:'Prestazioni rese come da disciplinare del
 const rC=ctx.xmlDaDati(dC);
 t('la causale scritta in revisione ci finisce',
   !rC.errori&&/disciplinare del 12\/03\/2026/.test(rC.xml),rC.errori);
-t('accanto al riferimento della commessa',
+t('e ci finisce da sola, senza il riferimento alla commessa appiccicato',
   !rC.errori&&(rC.xml.match(/<Causale>([^<]*)<\/Causale>/g)||[])
-    .some(c=>/Recupero Palazzo Vitelli/.test(c)),null);
+    .every(c=>!/Recupero Palazzo Vitelli|2026_07/.test(c)),
+  (rC.errori?[]:rC.xml.match(/<Causale>[^<]*<\/Causale>/g)||[]));
 t('e continua a non tirarsi dietro le note interne',
   !rC.errori&&!/spese catastali|ricordarsi il bollo/.test(rC.xml),null);
 

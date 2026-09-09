@@ -732,9 +732,17 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
       </div>
       <div class="fg"><label class="fl">Importo incassato €</label><input type="number" class="fc" id="fa-incimp" step="0.01"></div>
+      <div class="fg"><label class="fl">Note in fattura
+        <span style="font-weight:400;color:var(--mut)">&mdash; le legge il committente</span></label>
+        <textarea class="fc" id="fa-notefatt" rows="2"
+          placeholder="Di norma si lascia vuoto"></textarea>
+        <div class="hint">Finiscono nel campo che i programmi di fatturazione mostrano come
+          &laquo;note&raquo;. Ci va <b>solo quello che scrivi qui</b>: se la lasci vuota il documento
+          esce senza note.</div></div>
       <div class="fg"><label class="fl">Note interne</label>
         <textarea class="fc" id="fa-note2" rows="2"></textarea>
-        <div class="hint">Promemoria per voi. <b>Non finiscono in fattura</b>: quello che deve leggere il committente si scrive nella finestra di revisione, prima di generare il file.</div></div>
+        <div class="hint">Promemoria per voi. <b>Non finiscono in fattura</b>: per quelle c&rsquo;&egrave;
+          la casella qui sopra.</div></div>
       <input type="hidden" id="fa-id2">
     </div>
     <div class="mf">
@@ -1102,7 +1110,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.08.7';
+const VERSIONE = '2026.09.09.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1297,7 +1305,8 @@ const MIGRAZIONI = {
   '022_ripartizione_soci':   ['ripartisce'],
   '023_ore_esterni':         ['esterno','costo_totale'],
   '024_righe_fattura':       ['commessa_fattura_righe','fattura_id'],
-  '025_fine_commessa':       ['allinea_fine_commessa']
+  '025_fine_commessa':       ['allinea_fine_commessa'],
+  '026_note_fattura':        ['note_fattura']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -4143,38 +4152,21 @@ function spezza(testo, max, maxPezzi) {
   return out;
 }
 
-/* LA PREMESSA E' TESTO, NON UNA RIGA DI FATTURA
-   Nel tracciato FatturaPA PrezzoUnitario, PrezzoTotale e AliquotaIVA sono
-   obbligatori su OGNI riga: una riga descrittiva non esiste, al massimo esiste
-   una riga che costa zero - e nel documento si legge appunto "0,00 EUR", con
-   tanto di quantita' e aliquota. Per l'oggetto dell'incarico e' sbagliato: non
-   e' una voce che non si paga, e' il testo che dice di che lavoro si tratta.
+/* LE NOTE DEL DOCUMENTO LE SCRIVE UNA PERSONA
+   <Causale> e' il campo che i programmi di fatturazione mostrano come "Note":
+   lo legge il committente. Prima se lo componeva il gestionale, mettendoci
+   l'oggetto dell'incarico e il riferimento alla commessa - roba messa li' da
+   una regola, non da qualcuno: in fattura compariva sempre una nota che
+   nessuno aveva scritto e nessuno poteva togliere. E' lo stesso difetto, in
+   forma piu' educata, della nota per l'amministrazione che finiva al
+   committente.
 
-   Il posto per il testo libero e' la <Causale> del documento, che i programmi
-   mostrano come "Note": nessuna colonna, nessun importo, nessuna aliquota.
-   Sta sotto le righe invece che sopra - la posizione la decide il foglio di
-   stile dell'Agenzia, non noi - ma e' l'unico modo di avere testo e basta.
-
-   Vale solo quando i servizi sono elencati: con la riga unica l'oggetto ce
-   l'ha gia' dentro, e ripeterlo sarebbe il difetto da cui siamo partiti. */
-function premessaDa(d) {
-  if (!(d.righe && d.righe.length)) return '';
-  const testo = (d.oggetto || d.descrizione || '').trim();
-  if (!testo) return '';
-  if (d.righe.length === 1 && latin(d.righe[0].descrizione) === latin(testo)) return '';
-  return testo;
-}
-
-/* Il testo che finisce nelle note del documento, composto una volta sola:
-   l'oggetto dell'incarico, il riferimento alla commessa, e quello che e' stato
-   scritto apposta in revisione. La usano sia la generazione del file sia
-   l'anteprima, cosi' non possono raccontare due cose diverse. */
+   Ci va quello che c'e' scritto nella casella "Note in fattura" dello
+   scaglione, e nient'altro. Vuota: il documento esce senza note, che e' il
+   caso normale. La usano sia la generazione del file sia l'anteprima in
+   revisione, cosi' non possono raccontare due cose diverse. */
 function anteprimaCausale(d) {
-  return [
-    premessaDa(d),
-    d.commessa ? 'Commessa: ' + d.commessa + (d.codice ? ' (' + d.codice + ')' : '') : '',
-    d.causale
-  ].filter(x => x).join('. ');
+  return String(d.causale || '').trim();
 }
 
 /* --------------------------------------------------------------------------
@@ -4221,11 +4213,11 @@ function datiFattura(f) {
     descrizione : f.descrizione || 'Prestazioni professionali',
     commessa    : p.name || '',
     codice      : p.codice || '',
-    /* La causale del documento nasce VUOTA e la si scrive, se serve, nella
-       finestra di revisione. Le note dello scaglione e la nota della richiesta
-       di fatturazione NON entrano qui: si scrivono per l'amministrazione, non
-       per il committente. Restano dove sono, e in fattura non ci vanno. */
-    causale     : '',
+    /* Le note che il committente legge in fattura: quelle scritte apposta
+       nella casella "Note in fattura" dello scaglione, e nient'altro. "note"
+       e' il promemoria interno e "richiesta_note" il messaggio a chi fattura:
+       nessuno dei due esce dallo studio. */
+    causale     : (f.note_fattura || '').trim(),
     /* I servizi elencati nella stessa fattura: uno per riga, con il suo importo.
        Vuoto = fattura a riga unica, come prima. */
     righe       : righeFattura(f.id).map(r => ({
@@ -5173,6 +5165,7 @@ function openFatt(id, presetPid) {
   el('fa-inc').value   = f ? (f.data_incasso || '') : '';
   el('fa-incimp').value= f && f.importo_incassato !== null ? f.importo_incassato : '';
   el('fa-note2').value = f ? (f.note || '') : '';
+  el('fa-notefatt').value = f ? (f.note_fattura || '') : '';
   fillSel('fa-fase', fasiOf(pid).map(x => ({v:x.id, l:x.nome})), f ? f.fase_id : '', '- Nessuna: maturazione manuale -');
   el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
   el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
@@ -5262,7 +5255,8 @@ async function saveFatt() {
     data_fattura: el('fa-data').value || null,
     data_incasso: el('fa-inc').value || null,
     importo_incassato: el('fa-incimp').value === '' ? null : parseFloat(el('fa-incimp').value),
-    note: el('fa-note2').value.trim() || null
+    note: el('fa-note2').value.trim() || null,
+    note_fattura: el('fa-notefatt').value.trim() || null
   };
   setLoading('fa-save2', true);
   let fid = id;
@@ -5401,32 +5395,21 @@ function disegnaRevisione() {
           + '</div><div class="hint">Si modificano dallo scaglione, nella scheda '
           + 'Fatturazione.</div></div>'
         : '')
-    + (() => {
-        const testo = anteprimaCausale(d);
-        return testo
-          ? '<div class="fg"><label class="fl">Note del documento '
-            + '<span style="font-weight:400;color:var(--mut)">— testo, senza importi</span></label>'
-            + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
-              + 'border-radius:6px;padding:8px 10px;color:var(--mut)">' + esc(testo) + '</div>'
-            + '<div class="hint">È quello che il committente legge sotto le righe, nel campo che i '
-            + 'programmi di fatturazione chiamano «note»: <b>solo testo, nessun importo e nessuna '
-            + 'aliquota</b>. Lo componi con l’oggetto del servizio e la causale qui sotto.</div></div>'
-          : '';
-      })()
     + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
       + '<div class="hint">Finisce nell’oggetto della fattura e nella descrizione della riga. '
       + 'I caratteri non ammessi dallo schema vengono convertiti da soli.</div></div>'
 
-    /* L'unico campo che finisce nella causale del documento. Nasce vuoto a ogni
-       fattura: quello che il committente legge lo si scrive qui, guardandolo. */
-    + '<div class="fg"><label class="fl">Causale in fattura <span style="font-weight:400;color:var(--mut)">'
-      + '— la legge il committente</span></label>'
+    /* L'unico campo che finisce nelle note del documento. Arriva dallo
+       scaglione ed e' modificabile qui per l'ultima volta prima di generare:
+       quello che il committente legge si vede mentre lo si scrive. */
+    + '<div class="fg"><label class="fl">Note in fattura <span style="font-weight:400;color:var(--mut)">'
+      + '— le legge il committente</span></label>'
       + '<textarea class="fc" data-rev="causale" rows="2" placeholder="Di norma si lascia vuoto">'
       + esc(d.causale || '') + '</textarea>'
-      + '<div class="hint">Compare accanto al riferimento della commessa, nel campo che i programmi '
-      + 'di fatturazione mostrano come «note». <b>Le note dello scaglione e la nota alla '
-      + 'amministrazione non finiscono qui</b>: quelle restano fra voi.</div></div>'
+      + '<div class="hint">È l’unica cosa che finisce nel campo che i programmi di fatturazione '
+      + 'mostrano come «note»: <b>niente di più</b>. Vuoto, il documento esce senza note. '
+      + 'Le note interne dello scaglione e la nota all’amministrazione restano fra voi.</div></div>'
 
     + sez('Destinatario', d.pa ? 'ente pubblico: formato FPA12' : 'privato: formato FPR12')
     + '<div class="fg2">'

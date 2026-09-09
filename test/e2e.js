@@ -840,6 +840,43 @@ function launchOpts(){
     must(/Rilievo e restituzione grafica/.test(txt)&&/Pratica edilizia/.test(txt),
       'i servizi non compaiono sotto lo scaglione');
   });
+  await t('nelle note della fattura va solo quello che si scrive nella casella',async()=>{
+    /* Caso reale, commessa VIVIANA ZOPPI: nelle note compariva sempre
+       l'oggetto dell'incarico più il riferimento alla commessa, messi lì da
+       una regola e non da una persona. */
+    const g=await p.evaluate(async()=>{
+      const f=S.fatture[0];
+      const d=datiFattura(f);
+      return {vuota:anteprimaCausale(d), oggetto:d.oggetto, commessa:d.commessa, fid:f.id};
+    });
+    must(g.vuota==='','senza scrivere niente le note non sono vuote: "'+g.vuota+'"');
+    must(!!g.oggetto,'la fattura di prova non ha un oggetto: il controllo non proverebbe niente');
+    /* si scrive nella casella dal form di fatturazione, come fa una persona */
+    await p.locator('tbody tr[data-fatt]').first().click();
+    await p.waitForSelector('#m-fatt.show');
+    must(await p.locator('#fa-notefatt').count()===1,'la casella "Note in fattura" non c è sul form');
+    await p.fill('#fa-notefatt','Pagamento a 60 giorni come da disciplinare');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const d=await p.evaluate(()=>{
+      const f=S.fatture.find(x=>x.note_fattura);
+      return {salvata:f&&f.note_fattura, causale:f?anteprimaCausale(datiFattura(f)):null};
+    });
+    must(d.salvata==='Pagamento a 60 giorni come da disciplinare','non salvata: '+d.salvata);
+    must(d.causale==='Pagamento a 60 giorni come da disciplinare',
+      'nelle note finisce altro: "'+d.causale+'"');
+  });
+  await t('e le note interne non ci finiscono comunque',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click();
+    await p.waitForSelector('#m-fatt.show');
+    await p.fill('#fa-note2','promemoria che resta fra noi');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const d=await p.evaluate(()=>{
+      const f=S.fatture.find(x=>x.note==='promemoria che resta fra noi');
+      return {interna:f&&f.note, causale:f?anteprimaCausale(datiFattura(f)):null};
+    });
+    must(d.interna==='promemoria che resta fra noi','la nota interna non è stata salvata');
+    must(!/promemoria/.test(d.causale||''),'la nota interna è finita nelle note del documento: '+d.causale);
+  });
   await t('la generazione passa dalla finestra di revisione',async()=>{
     await p.locator('[data-fxml]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});
