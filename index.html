@@ -1184,7 +1184,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.10.3';
+const VERSIONE = '2026.09.10.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4468,18 +4468,25 @@ function xmlDaDati(d) {
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
 
   /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA AL DOCUMENTO
-     Esce a importo zero, sulla stessa aliquota delle altre righe: nel
-     tracciato FatturaPA prezzo unitario, prezzo totale e aliquota sono
-     obbligatori su OGNI riga, quindi una riga di solo testo non esiste e lo
-     zero e' il modo previsto per dire "questa riga non e' un addebito".
+     Esce come riga di solo testo, senza nessun numero accanto.
 
-     Provato anche a metterla fuori campo IVA con la natura N2.2, per vedere
-     se il programma di fatturazione la stampasse nuda: non funziona - i
-     numeri li stampa lo stesso - e in piu' sporca i totali con due righe di
-     esenzione IVA che non c'entrano niente. Tolto.
+     COME SI FA USCIRE NUDA: LA QUANTITA' A ZERO.
+     Nel tracciato FatturaPA prezzo unitario, prezzo totale e aliquota sono
+     obbligatori su OGNI riga: una riga senza importi non esiste. Ma la
+     QUANTITA' e' facoltativa, e messa a zero i programmi di fatturazione
+     riconoscono la riga come descrittiva e stampano la sola descrizione a
+     tutta larghezza, senza prezzo, senza quantita' e senza aliquota.
 
-     Resta da capire come faccia la parcella 47 ad avere quella riga senza
-     numeri: serve il suo XML, dal PDF non si vede. */
+     Non e' una deduzione: sta scritto nella parcella 47 dello studio, dove la
+     riga "ART.1 - Immobile sito in..." ha quantita' 0,00 ed esce nuda, mentre
+     una riga poco piu' sotto ha lo stesso prezzo zero e la stessa aliquota
+     22% ma quantita' 1,00, e infatti stampa "0,000 EUR 1 22% 0,00 EUR".
+     Fra le due l'unica differenza e' la quantita'.
+
+     L'aliquota resta quella delle altre righe. Provata anche la strada
+     dell'aliquota a zero con natura N2.2: non serve a niente - i numeri li
+     stampa lo stesso - e sporca i totali con righe di esenzione IVA che non
+     c'entrano. Non rifarla. */
   const premessa = premessaDa(d);
   if (premessa) linee.unshift({ descrizione: premessa, premessa: true, importo: 0 });
 
@@ -4598,6 +4605,10 @@ function xmlDaDati(d) {
           '<DettaglioLinee>'
           + '<NumeroLinea>' + (i + 1) + '</NumeroLinea>'
           + elL('Descrizione', r.descrizione, 1000)
+          /* Zero sulla premessa: e' questo che la fa uscire senza numeri.
+             Uno sulle righe vere, scritto esplicitamente invece che lasciato
+             sottinteso, cosi' il documento dice sempre quello che intende. */
+          + el2('Quantita', n2(r.premessa ? 0 : 1))
           + el2('PrezzoUnitario', n2(r.importo)) + el2('PrezzoTotale', n2(r.importo))
           + el2('AliquotaIVA', n2(d.aliquotaIva))
           + '</DettaglioLinee>').join('')

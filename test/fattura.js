@@ -339,12 +339,19 @@ t('la premessa e la prima riga del documento',
 t('dice su quale immobile',/VIA LA FONTE 22 A SIROLO/.test(campo(lZ[0],'Descrizione')),null);
 t('non ha prezzo',campo(lZ[0],'PrezzoTotale')==='0.00'&&campo(lZ[0],'PrezzoUnitario')==='0.00',
   campo(lZ[0],'PrezzoTotale'));
-/* Resta sull'aliquota delle altre righe. Provata la strada dell'aliquota a
-   zero con natura N2.2: il programma di fatturazione stampa i numeri lo
-   stesso e in piu' aggiunge due righe di esenzione IVA nei totali. */
+/* LA QUANTITA' A ZERO E' QUELLO CHE LA FA USCIRE NUDA: senza, il documento
+   stampa "0,00 EUR 1 22% 0,00 EUR" accanto alla descrizione. */
+t('ha QUANTITA ZERO: e questo che la fa uscire senza numeri',
+  campo(lZ[0],'Quantita')==='0.00',campo(lZ[0],'Quantita'));
+/* Resta sull'aliquota delle altre righe. Provata anche la strada
+   dell'aliquota a zero con natura N2.2: i numeri li stampa lo stesso e in
+   piu' aggiunge righe di esenzione IVA nei totali. Non rifarla. */
 t('resta sull aliquota del documento',campo(lZ[0],'AliquotaIVA')==='22.00',campo(lZ[0],'AliquotaIVA'));
 t('e non porta nessuna natura, che sporcherebbe i totali',
   !campo(lZ[0],'Natura'),campo(lZ[0],'Natura'));
+t('i servizi hanno invece quantita uno',
+  campo(lZ[1],'Quantita')==='1.00'&&campo(lZ[2],'Quantita')==='1.00',
+  [campo(lZ[1],'Quantita'),campo(lZ[2],'Quantita')]);
 t('i servizi vengono dopo, con i loro importi',
   campo(lZ[1],'PrezzoTotale')==='1000.00'&&campo(lZ[1],'AliquotaIVA')==='22.00'
   &&campo(lZ[2],'PrezzoTotale')==='2000.00',
@@ -465,6 +472,45 @@ const zero=Object.assign({},dR,{righe:[{descrizione:'Voce',importo:0}],imponibil
 t('servizi che sommano zero: bloccati',
   ctx.validaFattura(zero).some(x=>/zero/.test(x)),ctx.validaFattura(zero));
 ctx.S.fattRighe=[]; ctx.S.fatture=[];
+
+
+console.log('\n— LA RIGA DESCRITTIVA, CONFRONTATA CON UNA PARCELLA VERA —');
+/* test/riferimenti/parcella_47.xml e' una parcella dello studio scritta dentro
+   FatturaElettronica APP, con i dati del committente sostituiti. La sua prima
+   riga esce senza numeri; una riga poco piu' sotto ha lo stesso prezzo zero e
+   la stessa aliquota ma stampa tutto. La differenza sta li' dentro, e questo
+   controllo la tiene ferma: se un domani cambiassimo il modo di scrivere la
+   premessa, qui si vedrebbe subito che non somiglia piu' a quella che
+   funziona. */
+const RIF=fs.readFileSync(require('path').join(__dirname,'riferimenti','parcella_47.xml'),'utf8');
+const righeDi=x=>(x.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g)||[]);
+const cmp=(l,t)=>((l.match(new RegExp('<'+t+'>([^<]*)'))||[])[1]);
+const rif=righeDi(RIF);
+
+t('la parcella di riferimento ha la sua riga descrittiva in testa',
+  /^ART\.1/.test(cmp(rif[0],'Descrizione')||''),String(cmp(rif[0],'Descrizione')).slice(0,30));
+t('e quella riga ha quantita zero',cmp(rif[0],'Quantita')==='0.00',cmp(rif[0],'Quantita'));
+/* la prova che e' la quantita' e non il prezzo: la riga 6 vale zero euro come
+   la prima, stessa aliquota, ma ha quantita' 1 e nel documento stampa tutto */
+const gratis=rif.find(l=>Number(cmp(l,'PrezzoTotale'))===0&&cmp(l,'Quantita')!=='0.00');
+t('mentre un altra riga a prezzo zero, ma quantita uno, non e descrittiva',
+  !!gratis&&cmp(gratis,'AliquotaIVA')===cmp(rif[0],'AliquotaIVA'),
+  gratis?[cmp(gratis,'Quantita'),cmp(gratis,'AliquotaIVA')]:'non trovata');
+
+/* e ora: la riga che generiamo noi deve essere fatta allo stesso modo */
+const nostra=righeDi(rZ.xml)[0];
+t('la nostra premessa e scritta come quella della parcella vera',
+  cmp(nostra,'Quantita')===cmp(rif[0],'Quantita')
+  && cmp(nostra,'PrezzoUnitario')===cmp(rif[0],'PrezzoUnitario')
+  && cmp(nostra,'PrezzoTotale')===cmp(rif[0],'PrezzoTotale')
+  && cmp(nostra,'AliquotaIVA')===cmp(rif[0],'AliquotaIVA')
+  && !cmp(nostra,'Natura') && !cmp(rif[0],'Natura'),
+  {nostra:[cmp(nostra,'Quantita'),cmp(nostra,'PrezzoTotale'),cmp(nostra,'AliquotaIVA')],
+   rif:[cmp(rif[0],'Quantita'),cmp(rif[0],'PrezzoTotale'),cmp(rif[0],'AliquotaIVA')]});
+t('e anche l ordine degli elementi e lo stesso',
+  (nostra.match(/<([A-Za-z]+)>/g)||[]).join()===(rif[0].match(/<([A-Za-z]+)>/g)||[]).join(),
+  {nostra:(nostra.match(/<([A-Za-z]+)>/g)||[]).join(' '),
+   rif:(rif[0].match(/<([A-Za-z]+)>/g)||[]).join(' ')});
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

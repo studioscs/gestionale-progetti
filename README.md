@@ -613,20 +613,36 @@ A. rilievo geometrico confermativo             250,00 €   1   22%   305,00 €
 B. verifica di conformità strutturale        2.250,00 €   1   22% 2.745,00 €
 ```
 
-La riga esce a **importo zero**, sulla stessa aliquota delle altre: nel tracciato
-FatturaPA prezzo unitario, prezzo totale e aliquota sono **obbligatori su ogni
-riga** — una riga di solo testo non esiste, e lo zero è il modo previsto per dire
-«questa riga non è un addebito». **Il totale non si muove di un centesimo.**
+*Come si ottiene una riga senza numeri*: **con la quantità a zero.**
 
-Con la fattura a voce unica la premessa non compare: la descrizione *è* la riga.
+Nel tracciato FatturaPA prezzo unitario, prezzo totale e aliquota sono
+obbligatori su ogni riga — una riga senza importi non esiste. Ma la **quantità è
+facoltativa**, e messa a zero i programmi di fatturazione riconoscono la riga
+come descrittiva e stampano la sola descrizione a tutta larghezza: niente
+prezzo, niente quantità, niente aliquota.
 
-> **Lo zero però si vede.** Il programma di fatturazione stampa `0,00 € 1 22%
-> 0,00 €` accanto alla premessa, e non è quello che si vorrebbe. Provata anche la
-> strada dell'aliquota a zero con natura `N2.2`, per vedere se così la riga
-> uscisse nuda: **non funziona** — i numeri li stampa lo stesso — e in più
-> aggiunge ai totali due righe di esenzione IVA che non c'entrano niente. Tolta.
-> Come faccia una parcella scritta dentro FatturaElettronica APP ad avere quella
-> riga senza numeri non è deducibile dal PDF: servirebbe il suo XML.
+L'aliquota resta quella delle altre righe, e **il totale non si muove di un
+centesimo**. Con la fattura a voce unica la premessa non compare: la descrizione
+*è* la riga.
+
+Non è una deduzione, è copiato da una parcella dello studio scritta dentro
+FatturaElettronica APP:
+
+| riga | quantità | prezzo | IVA | come esce nel documento |
+|---|---|---|---|---|
+| `ART.1 - Immobile sito in…` | **0,00** | 0,00 | 22% | **nuda, a tutta larghezza** |
+| `Redazione di descrittiva…` | 1,00 | 0,00 | 22% | `0,000 € 1 22% 0,00 €` |
+
+Stesso prezzo, stessa aliquota: l'unica differenza è la quantità. Quella
+parcella sta in `test/riferimenti/parcella_47.xml` (dati del committente
+sostituiti) e un controllo confronta riga per riga la premessa che generiamo con
+la sua: se un domani cambiasse il modo di scriverla, si vedrebbe subito che non
+somiglia più a quella che funziona.
+
+> **Strada già provata e scartata:** mettere l'aliquota a zero con natura `N2.2`
+> per far uscire la riga fuori campo IVA. Non serve — i numeri il documento li
+> stampa lo stesso — e in più aggiunge ai totali due righe di esenzione IVA che
+> non c'entrano niente. Non rifarla.
 
 ### Nelle note va solo quello che scrivi tu
 
