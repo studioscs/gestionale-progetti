@@ -339,14 +339,15 @@ t('la premessa e la prima riga del documento',
 t('dice su quale immobile',/VIA LA FONTE 22 A SIROLO/.test(campo(lZ[0],'Descrizione')),null);
 t('non ha prezzo',campo(lZ[0],'PrezzoTotale')==='0.00'&&campo(lZ[0],'PrezzoUnitario')==='0.00',
   campo(lZ[0],'PrezzoTotale'));
-/* azzerare il solo prezzo non basta: il documento stamperebbe comunque
-   "0,000 EUR 1 22% 0,00 EUR". Fuori campo IVA la riga esce nuda. */
-t('e nemmeno l aliquota: e fuori campo IVA',campo(lZ[0],'AliquotaIVA')==='0.00',campo(lZ[0],'AliquotaIVA'));
-t('con la natura che il tracciato pretende a aliquota zero',
-  campo(lZ[0],'Natura')==='N2.2',campo(lZ[0],'Natura'));
-t('i servizi vengono dopo, con i loro importi e la loro aliquota',
+/* Resta sull'aliquota delle altre righe. Provata la strada dell'aliquota a
+   zero con natura N2.2: il programma di fatturazione stampa i numeri lo
+   stesso e in piu' aggiunge due righe di esenzione IVA nei totali. */
+t('resta sull aliquota del documento',campo(lZ[0],'AliquotaIVA')==='22.00',campo(lZ[0],'AliquotaIVA'));
+t('e non porta nessuna natura, che sporcherebbe i totali',
+  !campo(lZ[0],'Natura'),campo(lZ[0],'Natura'));
+t('i servizi vengono dopo, con i loro importi',
   campo(lZ[1],'PrezzoTotale')==='1000.00'&&campo(lZ[1],'AliquotaIVA')==='22.00'
-  &&campo(lZ[2],'PrezzoTotale')==='2000.00'&&!campo(lZ[2],'Natura'),
+  &&campo(lZ[2],'PrezzoTotale')==='2000.00',
   lZ.slice(1).map(l=>[campo(l,'PrezzoTotale'),campo(l,'AliquotaIVA')]));
 t('la numerazione resta consecutiva da 1',
   lZ.map((l,i)=>campo(l,'NumeroLinea')===String(i+1)).every(Boolean),
@@ -355,11 +356,9 @@ t('la numerazione resta consecutiva da 1',
 /* Il riepilogo deve elencare ogni combinazione aliquota+natura usata nelle
    righe: se ne mancasse una lo SdI scarterebbe il documento. */
 const riep=(rZ.errori?[]:rZ.xml.match(/<DatiRiepilogo>[\s\S]*?<\/DatiRiepilogo>/g))||[];
-t('il riepilogo ha il blocco per la riga fuori campo',riep.length===2,riep.length);
-t('e vale zero, quindi non sposta niente',
-  campo(riep[1],'AliquotaIVA')==='0.00'&&campo(riep[1],'Natura')==='N2.2'
-  &&campo(riep[1],'ImponibileImporto')==='0.00'&&campo(riep[1],'Imposta')==='0.00',
-  [campo(riep[1],'AliquotaIVA'),campo(riep[1],'ImponibileImporto')]);
+t('il riepilogo resta un blocco solo',riep.length===1,riep.length);
+t('senza righe di esenzione IVA che sporcano i totali',
+  !/Natura/.test(rZ.xml),(rZ.xml.match(/<Natura>[^<]*/g)||[]).join(' '));
 t('il totale del documento e quello di sempre',
   (rZ.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]==='3806.40',
   (rZ.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]);

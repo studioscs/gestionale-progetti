@@ -613,20 +613,20 @@ A. rilievo geometrico confermativo             250,00 €   1   22%   305,00 €
 B. verifica di conformità strutturale        2.250,00 €   1   22% 2.745,00 €
 ```
 
-*Come si ottiene una riga senza numeri*: nel tracciato FatturaPA prezzo unitario,
-prezzo totale e aliquota sono **obbligatori su ogni riga** — una riga di solo
-testo non esiste. Metterli a zero lasciando l'aliquota delle altre non basta: il
-documento stamperebbe `0,000 € 1 22% 0,00 €`. La riga esce nuda solo azzerando
-**anche l'aliquota**, cioè mettendola fuori campo IVA; e a quel punto il
-tracciato pretende la *natura* dell'operazione, che per una riga che non è
-un'operazione ma un titolo è `N2.2` (non soggetta, altri casi) — impostata in
-`NATURA_PREMESSA`, in un punto solo, perché è una scelta fiscale.
-
-Il riepilogo IVA guadagna un blocco a zero: ogni combinazione di aliquota e
-natura usata nelle righe deve comparire lì, altrimenti lo SdI scarta il
-documento. **Il totale non si muove di un centesimo.**
+La riga esce a **importo zero**, sulla stessa aliquota delle altre: nel tracciato
+FatturaPA prezzo unitario, prezzo totale e aliquota sono **obbligatori su ogni
+riga** — una riga di solo testo non esiste, e lo zero è il modo previsto per dire
+«questa riga non è un addebito». **Il totale non si muove di un centesimo.**
 
 Con la fattura a voce unica la premessa non compare: la descrizione *è* la riga.
+
+> **Lo zero però si vede.** Il programma di fatturazione stampa `0,00 € 1 22%
+> 0,00 €` accanto alla premessa, e non è quello che si vorrebbe. Provata anche la
+> strada dell'aliquota a zero con natura `N2.2`, per vedere se così la riga
+> uscisse nuda: **non funziona** — i numeri li stampa lo stesso — e in più
+> aggiunge ai totali due righe di esenzione IVA che non c'entrano niente. Tolta.
+> Come faccia una parcella scritta dentro FatturaElettronica APP ad avere quella
+> riga senza numeri non è deducibile dal PDF: servirebbe il suo XML.
 
 ### Nelle note va solo quello che scrivi tu
 

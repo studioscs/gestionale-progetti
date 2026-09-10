@@ -1184,7 +1184,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.10.2';
+const VERSIONE = '2026.09.10.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4243,13 +4243,6 @@ function spezza(testo, max, maxPezzi) {
   return out;
 }
 
-/* La "natura" che accompagna una riga fuori campo IVA. N2.2 = non soggetta,
-   altri casi: e' quella che si usa per una riga che non e' un'operazione ma
-   un titolo. Sta qui, con un nome, perche' e' una scelta fiscale e non un
-   dettaglio tecnico: se il commercialista dice di usarne un'altra, si cambia
-   in un punto solo. */
-const NATURA_PREMESSA = 'N2.2';
-
 /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA AL DOCUMENTO
    E' quello che si scrive nel campo "Descrizione" dello scaglione - "Art. 1
    OGGETTO DEL SERVIZIO SU IMMOBILE SITO IN..." - e va in cima alla fattura,
@@ -4474,21 +4467,19 @@ function xmlDaDati(d) {
   const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
 
-  /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA, SENZA NUMERI
-     Nel tracciato FatturaPA ogni riga deve avere per forza prezzo unitario,
-     prezzo totale e aliquota: una riga di solo testo non esiste. Metterli a
-     zero lasciando l'aliquota di tutte le altre non basta - il documento
-     stampa "0,000 EUR  1  22%  0,00 EUR", che e' quello che non si voleva.
+  /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA AL DOCUMENTO
+     Esce a importo zero, sulla stessa aliquota delle altre righe: nel
+     tracciato FatturaPA prezzo unitario, prezzo totale e aliquota sono
+     obbligatori su OGNI riga, quindi una riga di solo testo non esiste e lo
+     zero e' il modo previsto per dire "questa riga non e' un addebito".
 
-     La riga descrittiva si ottiene azzerando ANCHE l'aliquota. Quando
-     l'aliquota e' zero il tracciato pretende la "natura" dell'operazione, e
-     una riga che non e' un'operazione ma un titolo prende N2.2 (non soggetta,
-     altri casi). Un programma di fatturazione, davanti a una riga a zero e
-     fuori campo IVA, stampa la sola descrizione a tutta larghezza.
+     Provato anche a metterla fuori campo IVA con la natura N2.2, per vedere
+     se il programma di fatturazione la stampasse nuda: non funziona - i
+     numeri li stampa lo stesso - e in piu' sporca i totali con due righe di
+     esenzione IVA che non c'entrano niente. Tolto.
 
-     Il riepilogo IVA cresce di un blocco a zero, che e' la contropartita
-     dovuta: ogni combinazione di aliquota e natura usata nelle righe deve
-     comparire nel riepilogo, altrimenti il Sistema di Interscambio scarta. */
+     Resta da capire come faccia la parcella 47 ad avere quella riga senza
+     numeri: serve il suo XML, dal PDF non si vede. */
   const premessa = premessaDa(d);
   if (premessa) linee.unshift({ descrizione: premessa, premessa: true, importo: 0 });
 
@@ -4608,20 +4599,13 @@ function xmlDaDati(d) {
           + '<NumeroLinea>' + (i + 1) + '</NumeroLinea>'
           + elL('Descrizione', r.descrizione, 1000)
           + el2('PrezzoUnitario', n2(r.importo)) + el2('PrezzoTotale', n2(r.importo))
-          + el2('AliquotaIVA', n2(r.premessa ? 0 : d.aliquotaIva))
-          + (r.premessa ? el2('Natura', NATURA_PREMESSA) : '')
+          + el2('AliquotaIVA', n2(d.aliquotaIva))
           + '</DettaglioLinee>').join('')
     +   '<DatiRiepilogo>'
     +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
     +     el2('EsigibilitaIVA', d.split ? 'S' : 'I')
-    +   '</DatiRiepilogo>'
-    +   (linee.some(r => r.premessa)
-        ? '<DatiRiepilogo>' + el2('AliquotaIVA', n2(0)) + el2('Natura', NATURA_PREMESSA)
-          + el2('ImponibileImporto', n2(0)) + el2('Imposta', n2(0))
-          + el2('EsigibilitaIVA', d.split ? 'S' : 'I')
-          + '</DatiRiepilogo>' : '')
-    +   '</DatiBeniServizi>'
+    +   '</DatiRiepilogo></DatiBeniServizi>'
     +   '<DatiPagamento>' + el2('CondizioniPagamento', d.condizioni)
     +     '<DettaglioPagamento>' + el2('ModalitaPagamento', d.modalita)
     +       el2('DataScadenzaPagamento', scad) + el2('ImportoPagamento', n2(c.netto))
