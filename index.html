@@ -64,7 +64,13 @@ textarea.fc { resize:vertical; min-height:64px; }
 .btn-ic { padding:5px 8px; }
 
 /* ---------- LAYOUT ---------- */
-#app { display:none; height:100vh; overflow:hidden; }
+/* 100dvh e non 100vh: su Safari di iPhone e iPad "100vh" vale l'altezza dello
+   schermo SENZA la barra degli indirizzi, che pero' c'e'. Il fondo della
+   pagina finisce cosi' sotto il bordo visibile e non lo si raggiunge: e' il
+   motivo per cui dal telefono le ultime voci del menu non si vedevano. La
+   riga con 100vh resta prima come ripiego per i browser che non conoscono
+   dvh: la seconda vince dove e' supportata. */
+#app { display:none; height:100vh; height:100dvh; overflow:hidden; }
 #app.show { display:flex; }
 #side { width:224px; min-width:224px; background:var(--navy); display:flex; flex-direction:column; overflow-y:auto; }
 #main { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
@@ -95,6 +101,68 @@ textarea.fc { resize:vertical; min-height:64px; }
 .sfoot { margin-top:auto; padding:12px 16px; border-top:1px solid rgba(255,255,255,.1); }
 .sout { color:rgba(255,255,255,.45); font-size:12px; background:none; border:none; cursor:pointer; width:100%; text-align:left; padding:4px 0; }
 .sout:hover { color:#fff; }
+
+/* La striscia dei dati in testa alla commessa. Andava a capo mai, quindi su
+   uno schermo stretto le ultime voci - responsabile e ore - finivano oltre il
+   bordo destro senza modo di raggiungerle. */
+.pstats { display:flex; flex-wrap:wrap; gap:22px; font-size:12px; }
+@media (max-width:760px) { .pstats { gap:14px 20px; width:100%; } }
+
+/* ---------- TELEFONO ----------
+   La soglia e' 760px, sotto la larghezza di ogni iPad anche in verticale
+   (il piu' stretto, l'iPad mini, ne misura 768): su iPad la barra laterale
+   resta dov'e', perche' li' ci sta e funziona. Sotto i 760 non ci sta e
+   basta - su un iPhone SE si mangiava 224 dei 320 punti disponibili,
+   lasciandone 96 al lavoro vero - quindi diventa un cassetto che si apre da
+   un pulsante e si richiude appena si sceglie dove andare. */
+#menubtn { display:none; }
+
+@media (max-width:760px) {
+  #menubtn { display:inline-flex; align-items:center; justify-content:center;
+    width:40px; height:40px; margin-left:-6px; flex-shrink:0;
+    border:none; background:none; font-size:22px; color:var(--navy); cursor:pointer; }
+
+  /* Il cassetto: fuori campo, entra scorrendo. Resta position:fixed cosi'
+     non spinge il contenuto e non lo fa sbordare. */
+  #side { position:fixed; top:0; bottom:0; left:0; z-index:600;
+    transform:translateX(-100%); transition:transform .22s ease;
+    box-shadow:2px 0 18px rgba(0,0,0,.3); }
+  #side.aperto { transform:translateX(0); }
+  #sidevelo { position:fixed; inset:0; z-index:590; background:rgba(0,0,0,.45); }
+
+  /* Le voci diventano toccabili col dito: 44px e' la misura che Apple indica
+     come minimo perche' un bersaglio non si sbagli. */
+  .sn { padding:12px 16px; font-size:14px; min-height:44px; }
+  .sout { padding:10px 0; }
+
+  #top { padding:0 12px; gap:8px; }
+  #top h2 { font-size:15px; overflow:hidden; text-overflow:ellipsis; }
+  #page { padding:12px; }
+
+  /* Due colonne su uno schermo largo come una mano non sono due colonne:
+     sono due colonne illeggibili. */
+  .fg2, .fg3 { grid-template-columns:1fr; }
+  .kgrid { grid-template-columns:1fr 1fr; gap:10px; }
+  .kboard { grid-template-columns:1fr; }
+  .card { padding:14px; }
+
+  /* Su uno schermo stretto una fila di pulsanti non e' una fila: e' una fila
+     che finisce fuori dal bordo. Vanno a capo. */
+  .row, .card-h, .spread { flex-wrap:wrap; }
+
+  /* L'intestazione di una fase porta casella, nome, stato, avanzamento e il
+     pulsante delle impostazioni: su 320 punti non ci stanno in fila. La barra
+     dell'avanzamento e' l'unica che si puo' togliere senza perdere niente -
+     il rapporto fatte/totali resta scritto accanto. */
+  .grp-h { flex-wrap:wrap; gap:8px; }
+  .grp-mini { display:none; }
+
+  /* Safari di iOS ingrandisce la pagina da solo quando si tocca un campo con
+     il testo sotto i 16px, e poi tocca all'utente rimpicciolire a mano. A 16
+     non lo fa. */
+  .fc, .sel, input, select, textarea { font-size:16px; }
+  .pfase .fc { font-size:16px; }
+}
 
 /* ---------- CARDS / GRID ---------- */
 .card { background:#fff; border:1px solid var(--bord); border-radius:10px; padding:18px; }
@@ -411,7 +479,11 @@ tbody tr:hover td { background:#f0f4f9; }
   </nav>
   <div id="main">
     <div id="top">
-      <div>
+      <!-- Solo su telefono: da li' la barra laterale non ci sta, e diventa un
+           cassetto che si apre da qui. Su iPad e su computer resta fissa e
+           questo pulsante non esiste. -->
+      <button id="menubtn" aria-label="Apri il menu" aria-expanded="false">&#9776;</button>
+      <div style="min-width:0">
         <h2 id="ptitle">Oggi</h2>
         <div id="crumb"></div>
       </div>
@@ -420,6 +492,8 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="btn btn-sm btn-ic" id="refresh" title="Ricarica dati">&#8635;</button>
     </div>
     <div id="ndrop" class="ndrop"></div>
+    <!-- La tendina scura dietro al cassetto del menu: toccarla lo richiude. -->
+    <div id="sidevelo" hidden></div>
     <!-- Avviso di database non allineato: compare solo se all'avvio manca
          qualcosa, cosi' non lo si scopre al primo salvataggio fallito. -->
     <div id="schema-warn" style="display:none"></div>
@@ -1110,7 +1184,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.09.1';
+const VERSIONE = '2026.09.10.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3438,13 +3512,30 @@ const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del client
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
 
+/* IL CASSETTO DEL MENU (solo su telefono)
+   Su iPad e su computer la barra laterale e' sempre li' e queste funzioni non
+   fanno niente di visibile: la classe c'e' ma il CSS la ignora sopra i 760px.
+   Si chiude da sola appena si sceglie una voce, perche' lasciarla aperta
+   sopra la pagina appena scelta sarebbe il modo piu' rapido di non far vedere
+   quello che si e' appena chiesto. */
+function apriMenu(si) {
+  const s = el('side'), v = el('sidevelo'), b = el('menubtn');
+  const aperto = si === undefined ? !s.classList.contains('aperto') : !!si;
+  s.classList.toggle('aperto', aperto);
+  v.hidden = !aperto;
+  if (b) b.setAttribute('aria-expanded', aperto ? 'true' : 'false');
+}
+const chiudiMenu = () => apriMenu(false);
+
 function go(page) {
   S.page = page;
   if (page !== 'project') S.projId = null;
   qsa('.sn').forEach(n => n.classList.toggle('on', n.dataset.page === page));
+  chiudiMenu();
   render();
 }
 function goProject(pid, tab) {
+  chiudiMenu();
   S.projId = pid;
   S.page = 'project';
   S.tab = tab || 'avanzamento';
@@ -6067,7 +6158,7 @@ function rProject() {
       + '<span style="font-size:12px;color:var(--mut)">Avanzamento complessivo</span>'
       + '<b>' + pr.pct + '% (' + pr.done + '/' + pr.tot + ')</b></div>'
       + '<div class="pb"><div class="pbf" style="width:' + pr.pct + '%"></div></div></div>'
-    + '<div style="display:flex;gap:22px;font-size:12px">'
+    + '<div class="pstats">'
       + statBox('Inizio', fdate(p.start_date)) + statBox('Fine prevista', fdate(p.end_date), isLate(p.end_date) && p.status !== 'completato')
       + statBox('Importo', feuro(p.amount)) + statBox('Responsabile', p.owner_id ? un(p.owner_id) : '-')
       + statBox('Ore', S.time.filter(e => e.project_id === p.id).reduce((a,e) => a + Number(e.hours||0), 0).toFixed(1))
@@ -9156,6 +9247,8 @@ document.addEventListener('DOMContentLoaded', () => {
   el('nskip').onclick = ev => { ev.preventDefault(); chiudiReset(); boot(); };
   el('rpass2').onkeydown = e => { if (e.key === 'Enter') doRegister(); };
   el('sout').onclick = doLogout;
+  el('menubtn').onclick  = () => apriMenu();
+  el('sidevelo').onclick = chiudiMenu;
   el('refresh').onclick = async () => { if (await loadAll()) { render(); toast('Dati aggiornati'); } };
 
   el('bell').onclick = e => {
@@ -9397,7 +9490,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Scorciatoie da tastiera */
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeAll(); closePop(); el('ndrop').classList.remove('show'); return; }
+    if (e.key === 'Escape') { closeAll(); closePop(); chiudiMenu(); el('ndrop').classList.remove('show'); return; }
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     if (!S.loaded) return;

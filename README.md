@@ -532,6 +532,23 @@ dati assenti, un pulsante collegato a nulla.
 140 passi. I comandi distruttivi sono esclusi apposta: cancellerebbero i dati a
 metà giro e il rumore che ne segue nasconderebbe i guasti veri.
 
+### `mobile.js` — iPad e iPhone
+
+Rifà il giro su **sei schermi** — iPhone SE, iPhone 13, iPhone in orizzontale,
+iPad mini e iPad Pro in verticale, iPad in orizzontale — toccando col dito, non
+cliccando col mouse. Su ognuno verifica che aprendo una commessa la scheda si
+apra davvero, che in tutte e sei le sue linguette **niente finisca oltre il
+bordo destro**, e che le finestre ci stiano nello schermo.
+
+Su iPad controlla in più che la barra laterale resti dov'è. Su iPhone che
+diventi un cassetto, che si arrivi in fondo al menu, che si richiuda da sola
+quando scegli dove andare, che ogni voce sia alta almeno 44 punti — la misura
+sotto la quale un dito sbaglia bersaglio — e che nessun campo abbia il testo
+sotto i 16 punti, perché sotto quella soglia Safari di iOS ingrandisce la pagina
+da solo appena tocchi una casella.
+
+36 controlli.
+
 ---
 
 ## Fatturazione
@@ -802,6 +819,31 @@ I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
 destinatario SDI o PEC) si compilano nella scheda della commessa.
 
 ---
+
+## Da iPad e da iPhone
+
+**Su iPad si lavora**, non si consulta soltanto: la barra laterale resta dov'è
+in tutte le posizioni — anche sull'iPad mini in verticale, che è il più stretto
+—, le linguette della commessa si raggiungono tutte e le finestre ci stanno
+nello schermo. Non serve fare niente di diverso da come si fa al computer.
+
+**Su iPhone si consulta comodamente.** Sotto i 760 punti di larghezza — cioè
+ogni iPhone, e nessun iPad — la barra laterale non ci starebbe: si mangiava 224
+dei 320 punti di un iPhone SE, lasciandone 96 al lavoro vero. Diventa quindi un
+**cassetto**: lo apri col pulsante ☰ in alto a sinistra, si richiude da solo
+appena scegli dove andare, e il contenuto prende tutta la larghezza.
+
+Sempre sotto quella soglia: i moduli passano a una colonna sola, le file di
+pulsanti vanno a capo invece di finire oltre il bordo, e i campi di testo
+salgono a 16 punti — sotto quella misura Safari di iOS ingrandisce la pagina da
+solo appena tocchi una casella, e poi tocca a te rimpicciolirla a mano.
+
+L'altezza della pagina è misurata in `dvh` e non in `vh`: su Safari di iPhone e
+iPad `100vh` vale l'altezza dello schermo *senza* la barra degli indirizzi, che
+però c'è, e il fondo della pagina finisce sotto il bordo visibile. È il motivo
+per cui dal telefono le ultime voci del menu non si raggiungevano.
+
+Tutto questo è verificato a ogni modifica da `test/mobile.js` su sei schermi.
 
 ## Edilizia privata: il percorso completo
 
