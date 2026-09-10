@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -277,7 +277,7 @@ t('l XML si genera',!rR.errori,rR.errori);
 if(!rR.errori){
   const linee=rR.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g)||[];
   /* una premessa senza importo piu' i tre servizi */
-  t('una riga di fattura per ogni servizio',linee.length===3,linee.length);
+  t('una riga per ogni servizio, piu la premessa in testa',linee.length===4,linee.length);
   t('le righe sono numerate da 1 in su',
     linee.map((l,i)=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]===String(i+1)).every(Boolean),
     linee.map(l=>(l.match(/<NumeroLinea>(\d+)/)||[])[1]));
@@ -322,16 +322,62 @@ const rZ=ctx.xmlDaDati(dZ);
 t('l XML si genera',!rZ.errori,rZ.errori);
 const cauZ=(rZ.errori?[]:rZ.xml.match(/<Causale>[^<]*<\/Causale>/g))||[];
 
-t('senza note scritte, il documento non ha note',cauZ.length===0,cauZ);
-t('l oggetto dell incarico NON ci finisce piu da solo',
-  !/Art\. 1 OGGETTO DEL SERVIZIO/.test(rZ.xml),'oggetto trovato nel documento');
-t('e nemmeno il riferimento alla commessa',
+t('senza note scritte, il documento non ha NOTE',cauZ.length===0,cauZ);
+t('l oggetto dell incarico non finisce nelle note',
+  !cauZ.some(c=>/Art\. 1 OGGETTO/.test(c)),cauZ);
+t('e il riferimento alla commessa nemmeno',
   !/VIVIANA ZOPPI|2026_33/.test(rZ.xml),'riferimento alla commessa trovato');
 t('le note interne restano fuori',!/promemoria interno/.test(rZ.xml),null);
 t('la nota all amministrazione pure',!/chiedi a giorgio/.test(rZ.xml),null);
-t('i servizi restano quelli, con i loro importi',
-  (rZ.xml.match(/<DettaglioLinee>/g)||[]).length===2
-  &&/A\. Rilievo/.test(rZ.xml)&&/B\. Progetto/.test(rZ.xml),null);
+
+/* L'OGGETTO TORNA, MA COME PRIMA RIGA SENZA NUMERI (come la parcella 47) */
+const lZ=(rZ.errori?[]:rZ.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
+const campo=(l,t)=>((l.match(new RegExp('<'+t+'>([^<]*)'))||[])[1]);
+t('la premessa e la prima riga del documento',
+  lZ.length===3&&/Art\. 1 OGGETTO DEL SERVIZIO/.test(campo(lZ[0],'Descrizione')),
+  lZ.map(l=>String(campo(l,'Descrizione')).slice(0,18)));
+t('dice su quale immobile',/VIA LA FONTE 22 A SIROLO/.test(campo(lZ[0],'Descrizione')),null);
+t('non ha prezzo',campo(lZ[0],'PrezzoTotale')==='0.00'&&campo(lZ[0],'PrezzoUnitario')==='0.00',
+  campo(lZ[0],'PrezzoTotale'));
+/* azzerare il solo prezzo non basta: il documento stamperebbe comunque
+   "0,000 EUR 1 22% 0,00 EUR". Fuori campo IVA la riga esce nuda. */
+t('e nemmeno l aliquota: e fuori campo IVA',campo(lZ[0],'AliquotaIVA')==='0.00',campo(lZ[0],'AliquotaIVA'));
+t('con la natura che il tracciato pretende a aliquota zero',
+  campo(lZ[0],'Natura')==='N2.2',campo(lZ[0],'Natura'));
+t('i servizi vengono dopo, con i loro importi e la loro aliquota',
+  campo(lZ[1],'PrezzoTotale')==='1000.00'&&campo(lZ[1],'AliquotaIVA')==='22.00'
+  &&campo(lZ[2],'PrezzoTotale')==='2000.00'&&!campo(lZ[2],'Natura'),
+  lZ.slice(1).map(l=>[campo(l,'PrezzoTotale'),campo(l,'AliquotaIVA')]));
+t('la numerazione resta consecutiva da 1',
+  lZ.map((l,i)=>campo(l,'NumeroLinea')===String(i+1)).every(Boolean),
+  lZ.map(l=>campo(l,'NumeroLinea')));
+
+/* Il riepilogo deve elencare ogni combinazione aliquota+natura usata nelle
+   righe: se ne mancasse una lo SdI scarterebbe il documento. */
+const riep=(rZ.errori?[]:rZ.xml.match(/<DatiRiepilogo>[\s\S]*?<\/DatiRiepilogo>/g))||[];
+t('il riepilogo ha il blocco per la riga fuori campo',riep.length===2,riep.length);
+t('e vale zero, quindi non sposta niente',
+  campo(riep[1],'AliquotaIVA')==='0.00'&&campo(riep[1],'Natura')==='N2.2'
+  &&campo(riep[1],'ImponibileImporto')==='0.00'&&campo(riep[1],'Imposta')==='0.00',
+  [campo(riep[1],'AliquotaIVA'),campo(riep[1],'ImponibileImporto')]);
+t('il totale del documento e quello di sempre',
+  (rZ.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]==='3806.40',
+  (rZ.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]);
+if(!rZ.errori){
+  fs.writeFileSync('/tmp/fatt-premessa.xml',rZ.xml);
+  let wf=''; try{execSync('xmllint --noout /tmp/fatt-premessa.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
+  t('l XML resta ben formato',wf==='',wf.slice(0,300));
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-premessa.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('e VALIDO secondo lo schema',haXsd?/validates/.test(out):true,out.slice(0,400));
+}
+
+/* Con la fattura a voce unica la premessa non serve: la descrizione E' la riga */
+t('a voce unica non compare nessuna premessa',ctx.premessaDa({righe:[],oggetto:OGG})==='',null);
+t('ne quando direbbe la stessa cosa dell unico servizio',
+  ctx.premessaDa({righe:[{descrizione:OGG}],oggetto:OGG})==='',null);
+t('senza oggetto non si inventa niente',
+  ctx.premessaDa({righe:[{descrizione:'a'}],oggetto:'',descrizione:''})==='',null);
 
 /* Quello che si scrive nella casella, invece, ci finisce - e solo quello */
 const FN2=Object.assign({},FZ,{note_fattura:'Pagamento a 60 giorni come da disciplinare'});

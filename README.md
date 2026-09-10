@@ -600,6 +600,34 @@ Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
 
+### La premessa: l'oggetto in testa, senza importi
+
+La **Descrizione** dello scaglione — «Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE
+SITO IN…» — diventa la **prima riga della fattura**, sopra le voci che costano,
+e esce senza prezzo, senza quantità, senza aliquota:
+
+```
+DESCRIZIONE                                    IMPORTO  Q.TÀ  IVA    TOTALE
+Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE SITO IN VIA…
+A. rilievo geometrico confermativo             250,00 €   1   22%   305,00 €
+B. verifica di conformità strutturale        2.250,00 €   1   22% 2.745,00 €
+```
+
+*Come si ottiene una riga senza numeri*: nel tracciato FatturaPA prezzo unitario,
+prezzo totale e aliquota sono **obbligatori su ogni riga** — una riga di solo
+testo non esiste. Metterli a zero lasciando l'aliquota delle altre non basta: il
+documento stamperebbe `0,000 € 1 22% 0,00 €`. La riga esce nuda solo azzerando
+**anche l'aliquota**, cioè mettendola fuori campo IVA; e a quel punto il
+tracciato pretende la *natura* dell'operazione, che per una riga che non è
+un'operazione ma un titolo è `N2.2` (non soggetta, altri casi) — impostata in
+`NATURA_PREMESSA`, in un punto solo, perché è una scelta fiscale.
+
+Il riepilogo IVA guadagna un blocco a zero: ogni combinazione di aliquota e
+natura usata nelle righe deve comparire lì, altrimenti lo SdI scarta il
+documento. **Il totale non si muove di un centesimo.**
+
+Con la fattura a voce unica la premessa non compare: la descrizione *è* la riga.
+
 ### Nelle note va solo quello che scrivi tu
 
 `Causale` è il campo che i programmi di fatturazione mostrano come **«Note»**:
