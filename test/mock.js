@@ -8,7 +8,7 @@
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
-    commessa_contratti:[], commessa_fattura_righe:[]
+    commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -34,6 +34,7 @@
     commessa_contratti:['project_id','numero','tipo','oggetto','importo','stato'],
     commessa_fatture:['project_id','descrizione','stato'],
     commessa_fattura_righe:['fattura_id','descrizione','importo'],
+    commessa_spese:['project_id','tipo','importo','data_spesa'],
     profili_costi:['profile_id','valido_dal']
   };
   let seq=0; const uid=()=>'id'+(++seq);

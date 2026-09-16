@@ -877,6 +877,73 @@ function launchOpts(){
     must(d.interna==='promemoria che resta fra noi','la nota interna non è stata salvata');
     must(!/promemoria/.test(d.causale||''),'la nota interna è finita nelle note del documento: '+d.causale);
   });
+  await t('si registra una spesa anticipata dalla scheda Fatturazione',async()=>{
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>{ S.tab='fatture'; render(); });
+    await p.waitForTimeout(400);
+    must(/Spese anticipate per il committente/.test(await p.textContent('#page')),
+      'il pannello delle spese non c è nella scheda Fatturazione');
+    await p.click('[data-act="nuovaspesa"]');
+    await p.waitForSelector('#m-spesa.show',{timeout:4000});
+    await p.selectOption('#sp-tipo','bolli_genio');
+    await p.fill('#sp-imp','32');
+    await p.click('#sp-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>({n:speseDi(S.projId).length, aperte:speseAperte(S.projId).length,
+      tot:totSpese(speseAperte(S.projId))}));
+    must(g.n===1,'la spesa non è stata salvata');
+    must(g.aperte===1&&g.tot===32,'non risulta da farsi restituire: '+JSON.stringify(g));
+  });
+  await t('con «Altro» pretende di sapere di che spesa si tratta',async()=>{
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>{ S.tab='fatture'; render(); });
+    await p.waitForTimeout(400);
+    await p.click('[data-act="nuovaspesa"]');
+    await p.waitForSelector('#m-spesa.show',{timeout:4000});
+    await p.selectOption('#sp-tipo','altro');
+    await p.fill('#sp-imp','24.50');
+    await p.click('#sp-save'); await p.waitForTimeout(600);
+    must(await p.isVisible('#m-spesa'),'ha salvato una spesa «Altro» senza dire quale');
+    must(await p.evaluate(()=>speseDi(S.projId).length)===1,'l ha salvata lo stesso');
+    await p.fill('#sp-desc','diritti di segreteria');
+    await p.click('#sp-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>({n:speseAperte(S.projId).length,
+      etichetta:etichettaSpesa(speseDi(S.projId).find(x=>x.tipo==='altro'))}));
+    must(g.n===2,'la seconda spesa non è stata salvata: '+g.n);
+    must(/diritti di segreteria/.test(g.etichetta)&&/art\. 15/.test(g.etichetta),
+      'in fattura non uscirebbe come deve: '+g.etichetta);
+  });
+  await t('finiscono sulla prima fattura, e da lì non escono più',async()=>{
+    const g=await p.evaluate(async()=>{
+      const pid=S.projId, f=fattureOf(pid)[0];
+      if(!f) return {salta:true};
+      const prima=datiFattura(f).spese.length;
+      /* si rifà quello che fa la generazione del file: aggancia le spese
+         alla fattura e segna il documento come generato */
+      const aperte=speseAperte(pid).map(x=>x.id);
+      await SB.from('commessa_spese').update({fattura_id:f.id}).in('id',aperte);
+      await SB.from('commessa_fatture').update({xml_generato_at:new Date().toISOString()}).eq('id',f.id);
+      await loadAll(true);
+      const dopo=fattureOf(pid)[1];
+      return {prima, suQuella:datiFattura(byId(S.fatture,f.id)).spese.length,
+              sullaProssima:dopo?datiFattura(dopo).spese.length:0,
+              ancoraAperte:speseAperte(pid).length};
+    });
+    if(!g.salta){
+      must(g.prima===2,'la fattura non se le era prese: '+g.prima);
+      must(g.suQuella===2,'dopo la generazione non le ha più: '+g.suQuella);
+      must(g.sullaProssima===0,'sono finite anche sulla fattura dopo: sarebbero un doppione');
+      must(g.ancoraAperte===0,'risultano ancora da farsi restituire');
+    }
+  });
+  await t('una spesa già fatturata non si modifica più',async()=>{
+    const sid=await p.evaluate(()=>{const x=speseDi(S.projId).find(y=>y.fattura_id); return x?x.id:null;});
+    must(!!sid,'nessuna spesa agganciata a una fattura');
+    await p.evaluate(id=>openSpesa(id),sid);
+    await p.waitForTimeout(400);
+    must(await p.isDisabled('#sp-imp'),'l importo di una spesa già fatturata è ancora modificabile');
+    must(await p.isVisible('#sp-chiusa'),'non spiega perché non si tocca');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  });
   await t('la generazione passa dalla finestra di revisione',async()=>{
     await p.locator('[data-fxml]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});
@@ -1652,17 +1719,23 @@ function launchOpts(){
   });
 
   await t('spostando la fine di una fase la commessa la segue',async()=>{
-    /* Caso vero: commessa PIERUCCI, fine 04/09 segnata in rosso come scaduta
-       mentre la fase era già stata riportata all'11/09. */
-    const g=await p.evaluate(async()=>{
+    /* Caso vero: commessa PIERUCCI, con la fine segnata in rosso come scaduta
+       mentre la fase era già stata riportata più avanti.
+       Le date si contano da OGGI e non sono scritte fisse: una fine "futura"
+       scritta a mano smette di essere futura da sola, e il controllo
+       comincerebbe a fallire senza che nessuno abbia rotto niente. */
+    const D=await p.evaluate(()=>({ieri:iso(addD(today(),-1)), fraUnMese:iso(addD(today(),30)),
+                                   unMeseFa:iso(addD(today(),-30))}));
+    global.__DFIN=D;
+    const g=await p.evaluate(async D=>{
       const {data}=await SB.from('projects').insert({codice:'FIN_01',name:'Fine che segue',
-        status:'attivo',start_date:'2026-08-26',end_date:'2026-09-04'}).select().single();
+        status:'attivo',start_date:D.unMeseFa,end_date:D.ieri}).select().single();
       await SB.from('commessa_fasi').insert({project_id:data.id,fase_key:'att',nome:'Attività',
-        ordine:0,stato:'non_avviata',data_inizio:'2026-08-26',data_fine_prevista:'2026-09-04'});
+        ordine:0,stato:'non_avviata',data_inizio:D.unMeseFa,data_fine_prevista:D.ieri});
       await loadAll(true);
       return {pid:data.id,fid:fasiOf(data.id)[0].id,prima:byId(S.projects,data.id).end_date};
-    });
-    must(g.prima==='2026-09-04','la commessa di prova non parte dal 04/09: '+g.prima);
+    },D);
+    must(g.prima===D.ieri,'la commessa di prova non parte da ieri: '+g.prima);
     global.__PIDFIN=g.pid; global.__FIDFIN=g.fid;
     /* si sposta la fine della fase dall'interfaccia, come fa una persona */
     await p.evaluate(x=>{ S.projId=x.pid; S.tab='avanzamento'; go('project');
@@ -1670,15 +1743,15 @@ function launchOpts(){
     await p.waitForTimeout(500);
     const box='[data-piano="'+g.fid+'"]';
     must(await p.locator(box).count()===1,'riquadro della fase non aperto');
-    await p.fill(box+' [data-pf="df"]','2026-09-11');
+    await p.fill(box+' [data-pf="df"]',D.fraUnMese);
     await p.click('[data-psave="'+g.fid+'"]');
     await p.waitForTimeout(700);
     const d=await p.evaluate(pid=>({
       inApp:byId(S.projects,pid).end_date,
       nelDb:__DB.projects.find(x=>x.id===pid).end_date
     }),g.pid);
-    must(d.inApp==='2026-09-11','la commessa mostra ancora '+d.inApp+' invece del 11/09');
-    must(d.nelDb==='2026-09-11','nel database è rimasta '+d.nelDb);
+    must(d.inApp===D.fraUnMese,'la commessa mostra ancora '+d.inApp+' invece di '+D.fraUnMese);
+    must(d.nelDb===D.fraUnMese,'nel database è rimasta '+d.nelDb);
   });
   await t('e non risulta più scaduta',async()=>{
     const g=await p.evaluate(pid=>{
@@ -1688,13 +1761,13 @@ function launchOpts(){
     must(g.rossa===false,'la commessa resta segnata come scaduta con fine '+g.fine);
   });
   await t('ma una fase che finisce prima non accorcia la commessa',async()=>{
-    const g=await p.evaluate(async pid=>{
-      await SB.from('commessa_fasi').insert({project_id:pid,fase_key:'pre',nome:'Preliminare',
-        ordine:1,stato:'non_avviata',data_fine_prevista:'2026-08-30'});
+    const g=await p.evaluate(async x=>{
+      await SB.from('commessa_fasi').insert({project_id:x.pid,fase_key:'pre',nome:'Preliminare',
+        ordine:1,stato:'non_avviata',data_fine_prevista:x.unMeseFa});
       await loadAll(true);
-      return byId(S.projects,pid).end_date;
-    },global.__PIDFIN);
-    must(g==='2026-09-11','la commessa si è accorciata a '+g);
+      return byId(S.projects,x.pid).end_date;
+    },{pid:global.__PIDFIN,unMeseFa:global.__DFIN.unMeseFa});
+    must(g===global.__DFIN.fraUnMese,'la commessa si è accorciata a '+g);
   });
   await t('generando fasi da template la fine si sposta se serve',async()=>{
     const g=await p.evaluate(async()=>{

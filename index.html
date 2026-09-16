@@ -764,6 +764,46 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
+<div class="ov" id="m-spesa">
+  <div class="modal modal-sm">
+    <div class="mh"><h3 id="msp-t">Nuova spesa anticipata</h3><button class="mx" data-close="m-spesa">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16" style="font-size:12px">Quello che lo studio anticipa <b>in nome e per
+        conto del committente</b>: bolli, visure, diritti. In fattura esce come rimborso, con la
+        dicitura di legge, <b>senza IVA e senza contributo cassa</b>.</div>
+      <div class="wbox mb16" id="sp-chiusa" style="display:none;font-size:12px">Questa spesa &egrave;
+        gi&agrave; finita in una fattura emessa: non si modifica pi&ugrave;, perch&eacute; cambierebbe
+        il totale di un documento gi&agrave; trasmesso.</div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Tipo di spesa *</label>
+          <select class="fc" id="sp-tipo">
+            <option value="bolli_genio">Bolli Genio civile</option>
+            <option value="bolli_comune">Bolli Comune</option>
+            <option value="catasto">Spese catasto</option>
+            <option value="diritti_comune">Spese e diritti Comune</option>
+            <option value="altro">Altro &mdash; specificare</option>
+          </select></div>
+        <div class="fg"><label class="fl">Importo anticipato &euro; *</label>
+          <input type="number" class="fc" id="sp-imp" step="0.01" min="0"></div>
+      </div>
+      <div class="fg"><label class="fl" id="sp-desc-l">Dettaglio (facoltativo)</label>
+        <input class="fc" id="sp-desc" placeholder="Es. pratica n. 1234"></div>
+      <div class="fg"><label class="fl">Data della spesa</label>
+        <input type="date" class="fc" id="sp-data"></div>
+      <div class="fg"><label class="fl">Note interne</label>
+        <textarea class="fc" id="sp-note" rows="2"></textarea>
+        <div class="hint">Promemoria per voi: numero della ricevuta, chi ha pagato. <b>Non finiscono
+          in fattura.</b></div></div>
+      <input type="hidden" id="sp-id">
+    </div>
+    <div class="mf">
+      <span class="left"><button class="btn btn-d" id="sp-del" style="display:none">Elimina</button></span>
+      <button class="btn" data-close="m-spesa">Chiudi</button>
+      <button class="btn btn-p" id="sp-save">Salva</button>
+    </div>
+  </div>
+</div>
+
 <div class="ov" id="m-fatt">
   <div class="modal">
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
@@ -1184,7 +1224,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.10.4';
+const VERSIONE = '2026.09.16.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1207,7 +1247,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [],
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [],
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1380,7 +1420,8 @@ const MIGRAZIONI = {
   '023_ore_esterni':         ['esterno','costo_totale'],
   '024_righe_fattura':       ['commessa_fattura_righe','fattura_id'],
   '025_fine_commessa':       ['allinea_fine_commessa'],
-  '026_note_fattura':        ['note_fattura']
+  '026_note_fattura':        ['note_fattura'],
+  '027_spese_anticipate':    ['commessa_spese','data_spesa']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2706,7 +2747,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2723,7 +2764,8 @@ async function loadAll(silent) {
       SB.from('commessa_varianti').select('*').order('numero'),
       SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300),
       SB.from('commessa_contratti').select('*').order('numero'),
-      SB.from('commessa_fattura_righe').select('*').order('ordine')
+      SB.from('commessa_fattura_righe').select('*').order('ordine'),
+      SB.from('commessa_spese').select('*').order('data_spesa')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2746,6 +2788,7 @@ async function loadAll(silent) {
     S.varianti  = rva.error ? [] : (rva.data || []);
     S.contratti = rct.error ? [] : (rct.data || []);
     S.fattRighe = rfr.error ? [] : (rfr.data || []);
+    S.spese     = rsp.error ? [] : (rsp.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2755,7 +2798,8 @@ async function loadAll(silent) {
                      [rco, 'profili_costi'],    [ren, 'enti_pa'],
                      [rsa, 'commessa_sal'],     [rva, 'commessa_varianti'],
                      [rms, 'task_messaggi'],   [rct, 'commessa_contratti'],
-                     [rfr, 'commessa_fattura_righe']]);
+                     [rfr, 'commessa_fattura_righe'],
+                     [rsp, 'commessa_spese']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -4134,6 +4178,46 @@ function righeFattura(fid) {
 }
 const totRighe = rr => r2(rr.reduce((a, r) => a + Number(r.importo || 0), 0));
 
+/* ---------------------------------------------------------------------------
+   SPESE ANTICIPATE PER IL COMMITTENTE (art. 15 DPR 633/72)
+   Bolli, visure, diritti: soldi che lo studio tira fuori per conto del cliente
+   e che il cliente restituisce. Non sono un compenso, quindi in fattura vanno
+   fuori dalla base imponibile - niente IVA, niente cassa - e si sommano solo
+   al totale.
+   --------------------------------------------------------------------------- */
+const TIPI_SPESA = {
+  bolli_genio:    'Bolli Genio civile',
+  bolli_comune:   'Bolli Comune',
+  catasto:        'Spese catasto',
+  diritti_comune: 'Spese e diritti Comune',
+  altro:          'Altro'
+};
+/* La dicitura che il committente legge in fattura, davanti a ogni anticipo. */
+const DICITURA_SPESE = 'Spese anticipate esenti IVA art. 15 DPR 633/72';
+/* Natura N1 = escluse ex art. 15. E' quella che il tracciato pretende su una
+   riga ad aliquota zero di questo tipo. */
+const NATURA_SPESE = 'N1';
+
+const speseDi      = pid => S.spese.filter(x => x.project_id === pid);
+const speseAperte  = pid => speseDi(pid).filter(x => !x.fattura_id);
+const speseDiFatt  = fid => S.spese.filter(x => x.fattura_id === fid);
+const totSpese     = ss => r2(ss.reduce((a, x) => a + Number(x.importo || 0), 0));
+/* Come si chiama in fattura: la dicitura di legge, poi di che spesa si tratta. */
+const etichettaSpesa = x => DICITURA_SPESE + ' — '
+  + (x.tipo === 'altro' ? (x.descrizione || 'spesa anticipata')
+     : (TIPI_SPESA[x.tipo] || x.tipo) + (x.descrizione ? ' (' + x.descrizione + ')' : ''));
+
+/* QUALI SPESE FINISCONO SU QUESTA FATTURA
+   Quelle gia' agganciate, sempre: una fattura emessa non cambia piu'. E, se il
+   file non e' ancora stato generato, anche tutte quelle ancora da fatturare -
+   e' il significato di "sulla prima fattura utile". Da li' in poi restano
+   attaccate a quella e non possono finire due volte. */
+function speseDaMettere(f) {
+  if (!f) return [];
+  const gia = speseDiFatt(f.id);
+  return f.xml_generato_at ? gia : gia.concat(speseAperte(f.project_id));
+}
+
 /* Con le righe l'imponibile e' la loro somma, e vince su tutto: e' il database
    stesso a tenerlo allineato, qui si legge lo stesso numero senza aspettare il
    ricaricamento. Senza righe vale l'importo fisso, e in mancanza di quello la
@@ -4149,13 +4233,21 @@ function impFattura(f) {
 const fattAperta = f => ['da_emettere','pronta'].indexOf(f.stato) >= 0;
 
 /* Calcolo del documento: imponibile, contributo cassa, IVA, totale */
-function calcolaFattura(imponibile) {
+/* Il secondo argomento sono le ANTICIPAZIONI in nome e per conto del cliente
+   (art. 15 DPR 633/72): bolli, visure, diritti di segreteria. Non sono un
+   compenso, quindi non entrano nella base su cui si calcolano cassa e IVA - si
+   sommano solo al totale del documento e a quello da incassare. Chi le
+   trattasse come compenso pagherebbe IVA e cassa su soldi che ha solo
+   anticipato. */
+function calcolaFattura(imponibile, spese) {
+  const antic = r2(Number(spese) || 0);
   const cassa = STUDIO.aliquotaCassa ? r2(imponibile * STUDIO.aliquotaCassa / 100) : 0;
   const base  = r2(imponibile + (STUDIO.cassaSoggettaIva ? cassa : 0));
   const iva   = r2(base * STUDIO.aliquotaIva / 100);
   const rit   = STUDIO.ritenuta ? r2(imponibile * STUDIO.ritenuta.aliquota / 100) : 0;
-  return { imponibile: r2(imponibile), cassa, base, iva, totale: r2(base + iva), ritenuta: rit,
-           netto: r2(base + iva - rit) };
+  return { imponibile: r2(imponibile), cassa, base, iva, anticipazioni: antic,
+           totale: r2(base + iva + antic), ritenuta: rit,
+           netto: r2(base + iva + antic - rit) };
 }
 
 /* --------------------------------------------------------------------------
@@ -4330,6 +4422,9 @@ function datiFattura(f) {
        Vuoto = fattura a riga unica, come prima. */
     righe       : righeFattura(f.id).map(r => ({
                     descrizione: r.descrizione || '', importo: r2(r.importo || 0) })),
+    /* Le anticipazioni art. 15 da farsi restituire con questa fattura. */
+    spese       : speseDaMettere(f).map(x => ({
+                    id: x.id, descrizione: etichettaSpesa(x), importo: r2(x.importo || 0) })),
 
     /* Imposte */
     aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
@@ -4362,15 +4457,18 @@ function datiFattura(f) {
    i totali seguono. */
 function calcolaDa(d) {
   const imponibile = r2(Number(d.imponibile) || 0);
+  /* Le anticipazioni art. 15 restano fuori da cassa e IVA: si sommano solo in
+     coda, al totale e a quello da incassare. */
+  const antic = r2((d.spese || []).reduce((a, s) => a + (Number(s.importo) || 0), 0));
   const cassa = r2(imponibile * (Number(d.aliquotaCassa) || 0) / 100);
   const base  = r2(imponibile + (d.cassaSoggettaIva ? cassa : 0));
   const iva   = r2(base * (Number(d.aliquotaIva) || 0) / 100);
   const rit   = d.ritenuta ? r2(imponibile * Number(d.ritenuta.aliquota) / 100) : 0;
-  const totale = r2(base + iva);
+  const totale = r2(base + iva + antic);
   /* In scissione dei pagamenti l'IVA non la incassa chi emette: il documento la
      espone, ma l'importo da pagare ne e' al netto. */
-  const netto = r2((d.split ? base : base + iva) - rit);
-  return { imponibile, cassa, base, iva, totale, ritenuta: rit, netto };
+  const netto = r2((d.split ? base : base + iva) + antic - rit);
+  return { imponibile, cassa, base, iva, anticipazioni: antic, totale, ritenuta: rit, netto };
 }
 
 /* Controlli prima di generare. Separati dalla resa dell'XML perche' la finestra
@@ -4490,6 +4588,12 @@ function xmlDaDati(d) {
   const premessa = premessaDa(d);
   if (premessa) linee.unshift({ descrizione: premessa, premessa: true, importo: 0 });
 
+  /* Le anticipazioni per conto del cliente chiudono il documento, dopo i
+     compensi: e' l'ordine in cui le legge chi riceve, e tiene separato quello
+     che e' lavoro da quello che e' solo un rimborso. */
+  const tutteLeRighe = linee.concat((d.spese || []).map(x => ({
+    descrizione: x.descrizione, importo: r2(x.importo || 0), spesa: true })));
+
 
   const dest = String(d.destinatario || '').toUpperCase() || '0000000';
   const sede = (ind, civ, cap, com, pr) =>
@@ -4601,7 +4705,7 @@ function xmlDaDati(d) {
     +   '</DatiGeneraliDocumento>'
     +   bloccoRif
     +   '</DatiGenerali>'
-    +   '<DatiBeniServizi>' + linee.map((r, i) =>
+    +   '<DatiBeniServizi>' + tutteLeRighe.map((r, i) =>
           '<DettaglioLinee>'
           + '<NumeroLinea>' + (i + 1) + '</NumeroLinea>'
           + elL('Descrizione', r.descrizione, 1000)
@@ -4610,13 +4714,24 @@ function xmlDaDati(d) {
              sottinteso, cosi' il documento dice sempre quello che intende. */
           + el2('Quantita', n2(r.premessa ? 0 : 1))
           + el2('PrezzoUnitario', n2(r.importo)) + el2('PrezzoTotale', n2(r.importo))
-          + el2('AliquotaIVA', n2(d.aliquotaIva))
+          /* Le anticipazioni art. 15 stanno fuori campo IVA e portano la loro
+             natura; tutto il resto segue l'aliquota del documento. */
+          + el2('AliquotaIVA', n2(r.spesa ? 0 : d.aliquotaIva))
+          + (r.spesa ? el2('Natura', NATURA_SPESE) : '')
           + '</DettaglioLinee>').join('')
     +   '<DatiRiepilogo>'
     +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
     +     el2('EsigibilitaIVA', d.split ? 'S' : 'I')
-    +   '</DatiRiepilogo></DatiBeniServizi>'
+    +   '</DatiRiepilogo>'
+    /* Ogni combinazione di aliquota e natura usata nelle righe deve comparire
+       nel riepilogo: se mancasse, il Sistema di Interscambio scarterebbe. */
+    +   (c.anticipazioni
+        ? '<DatiRiepilogo>' + el2('AliquotaIVA', n2(0)) + el2('Natura', NATURA_SPESE)
+          + el2('ImponibileImporto', n2(c.anticipazioni)) + el2('Imposta', n2(0))
+          + el2('EsigibilitaIVA', d.split ? 'S' : 'I')
+          + '</DatiRiepilogo>' : '')
+    +   '</DatiBeniServizi>'
     +   '<DatiPagamento>' + el2('CondizioniPagamento', d.condizioni)
     +     '<DettaglioPagamento>' + el2('ModalitaPagamento', d.modalita)
     +       el2('DataScadenzaPagamento', scad) + el2('ImportoPagamento', n2(c.netto))
@@ -5147,6 +5262,7 @@ function fatturePanel(pid) {
   }).join('');
 
   return contrattiPanel(p)
+    + spesePanel(p)
     + '<div class="g2 mb16">'
     + '<div class="card"><div class="card-h"><span class="card-t">Situazione economica</span></div>'
       + '<div class="spread" style="font-size:13px;margin-bottom:12px"><span>Importo di commessa</span><b>' + feuro(imp) + '</b></div>'
@@ -5281,6 +5397,111 @@ function rFatturare() {
     + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
     + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti')
     + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)');
+}
+
+/* ---------------------------------------------------------------------------
+   SPESE ANTICIPATE PER IL COMMITTENTE
+   Quello che lo studio tira fuori di tasca per conto del cliente: bolli,
+   visure, diritti. Scritto qui appena lo si sostiene, va da solo sulla prima
+   fattura che si genera - e da li' in poi resta attaccato a quella.
+   --------------------------------------------------------------------------- */
+function spesePanel(p) {
+  const list = speseDi(p.id).slice()
+    .sort((a, b) => String(a.data_spesa).localeCompare(String(b.data_spesa)));
+  const aperte = list.filter(x => !x.fattura_id);
+
+  const riga = x => {
+    const f = x.fattura_id ? byId(S.fatture, x.fattura_id) : null;
+    return '<tr' + (canW() ? ' data-spesa="' + x.id + '" style="cursor:pointer"' : '') + '>'
+      + '<td style="width:96px;font-size:12px;color:var(--mut)">' + fdate(x.data_spesa) + '</td>'
+      + '<td>' + esc(TIPI_SPESA[x.tipo] || x.tipo)
+        + (x.descrizione ? '<div style="font-size:11px;color:var(--mut)">' + esc(x.descrizione) + '</div>' : '')
+        + '</td>'
+      + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(x.importo) + '</b></td>'
+      + '<td style="font-size:11.5px">' + (x.fattura_id
+          ? '<span style="color:var(--grn)">✓ in fattura' + (f && f.numero_fattura ? ' n. ' + esc(f.numero_fattura) : '')
+            + '</span>'
+          : '<span style="color:var(--ora);font-weight:600">da farsi restituire</span>') + '</td>'
+      + '</tr>';
+  };
+
+  return '<div class="card mb16">'
+    + '<div class="card-h"><span class="card-t">Spese anticipate per il committente</span>'
+      + '<span class="row">'
+        + (aperte.length ? '<span class="chip chip-a">' + feuro(totSpese(aperte)) + ' da farsi restituire</span> ' : '')
+        + (canW() ? '<button class="btn btn-sm btn-p" data-act="nuovaspesa">&#43; Spesa</button>' : '')
+      + '</span></div>'
+    + (list.length
+        ? '<div class="tw"><table class="tsm"><tbody>' + list.map(riga).join('') + '</tbody></table></div>'
+        : '<div class="hint" style="margin:0">Nessuna spesa anticipata.</div>')
+    + '<div class="hint" style="margin-top:10px">Bolli, visure, diritti di segreteria: quello che lo '
+      + 'studio anticipa <b>in nome e per conto del cliente</b>. Finiscono da sole sulla prima fattura '
+      + 'che generi, con la dicitura «' + esc(DICITURA_SPESE) + '», <b>senza IVA e senza cassa</b> — '
+      + 'sono un rimborso, non un compenso. Da lì restano attaccate a quella fattura e non possono '
+      + 'uscire due volte.</div>'
+    + '</div>';
+}
+
+let SPESA_PID = null;
+function openSpesa(id, presetPid) {
+  const x = id ? byId(S.spese, id) : null;
+  SPESA_PID = x ? x.project_id : (presetPid || S.projId);
+  el('msp-t').textContent = x ? 'Spesa anticipata' : 'Nuova spesa anticipata';
+  el('sp-id').value    = id || '';
+  el('sp-tipo').value  = x ? x.tipo : 'bolli_genio';
+  el('sp-desc').value  = x ? (x.descrizione || '') : '';
+  el('sp-imp').value   = x && x.importo !== null ? x.importo : '';
+  el('sp-data').value  = x ? (x.data_spesa || todayISO()) : todayISO();
+  el('sp-note').value  = x ? (x.note || '') : '';
+  el('sp-del').style.display = (id && canW()) ? 'inline-flex' : 'none';
+  /* Una spesa gia' finita in fattura non si tocca piu': cambiarla sposterebbe
+     il totale di un documento gia' emesso, e quel documento non cambia piu'. */
+  const chiusa = !!(x && x.fattura_id);
+  ['sp-tipo','sp-desc','sp-imp','sp-data'].forEach(k => el(k).disabled = chiusa);
+  el('sp-save').style.display = chiusa ? 'none' : '';
+  el('sp-del').style.display  = (id && canW() && !chiusa) ? 'inline-flex' : 'none';
+  el('sp-chiusa').style.display = chiusa ? '' : 'none';
+  disegnaSpesa();
+  openM('m-spesa');
+}
+/* La descrizione conta davvero solo su "Altro": negli altri casi il tipo dice
+   gia' tutto, e resta un'aggiunta facoltativa. */
+function disegnaSpesa() {
+  const altro = el('sp-tipo').value === 'altro';
+  el('sp-desc-l').textContent = altro ? 'Di che spesa si tratta *' : 'Dettaglio (facoltativo)';
+  el('sp-desc').placeholder = altro ? 'Es. diritti di segreteria' : 'Es. pratica n. 1234';
+}
+
+async function saveSpesa() {
+  const tipo = el('sp-tipo').value;
+  const desc = el('sp-desc').value.trim();
+  if (tipo === 'altro' && !desc)
+    return toast('Con «Altro» scrivi di che spesa si tratta: in fattura ci va quello.', 'error');
+  const imp = parseFloat(el('sp-imp').value);
+  if (isNaN(imp) || imp <= 0) return toast('Indica l’importo anticipato.', 'error');
+  const pay = {
+    project_id: SPESA_PID, tipo, descrizione: desc || null, importo: imp,
+    data_spesa: el('sp-data').value || todayISO(),
+    note: el('sp-note').value.trim() || null
+  };
+  const id = el('sp-id').value;
+  setLoading('sp-save', true);
+  const { error } = id
+    ? await SB.from('commessa_spese').update(pay).eq('id', id)
+    : await SB.from('commessa_spese').insert(Object.assign({ created_by: S.me.id }, pay));
+  setLoading('sp-save', false);
+  if (error) return sbErr(error, 'spesa anticipata');
+  closeM('m-spesa'); await loadAll(true); render();
+  toast(id ? 'Spesa aggiornata' : 'Spesa registrata: andrà sulla prossima fattura', 'success');
+}
+
+async function delSpesa() {
+  const id = el('sp-id').value; const x = byId(S.spese, id); if (!x) return;
+  if (x.fattura_id) return toast('È già in una fattura emessa: non si può eliminare.', 'error');
+  if (!confirm('Eliminare la spesa di ' + feuro(x.importo) + '?')) return;
+  const { error } = await SB.from('commessa_spese').delete().eq('id', id);
+  if (error) return sbErr(error, 'spesa anticipata');
+  closeM('m-spesa'); await loadAll(true); render(); toast('Spesa eliminata');
 }
 
 /* ----------------------------- MODALE SCAGLIONE ----------------------------- */
@@ -5630,6 +5851,7 @@ function aggiornaTotali() {
     + riga('Base imponibile IVA', c.base)
     + riga('IVA ' + d.aliquotaIva + '%', c.iva)
     + (c.ritenuta ? riga('Ritenuta d’acconto', -c.ritenuta) : '')
+    + (c.anticipazioni ? riga('Anticipazioni art. 15 (fuori IVA e cassa)', c.anticipazioni) : '')
     + riga('Totale documento', c.totale, true)
     + riga(d.split ? 'Da incassare (IVA versata dall’ente)' : 'Da incassare', c.netto, true)
     + '<div class="hint" style="margin-top:8px">Nome del file: <code>IT' + esc(STUDIO.piva) + '_'
@@ -5669,6 +5891,18 @@ async function generaDaRevisione() {
 
   /* Numero e data digitati in revisione tornano sullo scaglione: e' quello che
      poi si rilegge nell'elenco e nella pagina "Da fatturare". */
+  /* Le anticipazioni entrate in questo documento si segnano come fatturate:
+     da qui in poi appartengono a questa fattura e non possono finire su
+     un'altra. Prima di scrivere il numero, perche' e' la cosa che non deve
+     sfuggire: una spesa fatturata due volte e' un errore che si scopre tardi
+     e si spiega male. */
+  const daSegnare = speseDaMettere(byId(S.fatture, REV.fattId)).filter(x => !x.fattura_id);
+  if (daSegnare.length) {
+    const { error } = await SB.from('commessa_spese')
+      .update({ fattura_id: REV.fattId }).in('id', daSegnare.map(x => x.id));
+    if (error) sbErr(error, 'spese anticipate in fattura');
+  }
+
   const patch = { xml_generato_at: new Date().toISOString() };
   const f = byId(S.fatture, REV.fattId);
   if (f && REV.numero && REV.numero !== f.numero_fattura) patch.numero_fattura = REV.numero;
@@ -9418,6 +9652,9 @@ document.addEventListener('DOMContentLoaded', () => {
     recalcScadenza();
   };
   el('fa-save').onclick = saveFase;
+  el('sp-save').onclick = saveSpesa;
+  el('sp-del').onclick  = delSpesa;
+  el('sp-tipo').onchange = disegnaSpesa;
   el('fa-save2').onclick = saveFatt;
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
   el('fa-xml').onclick   = () => { const id = el('fa-id2').value; closeM('m-fatt'); openRevisione(id); };
@@ -9512,6 +9749,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-cli')))     { return openCliente(n.dataset.cli); }
     if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
     if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
+    if ((n = f('data-spesa')))   { return openSpesa(n.dataset.spesa); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
     if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
@@ -9536,6 +9774,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'ripristina') return archiviaProj(S.projId, false);
       if (a === 'prreset')  { S.prQ=''; S.prBucket=''; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
       if (a === 'fattstd')  return scaglioniStandard(S.projId);
+      if (a === 'nuovaspesa') return openSpesa(null, S.projId);
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'back')     return go('projects');

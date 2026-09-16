@@ -44,6 +44,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 23. [`sql/024_righe_fattura.sql`](sql/024_righe_fattura.sql) — più servizi nella stessa fattura, uno per riga
 24. [`sql/025_fine_commessa.sql`](sql/025_fine_commessa.sql) — la fine prevista della commessa segue le sue fasi
 25. [`sql/026_note_fattura.sql`](sql/026_note_fattura.sql) — le note che il committente legge in fattura le scrive una persona
+26. [`sql/027_spese_anticipate.sql`](sql/027_spese_anticipate.sql) — spese anticipate per il committente, art. 15
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -599,6 +600,44 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+### Spese anticipate per il committente (art. 15)
+
+Bolli del Genio civile, bolli del Comune, visure al catasto, diritti di
+segreteria: soldi che lo studio tira fuori di tasca **in nome e per conto del
+cliente** e che il cliente restituisce. Non erano scritti da nessuna parte — chi
+fatturava doveva ricordarsele, e quando se ne dimenticava una quella era persa.
+
+Nella scheda **Fatturazione** di ogni commessa c'è ora l'elenco, con `＋ Spesa`
+per aggiungerne una: tipo (bolli Genio, bolli Comune, catasto, spese e diritti
+Comune, *altro — specificare*), importo, data, e note interne che restano fra
+voi. In testa al riquadro si legge sempre **quanto c'è ancora da farsi
+restituire**.
+
+**Finiscono da sole sulla prima fattura che generi**, con la dicitura di legge:
+
+```
+DESCRIZIONE                                             IMPORTO  Q.TÀ  IVA   TOTALE
+A. rilievo geometrico confermativo                     1.000,00 €  1  22% 1.220,00 €
+Spese anticipate esenti IVA art. 15 DPR 633/72 — Bolli     32,00 €  1   0%    32,00 €
+Spese anticipate esenti IVA art. 15 DPR 633/72 — diritti…  24,50 €  1   0%    24,50 €
+```
+
+**Niente IVA e niente cassa**: le anticipazioni in nome e per conto stanno fuori
+dalla base imponibile (art. 15, comma 1, n. 3 del DPR 633/72). In fattura sono
+righe ad aliquota zero con natura `N1` — escluse ex art. 15 — e si sommano solo
+al totale del documento. La base su cui si calcola il contributo cassa resta il
+**solo compenso**. Trattarle come un compenso significherebbe pagare IVA e cassa
+su soldi che non sono un ricavo: un costo vero, ogni volta.
+
+Dal momento in cui il file viene generato, ogni spesa **resta attaccata a quella
+fattura**: non torna sulla successiva e non si può più modificare, perché
+cambierebbe il totale di un documento già trasmesso. Non si può né dimenticarne
+una né metterla due volte.
+
+Il modello è la parcella 47 dello studio, che questa riga la fa da anni: un
+controllo confronta la riga che generiamo con la sua — quantità, aliquota,
+natura.
 
 ### La premessa: l'oggetto in testa, senza importi
 

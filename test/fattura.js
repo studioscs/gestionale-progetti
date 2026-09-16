@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -511,6 +511,112 @@ t('e anche l ordine degli elementi e lo stesso',
   (nostra.match(/<([A-Za-z]+)>/g)||[]).join()===(rif[0].match(/<([A-Za-z]+)>/g)||[]).join(),
   {nostra:(nostra.match(/<([A-Za-z]+)>/g)||[]).join(' '),
    rif:(rif[0].match(/<([A-Za-z]+)>/g)||[]).join(' ')});
+
+
+console.log('\n— SPESE ANTICIPATE PER IL COMMITTENTE (art. 15) —');
+/* Bolli, visure, diritti: soldi che lo studio tira fuori per conto del cliente.
+   Non sono un compenso, quindi in fattura vanno fuori dalla base imponibile -
+   niente IVA e niente cassa - e si sommano solo al totale. Il modello e' la
+   riga 7 della parcella 47, che fa esattamente questo. */
+const SALVA={projects:ctx.S.projects,fatture:ctx.S.fatture,righe:ctx.S.fattRighe,spese:ctx.S.spese};
+ctx.S.projects=[{id:'pS',name:'Villa con bolli',codice:'2026_60',client:'Bianchi Luca',amount:5000,
+  cliente_cf:'BNCLCU80A01H501U',cliente_indirizzo:'Via Prova 1',cliente_cap:'60100',
+  cliente_comune:'Ancona',cliente_prov:'AN',cliente_sdi:'0000000'}];
+const FS={id:'fS',project_id:'pS',descrizione:'Primo acconto',imponibile:1000,stato:'pronta'};
+ctx.S.fatture=[FS]; ctx.S.fattRighe=[];
+ctx.S.spese=[
+ {id:'sp1',project_id:'pS',tipo:'bolli_genio',importo:32.00,data_spesa:'2026-03-01',fattura_id:null},
+ {id:'sp2',project_id:'pS',tipo:'catasto',descrizione:'visura n. 88',importo:15.50,data_spesa:'2026-03-04',fattura_id:null},
+ {id:'sp3',project_id:'pS',tipo:'altro',descrizione:'diritti di segreteria',importo:24.50,data_spesa:'2026-03-06',fattura_id:null}];
+
+t('le spese aperte sono tutte e tre',ctx.speseAperte('pS').length===3,ctx.speseAperte('pS').length);
+t('e sommano 72,00',ctx.totSpese(ctx.speseAperte('pS'))===72,ctx.totSpese(ctx.speseAperte('pS')));
+t('vanno sulla prima fattura che si genera',ctx.speseDaMettere(FS).length===3,null);
+t('in fattura portano la dicitura di legge',
+  /^Spese anticipate esenti IVA art\. 15 DPR 633\/72 — /.test(ctx.etichettaSpesa(ctx.S.spese[0])),
+  ctx.etichettaSpesa(ctx.S.spese[0]));
+t('e dicono di che spesa si tratta',
+  /Bolli Genio civile/.test(ctx.etichettaSpesa(ctx.S.spese[0]))
+  &&/visura n\. 88/.test(ctx.etichettaSpesa(ctx.S.spese[1])),ctx.etichettaSpesa(ctx.S.spese[1]));
+t('con «Altro» vale quello che si e scritto, non la parola Altro',
+  /diritti di segreteria/.test(ctx.etichettaSpesa(ctx.S.spese[2]))
+  &&!/Altro/.test(ctx.etichettaSpesa(ctx.S.spese[2])),ctx.etichettaSpesa(ctx.S.spese[2]));
+
+const dS=ctx.datiFattura(FS); dS.numero='2026/060'; dS.data='2026-09-16'; dS.progressivo=70;
+const cS=ctx.calcolaDa(dS);
+/* IL PUNTO: le anticipazioni non fanno base per cassa e IVA */
+t('la cassa si calcola sul compenso, non sulle spese',cS.cassa===40,cS.cassa);
+t('e nemmeno l IVA le tocca',cS.iva===ctx.r2(1040*0.22),cS.iva);
+t('ma il totale le comprende',cS.totale===ctx.r2(1040+228.80+72),[cS.totale,cS.anticipazioni]);
+t('e chi incassa le riceve',cS.netto===cS.totale,[cS.netto,cS.totale]);
+
+const rS=ctx.xmlDaDati(dS);
+t('l XML si genera',!rS.errori,rS.errori);
+const lS=(rS.errori?[]:rS.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
+const cp=(l,x)=>((l.match(new RegExp('<'+x+'>([^<]*)'))||[])[1]);
+t('le spese sono righe in fondo, dopo il compenso',
+  lS.length===4&&/Spese anticipate/.test(cp(lS[1],'Descrizione')),
+  lS.map(l=>String(cp(l,'Descrizione')).slice(0,22)));
+t('ognuna fuori campo IVA',lS.slice(1).every(l=>cp(l,'AliquotaIVA')==='0.00'),
+  lS.slice(1).map(l=>cp(l,'AliquotaIVA')));
+t('con natura N1, escluse ex art. 15',lS.slice(1).every(l=>cp(l,'Natura')==='N1'),
+  lS.slice(1).map(l=>cp(l,'Natura')));
+t('e quantita uno, che sono importi veri e non descrizioni',
+  lS.slice(1).every(l=>cp(l,'Quantita')==='1.00'),lS.slice(1).map(l=>cp(l,'Quantita')));
+t('il compenso resta sulla sua aliquota',cp(lS[0],'AliquotaIVA')==='22.00'&&!cp(lS[0],'Natura'),null);
+
+const riS=(rS.errori?[]:rS.xml.match(/<DatiRiepilogo>[\s\S]*?<\/DatiRiepilogo>/g))||[];
+t('il riepilogo ha il blocco delle escluse',riS.length===2,riS.length);
+t('che vale 72,00 a imposta zero',
+  cp(riS[1],'Natura')==='N1'&&cp(riS[1],'ImponibileImporto')==='72.00'&&cp(riS[1],'Imposta')==='0.00',
+  [cp(riS[1],'ImponibileImporto'),cp(riS[1],'Imposta')]);
+/* la base della cassa deve restare il solo compenso, come nella parcella 47 */
+t('la base della cassa e il solo compenso',
+  (rS.xml.match(/<ImponibileCassa>([\d.]+)/)||[])[1]==='1000.00',
+  (rS.xml.match(/<ImponibileCassa>([\d.]+)/)||[])[1]);
+t('il totale del documento comprende le spese',
+  (rS.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]==='1340.80',
+  (rS.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]);
+if(!rS.errori){
+  fs.writeFileSync('/tmp/fatt-spese.xml',rS.xml);
+  let wf=''; try{execSync('xmllint --noout /tmp/fatt-spese.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
+  t('l XML e ben formato',wf==='',wf.slice(0,300));
+  let out=''; try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/fatt-spese.xml 2>&1').toString();}
+  catch(e){out=(e.stdout||'')+(e.stderr||'');}
+  t('e VALIDO secondo lo schema',haXsd?/validates/.test(out):true,out.slice(0,400));
+}
+
+/* Scritte come le scrive la parcella 47, che questa riga la fa da anni */
+const rifSpesa=righeDi(RIF).find(l=>/SPESE ANTICIPATE/.test(cmp(l,'Descrizione')));
+t('la nostra riga di spesa e fatta come quella della parcella vera',
+  cmp(rifSpesa,'Quantita')===cp(lS[1],'Quantita')
+  && cmp(rifSpesa,'AliquotaIVA')===cp(lS[1],'AliquotaIVA')
+  && cmp(rifSpesa,'Natura')===cp(lS[1],'Natura'),
+  {nostra:[cp(lS[1],'Quantita'),cp(lS[1],'AliquotaIVA'),cp(lS[1],'Natura')],
+   rif:[cmp(rifSpesa,'Quantita'),cmp(rifSpesa,'AliquotaIVA'),cmp(rifSpesa,'Natura')]});
+
+/* UNA SPESA NON PUO' USCIRE DUE VOLTE */
+ctx.S.spese=ctx.S.spese.map(x=>Object.assign({},x,{fattura_id:'fS'}));
+const FS2={id:'fS2',project_id:'pS',descrizione:'Saldo',imponibile:4000,stato:'pronta'};
+ctx.S.fatture=[FS,FS2];
+t('gia fatturate, non tornano sulla fattura dopo',ctx.speseDaMettere(FS2).length===0,
+  ctx.speseDaMettere(FS2).length);
+t('ma restano su quella che le ha prese',ctx.speseDaMettere(FS).length===3,null);
+/* una fattura gia' generata non se ne prende di nuove */
+const FS3=Object.assign({},FS,{id:'fS3',xml_generato_at:'2026-09-01T10:00:00Z'});
+ctx.S.spese=ctx.S.spese.concat([{id:'sp4',project_id:'pS',tipo:'bolli_comune',importo:16,fattura_id:null}]);
+t('una fattura gia generata non si prende le spese nuove',
+  ctx.speseDaMettere(FS3).length===0,ctx.speseDaMettere(FS3).length);
+t('che aspettano invece la prossima',ctx.speseAperte('pS').length===1,ctx.speseAperte('pS').length);
+
+/* Senza spese il documento e' identico a prima: un blocco solo, niente N1 */
+ctx.S.spese=[];
+const rV=ctx.xmlDaDati(Object.assign({},ctx.datiFattura(FS),{numero:'2026/061',data:'2026-09-16',progressivo:71}));
+t('senza spese non compare nessun blocco di escluse',
+  !rV.errori&&(rV.xml.match(/<DatiRiepilogo>/g)||[]).length===1&&!/N1/.test(rV.xml),
+  (rV.errori?[]:rV.xml.match(/<DatiRiepilogo>/g)||[]).length);
+ctx.S.projects=SALVA.projects; ctx.S.fatture=SALVA.fatture;
+ctx.S.fattRighe=SALVA.righe; ctx.S.spese=SALVA.spese||[];
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

@@ -128,9 +128,13 @@ const SCHERMI=[
     });
     await t(nome+': dentro la commessa niente finisce oltre il bordo',async()=>{
       const fuori=[];
-      for(const tab of ['avanzamento','pratiche','fatturazione','contabilita','anagrafica','ore']){
+      /* le chiavi vere delle schede: 'fatture', non 'fatturazione' - con un
+         nome sbagliato la pagina resta vuota e il controllo non prova niente */
+      for(const tab of ['avanzamento','pratiche','fatture','contabilita','anagrafica','ore']){
         await p.evaluate(x=>{ S.tab=x; render(); },tab);
         await p.waitForTimeout(250);
+        const vuota=await p.evaluate(()=>document.getElementById('page').innerHTML.length<400);
+        must(!vuota,'la scheda '+tab+' non disegna niente: nome della scheda sbagliato?');
         const s=await p.evaluate(SBORDANO);
         if(s.length) fuori.push(tab+': '+s.slice(0,2).join(', '));
       }
