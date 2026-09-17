@@ -45,6 +45,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 24. [`sql/025_fine_commessa.sql`](sql/025_fine_commessa.sql) — la fine prevista della commessa segue le sue fasi
 25. [`sql/026_note_fattura.sql`](sql/026_note_fattura.sql) — le note che il committente legge in fattura le scrive una persona
 26. [`sql/027_spese_anticipate.sql`](sql/027_spese_anticipate.sql) — spese anticipate per il committente, art. 15
+27. [`sql/028_esterni_pagamento.sql`](sql/028_esterni_pagamento.sql) — parcelle dei collaboratori esterni: pagate e da pagare
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -600,6 +601,41 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+### Spese collaboratori esterni
+
+Il geologo, il collaudatore, l'acustico non mandano ore: mandano una parcella.
+Nella scheda **Ore** di ogni commessa c'è il riquadro **Spese collaboratori
+esterni**, con chi, quanto, quando — e la cosa che prima non aveva risposta:
+**se è già stata pagata.** In testa si legge il totale sulla commessa, quanto è
+già uscito e quanto resta.
+
+Si segna pagata **con un click** (`Segna pagata`), e la data la mette il
+gestionale a oggi; per una data diversa si apre la registrazione. Si torna
+indietro con lo stesso click al contrario.
+
+> **Il costo pesa sulla commessa dal momento in cui lo registri, pagato o no.**
+> Aspettare il pagamento per contarlo farebbe sembrare la commessa più
+> redditizia di quello che è, e te ne accorgeresti al bonifico. Il pagamento
+> dice solo se i soldi sono già usciti dalla cassa — e c'è un controllo che
+> verifica proprio questo: segnare pagata una parcella non sposta di un euro il
+> costo né il margine.
+
+### Quello che esce, su tutto lo studio
+
+La pagina **Da fatturare** dice quanto deve entrare. Ma su una commessa i soldi
+si muovono nei due sensi, e il geologo va pagato che il committente abbia
+saldato o no. Sotto i riquadri delle fatture c'è ora l'altra metà:
+
+| | |
+|---|---|
+| **Totale affidato agli esterni** | quanto è stato dato fuori, in tutto |
+| **Già pagato** | quanto è uscito dalla cassa |
+| **Ancora da pagare** | quanto deve ancora uscire |
+
+E sotto, l'elenco delle parcelle in sospeso **raggruppate per commessa**,
+ordinate da chi deve di più, con chi va pagato e da quanto tempo aspetta.
+Toccando una riga si apre la commessa.
 
 ### Spese anticipate per il committente (art. 15)
 

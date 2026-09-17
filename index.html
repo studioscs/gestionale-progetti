@@ -1096,6 +1096,17 @@ tbody tr:hover td { background:#f0f4f9; }
           <input type="number" class="fc" id="te-costo" step="0.01" min="0" placeholder="quanto ci costa la prestazione">
           <div class="hint">L&rsquo;importo della sua parcella, non quello che fatturiamo al committente.
           Entra nel costo della commessa e quindi nella Redditivit&agrave;.</div></div>
+        <div class="fg2">
+          <div class="fg"><label class="fl">Stato del pagamento</label>
+            <select class="fc" id="te-pag">
+              <option value="0">Da pagare</option>
+              <option value="1">Pagata</option>
+            </select></div>
+          <div class="fg" id="te-pagdt-box"><label class="fl">Pagata il</label>
+            <input type="date" class="fc" id="te-pagdt"></div>
+        </div>
+        <div class="hint" style="margin-top:-6px">Il costo pesa sulla commessa in ogni caso: che sia
+          gi&agrave; pagata o no cambia solo se &egrave; uscita dalla cassa.</div>
       </div>
     </div>
     <div class="mf">
@@ -1224,7 +1235,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.16.1';
+const VERSIONE = '2026.09.17.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1421,7 +1432,8 @@ const MIGRAZIONI = {
   '024_righe_fattura':       ['commessa_fattura_righe','fattura_id'],
   '025_fine_commessa':       ['allinea_fine_commessa'],
   '026_note_fattura':        ['note_fattura'],
-  '027_spese_anticipate':    ['commessa_spese','data_spesa']
+  '027_spese_anticipate':    ['commessa_spese','data_spesa'],
+  '028_esterni_pagamento':   ['pagato','data_pagamento']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2827,6 +2839,17 @@ const eEsterna = e => !!(e && e.esterno && String(e.esterno).trim());
 /* I nomi gia' usati, per non doverli riscrivere ogni volta */
 const nomiEsterni = () => Array.from(new Set(S.time.filter(eEsterna)
   .map(e => String(e.esterno).trim()))).sort((a, b) => a.localeCompare(b, 'it'));
+
+/* Le parcelle dei collaboratori esterni, e quali sono ancora da pagare.
+   Sono registrazioni di time_entries come le altre - e' cosi' che pesano sul
+   costo di commessa - ma vanno lette a parte: sono soldi che escono dalla
+   cassa dello studio, non ore di chi ci lavora dentro. */
+const esterniDi    = pid => S.time.filter(e => e.project_id === pid && eEsterna(e));
+const daPagare     = ee => ee.filter(e => !e.pagato);
+const giaPagate    = ee => ee.filter(e => !!e.pagato);
+const totEsterni   = ee => r2(ee.reduce((a, e) => a + Number(e.costo_totale || 0), 0));
+/* Su tutto lo studio: quanto e' uscito e quanto deve ancora uscire. */
+const esterniTutti = () => S.time.filter(eEsterna);
 /* Un'attivita' e' ancora DA FARE solo se la sua fase e' ancora aperta. Chiusa la
    fase, quello che sta dentro non e' piu' in scadenza: continuare a mostrarlo
    nello scadenzario riempirebbe la pagina di cose gia' archiviate e chi la
@@ -5341,10 +5364,13 @@ function rFatturare() {
   const emesse = S.fatture.filter(f => f.stato === 'emessa');
 
   if (!list.length && !emesse.length) {
-    el('page').innerHTML = '<div class="card"><div class="empty"><i>💶</i>'
+    /* Nessuna fattura, ma le parcelle degli esterni possono esserci lo stesso:
+       sono soldi che escono e vanno visti comunque. */
+    el('page').innerHTML = '<div class="card mb16"><div class="empty"><i>💶</i>'
       + '<p>Nessuno scaglione di fatturazione.</p>'
       + '<p style="font-size:12px;margin-top:6px">Aprine una commessa, scheda <b>Fatturazione</b>, '
-      + 'e genera gli scaglioni standard.</p></div></div>';
+      + 'e genera gli scaglioni standard.</p></div></div>'
+      + esterniRiepilogo();
     return;
   }
 
@@ -5385,6 +5411,7 @@ function rFatturare() {
             feuro(emesse.reduce((a, f) => a + impFattura(f), 0)), emesse.length ? 100 : 0, 'var(--blue)')
       + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
       + '</div>'
+    + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
     + (richieste.length
@@ -5502,6 +5529,56 @@ async function delSpesa() {
   const { error } = await SB.from('commessa_spese').delete().eq('id', id);
   if (error) return sbErr(error, 'spesa anticipata');
   closeM('m-spesa'); await loadAll(true); render(); toast('Spesa eliminata');
+}
+
+/* ---------------------------------------------------------------------------
+   QUELLO CHE ESCE: LE PARCELLE DEI COLLABORATORI ESTERNI
+   La pagina "Da fatturare" dice quanto deve entrare. Ma su una commessa i soldi
+   si muovono nei due sensi, e il geologo va pagato che il committente abbia
+   saldato o no. Qui sta l'altra meta': quanto e' gia' uscito e quanto deve
+   ancora uscire, su tutto lo studio e commessa per commessa.
+   --------------------------------------------------------------------------- */
+function esterniRiepilogo() {
+  const tutte = esterniTutti();
+  if (!tutte.length) return '';
+  const aperte = daPagare(tutte), chiuse = giaPagate(tutte);
+
+  /* Raggruppate per commessa, e prima quelle che devono di piu': e' l'ordine
+     in cui si guarda un elenco di cose da pagare. */
+  const per = {};
+  aperte.forEach(e => (per[e.project_id] = per[e.project_id] || []).push(e));
+  const righe = Object.keys(per)
+    .sort((a, b) => totEsterni(per[b]) - totEsterni(per[a]))
+    .map(pid => {
+      const ee = per[pid].slice().sort((a, b) => String(a.entry_date).localeCompare(String(b.entry_date)));
+      return '<tr data-proj="' + pid + '" style="cursor:pointer">'
+        + '<td style="font-size:12px"><b>' + esc(pn(pid)) + '</b></td>'
+        + '<td style="font-size:12px;color:var(--mut)">'
+          + ee.map(e => esc(e.esterno) + ' ' + feuro(e.costo_totale)).join(' · ') + '</td>'
+        + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(totEsterni(ee)) + '</b></td>'
+        + '<td style="font-size:12px;color:var(--mut);white-space:nowrap">'
+          + fdate(ee[0].entry_date) + '</td>'
+        + '</tr>';
+    }).join('');
+
+  return '<div class="card mb16">'
+    + '<div class="card-h"><span class="card-t">Collaboratori esterni &mdash; quello che esce</span>'
+      + '<span style="font-size:12px;color:var(--mut)">' + tutte.length
+      + (tutte.length === 1 ? ' prestazione' : ' prestazioni') + '</span></div>'
+    + '<div class="spread mb16" style="flex-wrap:wrap;gap:16px;font-size:13px">'
+      + '<span>Totale affidato agli esterni <b>' + feuro(totEsterni(tutte)) + '</b></span>'
+      + '<span style="color:var(--grn)">Già pagato <b>' + feuro(totEsterni(chiuse)) + '</b></span>'
+      + '<span style="color:var(--ora)">Ancora da pagare <b>' + feuro(totEsterni(aperte)) + '</b></span>'
+    + '</div>'
+    + (aperte.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th>Chi</th>'
+          + '<th style="text-align:right">Da pagare</th><th>Più vecchia</th></tr></thead><tbody>'
+          + righe + '</tbody></table></div>'
+        : '<div class="hint" style="margin:0">Nessuna parcella in sospeso: agli esterni è stato pagato tutto.</div>')
+    + '<div class="hint" style="margin-top:10px">Il costo pesa sulla redditività della commessa dal '
+      + 'momento in cui lo registri, pagato o no. Qui si vede solo <b>cosa è già uscito dalla cassa</b>. '
+      + 'Si segna pagata dalla scheda <b>Ore</b> della commessa.</div>'
+    + '</div>';
 }
 
 /* ----------------------------- MODALE SCAGLIONE ----------------------------- */
@@ -6473,7 +6550,8 @@ function rProject() {
   } else if (S.tab === 'anagrafica') {
     body += anagraficaPanel(p);
   } else if (S.tab === 'ore') {
-    body += (isAd() ? costoPanel(p.id) + '<div style="height:16px"></div>' : '') + orePanel(p.id);
+    body += (isAd() ? costoPanel(p.id) + '<div style="height:16px"></div>' : '')
+          + esterniPanel(p.id) + orePanel(p.id);
   }
   el('page').innerHTML = body;
 }
@@ -6786,6 +6864,69 @@ function mailtoAmministrazione(fid) {
   return 'mailto:' + encodeURIComponent(STUDIO.emailAmministrazione || '')
     + '?subject=' + encodeURIComponent('[' + p.name + '] Da fatturare: ' + f.descrizione)
     + '&body=' + encodeURIComponent(rows.join('\n'));
+}
+
+/* ---------------------------------------------------------------------------
+   SPESE PER COLLABORATORI ESTERNI
+   Il geologo, il collaudatore, l'acustico: mandano una parcella, non delle ore.
+   Qui si vede quanto costano su questa commessa e - la domanda che prima non
+   aveva risposta - quali sono gia' state pagate e quali no.
+   --------------------------------------------------------------------------- */
+function esterniPanel(pid) {
+  const list = esterniDi(pid).slice()
+    .sort((a, b) => String(b.entry_date).localeCompare(String(a.entry_date)));
+  const aperte = daPagare(list), chiuse = giaPagate(list);
+
+  const riga = e => '<tr' + (canW() ? ' data-ore="' + e.id + '" style="cursor:pointer"' : '') + '>'
+    + '<td style="width:94px;font-size:12px;color:var(--mut)">' + fdate(e.entry_date) + '</td>'
+    + '<td><b>' + esc(e.esterno) + '</b>'
+      + (e.description ? '<div style="font-size:11px;color:var(--mut)">' + esc(e.description) + '</div>' : '')
+      + '</td>'
+    + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(e.costo_totale) + '</b></td>'
+    + '<td style="font-size:11.5px;white-space:nowrap">' + (e.pagato
+        ? '<span style="color:var(--grn)">✓ pagata'
+          + (e.data_pagamento ? ' il ' + fdate(e.data_pagamento) : '') + '</span>'
+        : '<span style="color:var(--ora);font-weight:600">da pagare</span>') + '</td>'
+    + (canW() ? '<td class="ac" style="white-space:nowrap">'
+        + (e.pagato
+            ? '<button class="btn btn-xs" data-nonpag="' + e.id + '" title="Segnala come non ancora pagata">↺</button>'
+            : '<button class="btn btn-xs btn-p" data-paga="' + e.id + '">Segna pagata</button>')
+        + '</td>' : '')
+    + '</tr>';
+
+  return '<div class="card mb16">'
+    + '<div class="card-h"><span class="card-t">Spese collaboratori esterni</span>'
+      + '<span class="row">'
+        + (aperte.length ? '<span class="chip chip-a">' + feuro(totEsterni(aperte)) + ' da pagare</span> ' : '')
+        + (canW() ? '<button class="btn btn-sm btn-p" data-act="nuovoesterno">&#43; Prestazione</button>' : '')
+      + '</span></div>'
+    + (list.length
+        ? '<div class="spread mb8" style="font-size:13px;flex-wrap:wrap;gap:14px">'
+            + '<span>Totale sulla commessa <b>' + feuro(totEsterni(list)) + '</b></span>'
+            + '<span style="color:var(--grn)">Già pagate <b>' + feuro(totEsterni(chiuse)) + '</b></span>'
+            + '<span style="color:var(--ora)">Da pagare <b>' + feuro(totEsterni(aperte)) + '</b></span>'
+          + '</div>'
+          + '<div class="tw"><table class="tsm"><tbody>' + list.map(riga).join('') + '</tbody></table></div>'
+        : '<div class="hint" style="margin:0">Nessuna prestazione esterna su questa commessa.</div>')
+    + '<div class="hint" style="margin-top:10px">Geologo, collaudatore, acustico: mandano una parcella, '
+      + 'non delle ore. L’importo pesa sul <b>costo della commessa</b> e quindi sulla redditività, '
+      + 'che sia già pagato o no — quello che cambia è solo se è già uscito dalla cassa.</div>'
+    + '</div>';
+}
+
+/* Segnare pagata o non pagata: due click e non una finestra, perche' e' la
+   cosa che si fa piu' spesso e aprire un modulo per un interruttore e' tempo
+   buttato. La data di pagamento la mette il gestionale a oggi; per una data
+   diversa si apre la registrazione. */
+async function segnaPagata(id, si) {
+  const e = byId(S.time, id); if (!e) return;
+  const pay = si ? { pagato: true, data_pagamento: e.data_pagamento || todayISO() }
+                 : { pagato: false, data_pagamento: null };
+  Object.assign(e, pay);                       /* si vede subito */
+  render();
+  const { error } = await SB.from('time_entries').update(pay).eq('id', id);
+  if (error) { await loadAll(true); render(); return sbErr(error, 'pagamento della parcella'); }
+  toast(si ? 'Parcella di ' + e.esterno + ' segnata come pagata' : 'Segnata come da pagare', 'success');
 }
 
 function orePanel(pid) {
@@ -9354,7 +9495,7 @@ async function saveFase() {
    MODALE ORE
    =========================================================================== */
 let ORE_ID = null;
-function openOre(pid, id) {
+function openOre(pid, id, tipo) {
   const e = id ? byId(S.time, id) : null;
   ORE_ID = e ? id : null;
   el('mte-t').textContent = e ? 'Modifica registrazione' : 'Registra ore o costi';
@@ -9370,8 +9511,11 @@ function openOre(pid, id) {
   el('te-h').value = e && !eEsterna(e) ? e.hours : '';
   el('te-nome').value = e ? (e.esterno || '') : '';
   el('te-costo').value = e && e.costo_totale != null ? e.costo_totale : '';
+  el('te-pag').value   = e && e.pagato ? '1' : '0';
+  el('te-pagdt').value = e ? (e.data_pagamento || '') : '';
+  el('te-pag').onchange = disegnaOre;
   el('te-nomi').innerHTML = nomiEsterni().map(n => '<option value="' + esc(n) + '">').join('');
-  el('te-kind').value = eEsterna(e) ? 'ext' : 'int';
+  el('te-kind').value = eEsterna(e) ? 'ext' : (tipo === 'ext' ? 'ext' : 'int');
   el('te-kind').onchange = disegnaOre;
 
   el('te-quick').innerHTML = [1,2,4,8].map(h => '<button class="btn btn-xs" data-h="' + h + '">' + h + ' h</button>').join('')
@@ -9386,6 +9530,11 @@ function disegnaOre() {
   const ext = el('te-kind').value === 'ext';
   el('te-int').style.display = ext ? 'none' : '';
   el('te-ext').style.display = ext ? '' : 'none';
+  /* La data di pagamento ha senso solo se la parcella e' pagata: chiedere
+     quando e' successa una cosa che non e' successa confonde e basta. */
+  const pagata = el('te-pag').value === '1';
+  el('te-pagdt-box').style.display = pagata ? '' : 'none';
+  if (pagata && !el('te-pagdt').value) el('te-pagdt').value = todayISO();
 }
 function loadTeTasks() {
   const pid = el('te-p').value;
@@ -9408,15 +9557,21 @@ async function saveOre() {
     if (isNaN(costo) || costo < 0) return toast('Indica il costo della prestazione.', 'error');
     if (!dt) return toast('La data è obbligatoria.', 'error');
     /* Le ore restano a zero: quello che pesa e' la parcella. */
+    const pagata = el('te-pag').value === '1';
     Object.assign(pay, { entry_date: dt, hours: 0, operator_id: null,
-                         esterno: nome, costo_totale: costo });
+                         esterno: nome, costo_totale: costo,
+                         pagato: pagata,
+                         /* mai una data di pagamento senza pagamento: il
+                            database lo rifiuta, ed e' giusto che lo faccia */
+                         data_pagamento: pagata ? (el('te-pagdt').value || todayISO()) : null });
   } else {
     const h = parseFloat(el('te-h').value), dt = el('te-dt').value;
     if (!h || h <= 0 || h > 24) return toast('Inserisci un numero di ore tra 0.5 e 24.', 'error');
     if (!dt) return toast('La data è obbligatoria.', 'error');
     if (!el('te-op').value) return toast('Indica chi ha fatto il lavoro.', 'error');
     Object.assign(pay, { entry_date: dt, hours: h, operator_id: el('te-op').value,
-                         esterno: null, costo_totale: null });
+                         esterno: null, costo_totale: null,
+                         pagato: false, data_pagamento: null });
   }
 
   setLoading('ste-btn', true);
@@ -9750,6 +9905,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
     if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
     if ((n = f('data-spesa')))   { return openSpesa(n.dataset.spesa); }
+    if ((n = f('data-paga')))    { e.stopPropagation(); return segnaPagata(n.dataset.paga, true); }
+    if ((n = f('data-nonpag')))  { e.stopPropagation(); return segnaPagata(n.dataset.nonpag, false); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
     if ((n = f('data-nonnec')))  { e.stopPropagation(); return nonNecessaria(n.dataset.nonnec); }
     if ((n = f('data-prat')))  { return openPratica(n.dataset.prat); }
@@ -9775,6 +9932,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'prreset')  { S.prQ=''; S.prBucket=''; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
       if (a === 'fattstd')  return scaglioniStandard(S.projId);
       if (a === 'nuovaspesa') return openSpesa(null, S.projId);
+      if (a === 'nuovoesterno') return openOre(S.projId, null, 'ext');
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'back')     return go('projects');

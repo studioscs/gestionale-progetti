@@ -944,6 +944,83 @@ function launchOpts(){
     must(await p.isVisible('#sp-chiusa'),'non spiega perché non si tocca');
     await p.keyboard.press('Escape'); await p.waitForTimeout(300);
   });
+  await t('la commessa ha la sezione delle spese per collaboratori esterni',async()=>{
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    /* si segna dove siamo, per rimetterci la pagina alla fine del blocco */
+    global.__PIDEST=await p.evaluate(()=>S.projId);
+    await p.evaluate(()=>{ S.tab='ore'; render(); });
+    await p.waitForTimeout(400);
+    must(/Spese collaboratori esterni/.test(await p.textContent('#page')),
+      'il pannello degli esterni non c è nella scheda Ore');
+    must(await p.locator('[data-act="nuovoesterno"]').count()===1,'manca il pulsante per aggiungerne una');
+  });
+  await t('si registra una parcella e risulta da pagare',async()=>{
+    await p.click('[data-act="nuovoesterno"]');
+    await p.waitForSelector('#m-time.show',{timeout:4000});
+    /* il modulo si apre già sul collaboratore esterno, non sulle ore */
+    must(await p.inputValue('#te-kind')==='ext','non si apre sulla prestazione esterna');
+    await p.fill('#te-nome','Dott. Geol. Rossi');
+    await p.fill('#te-costo','1200');
+    await p.click('#ste-btn'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>{
+      const ee=esterniDi(S.projId);
+      return {n:ee.length, daPagare:totEsterni(daPagare(ee)), pagate:totEsterni(giaPagate(ee))};
+    });
+    must(g.n===1,'la parcella non è stata salvata');
+    must(g.daPagare===1200&&g.pagate===0,'non risulta da pagare: '+JSON.stringify(g));
+  });
+  await t('si segna pagata con un click, e la data la mette da sé',async()=>{
+    await p.evaluate(()=>{ S.tab='ore'; render(); });
+    await p.waitForTimeout(400);
+    await p.click('[data-paga]'); await p.waitForTimeout(800);
+    const g=await p.evaluate(()=>{
+      const e=esterniDi(S.projId)[0];
+      return {pagato:e.pagato, quando:e.data_pagamento, oggi:todayISO(),
+              nelDb:(__DB.time_entries.find(x=>x.id===e.id)||{}).pagato};
+    });
+    must(g.pagato===true,'non risulta pagata');
+    must(g.quando===g.oggi,'la data di pagamento è '+g.quando+' invece di oggi');
+    must(g.nelDb===true,'nel database è rimasta da pagare');
+  });
+  await t('e si può tornare indietro',async()=>{
+    await p.evaluate(()=>{ S.tab='ore'; render(); });
+    await p.waitForTimeout(400);
+    await p.click('[data-nonpag]'); await p.waitForTimeout(800);
+    const g=await p.evaluate(()=>{
+      const e=esterniDi(S.projId)[0];
+      return {pagato:e.pagato, quando:e.data_pagamento};
+    });
+    must(g.pagato===false,'è rimasta pagata');
+    must(!g.quando,'ha tenuto la data di pagamento senza essere pagata: '+g.quando);
+  });
+  await t('il costo pesa sulla commessa anche se non è ancora pagata',async()=>{
+    const g=await p.evaluate(()=>{
+      const c=costoCommessa(S.projId);
+      return {esterni:c.costoEsterni!==undefined?c.costoEsterni:null, lordo:c.lordo};
+    });
+    must(g.esterni===1200||g.lordo>=1200,'la parcella non pesa sul costo: '+JSON.stringify(g));
+  });
+  await t('la pagina Da fatturare riepiloga quello che esce',async()=>{
+    await p.evaluate(()=>go('fatturare')); await p.waitForTimeout(600);
+    const txt=await p.textContent('#page');
+    must(/Collaboratori esterni/.test(txt),'il riepilogo degli esterni non c è');
+    must(/Ancora da pagare/.test(txt),'non dice quanto resta da pagare');
+    must(/Dott\. Geol\. Rossi/.test(txt),'non elenca chi va pagato');
+    const g=await p.evaluate(()=>({tot:totEsterni(esterniTutti()),
+      aperte:totEsterni(daPagare(esterniTutti()))}));
+    must(g.tot===1200&&g.aperte===1200,'i totali non tornano: '+JSON.stringify(g));
+  });
+  await t('e da lì si torna sulla commessa toccandola',async()=>{
+    const riga=p.locator('#page tr[data-proj]').first();
+    must(await riga.count()>0,'il riepilogo non è cliccabile');
+    await riga.click(); await p.waitForTimeout(600);
+    must(await p.evaluate(()=>S.page)==='project','non ha aperto la commessa');
+    /* si rimette la pagina dove l'abbiamo trovata: i controlli che vengono
+       dopo lavorano sulla scheda Fatturazione di questa commessa, e lasciarli
+       altrove li farebbe fallire per un motivo che non c'entra niente. */
+    await p.evaluate(pid=>{ goProject(pid,'fatture'); },global.__PIDEST);
+    await p.waitForTimeout(500);
+  });
   await t('la generazione passa dalla finestra di revisione',async()=>{
     await p.locator('[data-fxml]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});
@@ -1173,14 +1250,19 @@ function launchOpts(){
     must(await p.inputValue('#te-h')==='4');
     await p.fill('#te-d','Coordinamento impianti');
     await p.click('#ste-btn'); await p.waitForTimeout(600);
-    must(await p.evaluate(()=>__DB.time_entries.length===1),'ore non registrate');
+    /* si cerca LA registrazione, non si contano le righe: un conteggio
+       assoluto si rompe ogni volta che un altro controllo ne aggiunge una,
+       e per un motivo che non c'entra con quello che si sta verificando */
+    must(await p.evaluate(()=>__DB.time_entries.some(e=>e.description==='Coordinamento impianti'
+      && Number(e.hours)===4)),'ore non registrate');
   });
   await t('ore: blocca se manca la commessa',async()=>{
+    const prima=await p.evaluate(()=>__DB.time_entries.length);
     await p.click('[data-act="ore"]'); await p.waitForSelector('#m-time.show');
     await p.selectOption('#te-p',''); await p.fill('#te-h','2');
     await p.click('#ste-btn'); await p.waitForTimeout(300);
     must(await p.isVisible('#m-time.show'),'ha chiuso senza commessa');
-    must(await p.evaluate(()=>__DB.time_entries.length===1),'ha salvato senza commessa');
+    must(await p.evaluate(()=>__DB.time_entries.length)===prima,'ha salvato senza commessa');
     await p.keyboard.press('Escape');
   });
   await t('ore: ricorda ultima commessa',async()=>{

@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -847,6 +847,41 @@ ctx.scordaImpegno();
 t('nemmeno una archiviata',
   ctx.allineaFineCommessa('pW')===false&&ctx.S.projects[0].end_date==='2025-06-30',null);
 ctx.S.projects=[]; ctx.S.fasi=[]; ctx.scordaImpegno();
+
+
+console.log('\n— COLLABORATORI ESTERNI: PAGATI E DA PAGARE —');
+/* Il geologo, il collaudatore, l'acustico mandano una parcella. Il costo pesa
+   sulla commessa dal momento in cui lo registri; quello che cambia con il
+   pagamento e' solo se e' gia' uscito dalla cassa. */
+ctx.S.projects=[{id:'pA',name:'Villa',amount:20000},{id:'pB',name:'Capannone',amount:9000}];
+ctx.S.time=[
+  {id:'e1',project_id:'pA',esterno:'Geologo Rossi',costo_totale:1200,entry_date:'2026-04-01',hours:0,pagato:true,data_pagamento:'2026-05-02'},
+  {id:'e2',project_id:'pA',esterno:'Collaudatore Bianchi',costo_totale:800,entry_date:'2026-04-08',hours:0,pagato:false},
+  {id:'e3',project_id:'pB',esterno:'Acustico Verdi',costo_totale:450,entry_date:'2026-04-10',hours:0,pagato:false},
+  {id:'o1',project_id:'pA',operator_id:'u1',hours:8,entry_date:'2026-04-02'}];
+
+t('le ore di chi lavora in studio non sono prestazioni esterne',
+  ctx.esterniDi('pA').length===2,ctx.esterniDi('pA').length);
+t('su tutto lo studio sono tre',ctx.esterniTutti().length===3,ctx.esterniTutti().length);
+t('totale affidato agli esterni',ctx.totEsterni(ctx.esterniTutti())===2450,ctx.totEsterni(ctx.esterniTutti()));
+t('gia pagato',ctx.totEsterni(ctx.giaPagate(ctx.esterniTutti()))===1200,null);
+t('ancora da pagare',ctx.totEsterni(ctx.daPagare(ctx.esterniTutti()))===1250,null);
+t('e le due parti fanno il totale',
+  ctx.totEsterni(ctx.giaPagate(ctx.esterniTutti()))+ctx.totEsterni(ctx.daPagare(ctx.esterniTutti()))
+  ===ctx.totEsterni(ctx.esterniTutti()),null);
+t('commessa per commessa: sulla Villa restano 800',
+  ctx.totEsterni(ctx.daPagare(ctx.esterniDi('pA')))===800,null);
+
+/* IL PUNTO: il costo pesa sulla redditivita' che sia pagato o no. Chi aspettasse
+   il pagamento per contarlo vedrebbe una commessa piu' redditizia di quello che
+   e', e se ne accorgerebbe solo al bonifico. */
+const conTutte=ctx.costoCommessa('pA');
+ctx.S.time=ctx.S.time.map(e=>e.id==='e2'?Object.assign({},e,{pagato:true,data_pagamento:'2026-06-01'}):e);
+const tuttePagate=ctx.costoCommessa('pA');
+t('pagare una parcella non cambia il costo della commessa',
+  conTutte.lordo===tuttePagate.lordo,[conTutte.lordo,tuttePagate.lordo]);
+t('e nemmeno il margine',conTutte.margine===tuttePagate.margine,null);
+ctx.S.time=[]; ctx.S.projects=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);
