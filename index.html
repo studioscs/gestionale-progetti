@@ -464,7 +464,7 @@ tbody tr:hover td { background:#f0f4f9; }
     </div>
     <div class="ssec">
       <span class="slbl">Gestione</span>
-      <button class="sn" data-page="time"><span class="snic">&#9202;</span>Ore</button>
+      <button class="sn" data-page="time"><span class="snic">&#9202;</span>Ore / costi esterni</button>
       <button class="sn" data-page="chat"><span class="snic">&#128172;</span>Chat<span class="snb" id="b-chat">0</span></button>
     </div>
     <div class="ssec" id="sec-admin">
@@ -1235,7 +1235,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.17.1';
+const VERSIONE = '2026.09.18.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1433,7 +1433,8 @@ const MIGRAZIONI = {
   '025_fine_commessa':       ['allinea_fine_commessa'],
   '026_note_fattura':        ['note_fattura'],
   '027_spese_anticipate':    ['commessa_spese','data_spesa'],
-  '028_esterni_pagamento':   ['pagato','data_pagamento']
+  '028_esterni_pagamento':   ['pagato','data_pagamento'],
+  '029_ore_zero_esterni':    ['ck_ore_o_parcella']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -3576,7 +3577,7 @@ async function doLogout() {
    ROUTER
    =========================================================================== */
 const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
-                 tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore',
+                 tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
 
 /* IL CASSETTO DEL MENU (solo su telefono)
@@ -6509,7 +6510,7 @@ function rProject() {
     ['fatture',     'Fatturazione', fattureOf(p.id).length],
     ['contabilita', 'Contabilità & SAL', salOf(p.id).length || null],
     ['anagrafica',  'Anagrafica', null],
-    ['ore',         'Ore', null]
+    ['ore',         'Ore / costi esterni', null]
   ];
   el('top-act').innerHTML = bdg(p.status, ST_PROJ)
     + (canW() ? '<button class="btn btn-sm" data-act="editproj">Modifica</button>' : '')

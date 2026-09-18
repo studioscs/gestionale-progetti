@@ -46,6 +46,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 25. [`sql/026_note_fattura.sql`](sql/026_note_fattura.sql) — le note che il committente legge in fattura le scrive una persona
 26. [`sql/027_spese_anticipate.sql`](sql/027_spese_anticipate.sql) — spese anticipate per il committente, art. 15
 27. [`sql/028_esterni_pagamento.sql`](sql/028_esterni_pagamento.sql) — parcelle dei collaboratori esterni: pagate e da pagare
+28. [`sql/029_ore_zero_esterni.sql`](sql/029_ore_zero_esterni.sql) — **una parcella non ha ore: lo zero va ammesso, da eseguire**
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -475,6 +476,7 @@ il problema si ripete, richiama il file con un parametro, ad esempio
 | Barra superiore *(idem)* | I pulsanti azione erano fuori dall'area con delega eventi e non rispondevano |
 | Invito senza password | Il link di invito di Supabase **autentica già chi lo apre**: l'app lo trattava come un accesso normale e si entrava con un account che una password non aveva mai avuto. Chiunque fosse arrivato a quella mail entrava al posto suo, e non c'era niente da indovinare. Ora invito e link magico portano alla scelta della password, senza scorciatoia per saltarla, e l'account resta segnato finché una password non c'è |
 | Recupero password *(idem)* | Il link ricevuto per email autentica già l'utente: la sessione veniva trattata come un login normale e si entrava nell'app **senza mai poter cambiare la password**. Ora il link porta a una schermata dedicata; il link scaduto viene riconosciuto e spiegato |
+| Parcella dell'esterno rifiutata dal database | Il vincolo sulle ore nasce con la tabella e pretende `hours > 0`; dalla 023 però una registrazione può essere la parcella di un esterno, che ha **zero ore** per definizione. Ogni inserimento veniva rifiutato con `time_entries_hours_check`. Il vincolo ora dice la cosa giusta: ore positive per chi lavora in studio, zero per una parcella. **Non se n'era accorto nessuno perché quel vincolo stava nel database vero ma non nello schema di prova**: ora c'è in tutti e due |
 | «Password dimenticata» che non apriva nulla | Il file carica la libreria Supabase senza fissarne la versione. Le versioni recenti generano di default link `?code=...` invece del vecchio frammento autosufficiente `#access_token=...`: quel formato va scambiato esplicitamente, e lo scambio riesce **solo dallo stesso browser** che ha chiesto il recupero. Aprire la mail sul telefono dopo aver chiesto il recupero dal computer — il caso più comune — non funzionava, e senza un errore a spiegarlo il link sembrava non fare niente. Il client ora chiede esplicitamente il formato a frammento (che funziona da qualunque dispositivo); un `?code=` viene comunque gestito come rete di sicurezza, con un messaggio chiaro se lo scambio fallisce |
 
 Correzioni trasversali: parsing date senza slittamento UTC (una scadenza *oggi* non

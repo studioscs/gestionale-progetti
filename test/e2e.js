@@ -954,6 +954,28 @@ function launchOpts(){
       'il pannello degli esterni non c è nella scheda Ore');
     must(await p.locator('[data-act="nuovoesterno"]').count()===1,'manca il pulsante per aggiungerne una');
   });
+  await t('una parcella con delle ore il database la rifiuta',async()=>{
+    /* E' il guasto vero: il vincolo sulle ore nasce con la tabella e pretende
+       hours > 0, ma la parcella di un esterno ha zero ore per definizione.
+       La migrazione 029 lo rifa' dicendo la cosa giusta, e questo controllo
+       tiene ferme tutte e due le direzioni. */
+    const g=await p.evaluate(async()=>{
+      const pid=S.projId;
+      const a=await SB.from('time_entries').insert({project_id:pid,entry_date:todayISO(),
+        hours:3,esterno:'Tizio con le ore',costo_totale:100});
+      const b=await SB.from('time_entries').insert({project_id:pid,entry_date:todayISO(),
+        hours:0,operator_id:S.me.id});
+      const c=await SB.from('time_entries').insert({project_id:pid,entry_date:todayISO(),
+        hours:0,esterno:'Tizio corretto',costo_totale:100});
+      if(!c.error) await SB.from('time_entries').delete().eq('esterno','Tizio corretto');
+      return {conOre:!!a.error, oreZeroInterne:!!b.error, parcella:!c.error,
+              msg:(a.error||{}).message};
+    });
+    must(g.conOre,'ha accettato una parcella con delle ore');
+    must(/ck_ore_o_parcella/.test(g.msg||''),'rifiutata per un altro motivo: '+g.msg);
+    must(g.oreZeroInterne,'ha accettato zero ore per qualcuno dello studio');
+    must(g.parcella,'rifiuta la parcella scritta bene: è il bug segnalato');
+  });
   await t('si registra una parcella e risulta da pagare',async()=>{
     await p.click('[data-act="nuovoesterno"]');
     await p.waitForSelector('#m-time.show',{timeout:4000});

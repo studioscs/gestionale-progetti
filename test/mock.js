@@ -37,6 +37,27 @@
     commessa_spese:['project_id','tipo','importo','data_spesa'],
     profili_costi:['profile_id','valido_dal']
   };
+  /* VINCOLI DI COERENZA, come li dichiara il database vero. Senza, in
+     laboratorio passa roba che in produzione viene rifiutata: e' cosi' che la
+     parcella di un esterno - zero ore - e' arrivata rotta agli utenti. */
+  const VINCOLI={
+    time_entries:[
+      [r=>{ const est=(r.esterno||'').trim();
+            const h=Number(r.hours||0);
+            if(est) return h===0;                 // parcella: nessuna ora
+            if(r.operator_id===undefined) return true;  // aggiornamento parziale
+            return h>0; },                        // ore dello studio: positive
+       'ck_ore_o_parcella'],
+      [r=>!(r.data_pagamento&&!r.pagato), 'ck_pagamento_coerente']
+    ]
+  };
+  function verificaVincoli(table,rec){
+    for(const [ok,nome] of (VINCOLI[table]||[]))
+      if(!ok(rec)) return {message:'new row for relation "'+table
+        +'" violates check constraint "'+nome+'"'};
+    return null;
+  }
+
   let seq=0; const uid=()=>'id'+(++seq);
   const clone=x=>JSON.parse(JSON.stringify(x));
   const giornoPrima=d=>{ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()-1);
@@ -139,6 +160,7 @@
                       +'" violates not-null constraint'};
             return api;
           }
+        for(const r of arr){ const v=verificaVincoli(table,r); if(v){ api._err=v; return api; } }
         const made=arr.map(x=>Object.assign({id:uid(),created_at:new Date().toISOString()},x));
         /* Replica il trigger trg_chiudi_costo della migrazione 009: inserendo un
            nuovo costo, il periodo aperto precedente si chiude il giorno prima. */

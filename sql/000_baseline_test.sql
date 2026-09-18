@@ -45,7 +45,12 @@ create table if not exists public.time_entries(
   project_id uuid references public.projects(id) on delete cascade,
   task_id uuid references public.tasks(id) on delete set null,
   operator_id uuid references public.profiles(id), description text,
-  entry_date date not null, hours numeric not null, created_at timestamptz default now());
+  entry_date date not null, created_at timestamptz default now(),
+  /* Il vincolo c'e' nel database vero: una registrazione di ore nasce con
+     hours > 0. Senza dichiararlo qui, in laboratorio passava roba che in
+     produzione veniva rifiutata - e' cosi' che la parcella di un esterno,
+     che ha zero ore, e' arrivata rotta agli utenti. */
+  hours numeric not null check (hours > 0));
 
 create table if not exists public.files(
   id uuid primary key default gen_random_uuid(),
