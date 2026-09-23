@@ -764,6 +764,26 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
+<div class="ov" id="m-isa">
+  <div class="modal modal-lg">
+    <div class="mh"><h3>ISA &mdash; quadro C, tipologia dell&rsquo;attivit&agrave;</h3>
+      <button class="mx" data-close="m-isa">&#10005;</button></div>
+    <div class="mb">
+      <div class="row mb16" style="gap:10px;flex-wrap:wrap">
+        <label class="fl" style="margin:0">Anno di competenza</label>
+        <select class="sel" id="isa-anno" style="min-width:120px"></select>
+        <span class="hint" style="margin:0">I totali e le percentuali sono quelli da riportare nelle
+          due colonne di destra del modello.</span>
+      </div>
+      <div id="isa-body"></div>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-isa">Chiudi</button>
+      <button class="btn btn-p" id="isa-stampa">&#128424; Stampa</button>
+    </div>
+  </div>
+</div>
+
 <div class="ov" id="m-spesa">
   <div class="modal modal-sm">
     <div class="mh"><h3 id="msp-t">Nuova spesa anticipata</h3><button class="mx" data-close="m-spesa">&#10005;</button></div>
@@ -809,6 +829,18 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
     <div class="mb">
       <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="fa-desc" placeholder="Es. Acconto 30% alla sottoscrizione dell'incarico"></div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Tipologia ISA
+          <span style="font-weight:400;color:var(--mut)">&mdash; quadro C</span></label>
+          <select class="fc" id="fa-isa"></select></div>
+        <div class="fg"><label class="fl">Anno di competenza</label>
+          <select class="fc" id="fa-anno"></select></div>
+      </div>
+      <div class="hint" style="margin:-8px 0 14px">Servono a ricostruire a fine anno il quadro C del
+        modello ISA senza rileggere le fatture una per una. Se elenchi i servizi qui sotto, ognuno
+        pu&ograve; avere la sua tipologia e il suo anno: &egrave; il caso normale, perch&eacute; lo
+        stesso acconto pu&ograve; coprire progettazione e direzione lavori, che sono caselle diverse.
+        L&rsquo;anno di competenza <b>non &egrave; per forza quello della fattura</b>.</div>
       <div class="fg2" id="fa-box-imp">
         <div class="fg"><label class="fl">Percentuale dell'importo commessa</label><input type="number" class="fc" id="fa-perc" step="0.5" min="0" max="100"></div>
         <div class="fg"><label class="fl">oppure importo fisso €</label><input type="number" class="fc" id="fa-imp" step="0.01" min="0"></div>
@@ -1235,7 +1267,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.18.1';
+const VERSIONE = '2026.09.23.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1434,7 +1466,8 @@ const MIGRAZIONI = {
   '026_note_fattura':        ['note_fattura'],
   '027_spese_anticipate':    ['commessa_spese','data_spesa'],
   '028_esterni_pagamento':   ['pagato','data_pagamento'],
-  '029_ore_zero_esterni':    ['ck_ore_o_parcella']
+  '029_ore_zero_esterni':    ['ck_ore_o_parcella'],
+  '030_isa':                 ['isa_tipo','anno_competenza']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -4209,6 +4242,148 @@ const totRighe = rr => r2(rr.reduce((a, r) => a + Number(r.importo || 0), 0));
    fuori dalla base imponibile - niente IVA, niente cassa - e si sommano solo
    al totale.
    --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   QUADRO C DEL MODELLO ISA (EK23U, studi tecnici)
+   Le caselle da C01 a C29, con la dicitura breve per il menu a tendina e
+   quella per intero come la scrive il modello: la prima serve a scegliere in
+   fretta, la seconda a essere sicuri di aver scelto la casella giusta, perche'
+   fra C03, C04 e C05 cambia solo una soglia di importo.
+   --------------------------------------------------------------------------- */
+const ISA_TIPI = [
+  ['C01','Indagini preliminari e fattibilità',
+        'Indagini preliminari, valutazione d’impatto ambientale, ricerca di finanziamenti e/o studi di fattibilità tecnico-economica'],
+  ['C02','Progettazione opere pubbliche',
+        'Progettazione di opere pubbliche (preliminare e/o definitiva / Progetto di fattibilità tecnico-economica e/o esecutiva)'],
+  ['C03','Progett. preliminare privata — fino a 51.646',
+        'Progettazione preliminare di opere private (importo opere fino a euro 51.646,00)'],
+  ['C04','Progett. preliminare privata — 51.646÷258.228',
+        'Progettazione preliminare di opere private (importo opere oltre euro 51.646,00 e fino a euro 258.228,00)'],
+  ['C05','Progett. preliminare privata — oltre 258.228',
+        'Progettazione preliminare di opere private (importo opere oltre euro 258.228,00)'],
+  ['C06','Progett. esecutiva privata — fino a 51.646',
+        'Progettazione esecutiva di opere private (importo opere fino a euro 51.646,00)'],
+  ['C07','Progett. esecutiva privata — 51.646÷258.228',
+        'Progettazione esecutiva di opere private (importo opere oltre euro 51.646,00 e fino a euro 258.228,00)'],
+  ['C08','Progett. esecutiva privata — oltre 258.228',
+        'Progettazione esecutiva di opere private (importo opere oltre euro 258.228,00)'],
+  ['C09','Project management', 'Attività di project management'],
+  ['C10','Direzione lavori pubblica',
+        'Direzione lavori, assistenza al collaudo e liquidazione finale di opere pubbliche'],
+  ['C11','Direzione lavori privata — fino a 51.646',
+        'Direzione lavori, assistenza al collaudo e liquidazione finale di opere private (importo opere fino a euro 51.646,00)'],
+  ['C12','Direzione lavori privata — 51.646÷258.228',
+        'Direzione lavori, assistenza al collaudo e liquidazione finale di opere private (importo opere oltre euro 51.646,00 fino a euro 258.228,00)'],
+  ['C13','Direzione lavori privata — oltre 258.228',
+        'Direzione lavori, assistenza al collaudo e liquidazione finale di opere private (importo opere oltre euro 258.228,00)'],
+  ['C14','Misura e contabilità lavori', 'Misura e contabilità lavori'],
+  ['C15','Sicurezza (D.lgs. 81/2008)', 'Gestione della sicurezza (D.lgs. 81/2008)'],
+  ['C16','Controllo qualità', 'Controllo qualità'],
+  ['C17','Formazione del personale', 'Addestramento e formazione del personale'],
+  ['C18','Costruzione dell’opera', 'Costruzione dell’opera'],
+  ['C19','Montaggio e avviamento', 'Montaggio e avviamento dell’opera'],
+  ['C20','Collaudo', 'Collaudo di lavori e forniture di opere'],
+  ['C21','Gestione e manutenzione', 'Gestione e manutenzione programmata nell’esercizio dell’opera finale'],
+  ['C22','C.T.U.', 'Consulenza Tecnica d’Ufficio'],
+  ['C23','Contenzioso, C.T.P., arbitrato',
+        'Attività di contenzioso e/o consulenza tecnica di parte e/o arbitrato e/o conciliazione'],
+  ['C24','Consulenza (escluse C.T.U. e C.T.P.)', 'Attività di consulenza (escluse C.T.U. e C.T.P.)'],
+  ['C25','Perizie estimative', 'Perizie estimative'],
+  ['C26','Certificazione energetica', 'Certificazione/Qualificazione energetica degli edifici'],
+  ['C27','Certificazione acustica', 'Certificazione acustica degli edifici'],
+  ['C28','Collaborazioni con studi terzi', 'Stabili collaborazioni con studi e/o strutture di terzi'],
+  ['C29','Altre attività', 'Altre attività']
+];
+const isaBreve   = c => (ISA_TIPI.find(x => x[0] === c) || [,''])[1] || '';
+const isaCompleto= c => (ISA_TIPI.find(x => x[0] === c) || [,,''])[2] || '';
+/* Il menu a tendina, uguale ovunque lo si usi */
+const isaOpzioni = sel => '<option value="">— non classificata —</option>'
+  + ISA_TIPI.map(x => '<option value="' + x[0] + '"' + (sel === x[0] ? ' selected' : '')
+      + ' title="' + esc(x[2]) + '">' + x[0] + ' · ' + esc(x[1]) + '</option>').join('');
+/* Gli anni fra cui scegliere: qualche anno indietro e uno avanti, che a fine
+   dicembre si predispongono gia' gli scaglioni dell'anno dopo. */
+const isaAnni = () => { const q = today().getFullYear(); const out = [];
+  for (let a = q + 1; a >= q - 5; a--) out.push(a); return out; };
+const isaOpzAnni = sel => '<option value="">— anno non indicato —</option>'
+  + isaAnni().map(a => '<option value="' + a + '"' + (Number(sel) === a ? ' selected' : '') + '>' + a + '</option>').join('');
+
+/* LE VOCI CHE CONCORRONO ALL'ISA, PER UN ANNO
+   Una fattura con i servizi elencati porta una voce per riga; una a voce unica
+   ne porta una sola, con quello che c'e' scritto sullo scaglione. Le
+   anticipazioni art. 15 restano fuori: sono un rimborso, non un compenso, e
+   nel quadro C non ci vanno.
+
+   Si conta anche quello che NON e' classificato, per dirlo: un riepilogo che
+   tace su quello che non sa e' peggio di uno che non c'e'. */
+function isaVoci(anno) {
+  const out = [];
+  S.fatture.forEach(f => {
+    if (f.stato === 'annullata') return;
+    const rr = righeFattura(f.id);
+    if (rr.length) {
+      rr.forEach(r => out.push({
+        tipo: r.isa_tipo || f.isa_tipo || null,
+        anno: Number(r.anno_competenza || f.anno_competenza || 0) || null,
+        importo: r2(r.importo || 0), pid: f.project_id, fid: f.id, cosa: r.descrizione }));
+    } else {
+      out.push({ tipo: f.isa_tipo || null,
+        anno: Number(f.anno_competenza || 0) || null,
+        importo: r2(impFattura(f)), pid: f.project_id, fid: f.id, cosa: f.descrizione });
+    }
+  });
+  return anno ? out.filter(v => v.anno === Number(anno)) : out;
+}
+
+/* PERCENTUALI CHE FANNO ESATTAMENTE 100
+   Arrotondando ogni quota per conto suo la somma esce 99,99 o 100,01, e il
+   modello pretende 100. Si assegna il resto - centesimo per centesimo - alle
+   voci il cui arrotondamento ha perso di piu': e' il metodo dei resti piu'
+   grandi, lo stesso con cui si ripartiscono i seggi, e sposta al massimo un
+   centesimo per voce. */
+function percentualiA100(valori) {
+  const tot = valori.reduce((a, v) => a + v, 0);
+  if (!tot) return valori.map(() => 0);
+  const esatte = valori.map(v => v / tot * 100);
+  const giu    = esatte.map(x => Math.floor(x * 100) / 100);
+  const mancano = Math.round((100 - giu.reduce((a, x) => a + x, 0)) * 100);
+  const ordine = esatte.map((x, i) => [i, x - giu[i]])
+    .sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  const out = giu.slice();
+  for (let k = 0; k < mancano && k < ordine.length; k++)
+    out[ordine[k]] = r2(out[ordine[k]] + 0.01);
+  return out.map(x => r2(x));
+}
+
+/* IL QUADRO C PER UN ANNO: una riga per tipologia, con numero di incarichi,
+   importo e percentuale. Le tipologie senza niente non compaiono - nel modello
+   si lasciano in bianco. */
+function isaRiepilogo(anno) {
+  const voci = isaVoci(anno);
+  const classificate = voci.filter(v => v.tipo);
+  const senzaTipo    = voci.filter(v => !v.tipo);
+
+  const per = {};
+  classificate.forEach(v => {
+    const g = per[v.tipo] = per[v.tipo] || { tipo: v.tipo, importo: 0, commesse: new Set(), voci: [] };
+    g.importo = r2(g.importo + v.importo);
+    g.commesse.add(v.pid);
+    g.voci.push(v);
+  });
+
+  const righe = ISA_TIPI.map(x => x[0]).filter(c => per[c]).map(c => per[c]);
+  const perc = percentualiA100(righe.map(g => g.importo));
+  righe.forEach((g, i) => { g.perc = perc[i]; g.incarichi = g.commesse.size; });
+
+  return { anno: Number(anno), righe,
+           totale: r2(righe.reduce((a, g) => a + g.importo, 0)),
+           incarichiTotali: new Set(classificate.map(v => v.pid)).size,
+           senzaTipo, importoSenzaTipo: r2(senzaTipo.reduce((a, v) => a + v.importo, 0)) };
+}
+
+/* Gli anni su cui c'e' qualcosa da dichiarare: serve a proporre quello giusto
+   invece di far cercare. */
+const isaAnniConDati = () => Array.from(new Set(isaVoci(null).map(v => v.anno).filter(Boolean)))
+  .sort((a, b) => b - a);
+
 const TIPI_SPESA = {
   bolli_genio:    'Bolli Genio civile',
   bolli_comune:   'Bolli Comune',
@@ -5344,6 +5519,12 @@ function fatturePanel(pid) {
 /* ------------------------- PAGINA: DA FATTURARE ------------------------- */
 function rFatturare() {
   el('crumb').textContent = 'Quello che è maturato e non è ancora stato fatturato.';
+  /* Il quadro C del modello ISA si compila una volta l'anno: il pulsante sta
+     qui, dove si guardano le fatture, e non in una pagina sua che nessuno
+     ricorderebbe di avere. */
+  el('top-act').innerHTML = '<button class="btn btn-sm" id="isa-btn" '
+    + 'title="Tipologia dell’attività per il modello ISA">&#128202; ISA</button>';
+  el('isa-btn').onclick = () => openIsa();
   const list = S.fatture.filter(f => {
     const p = byId(S.projects, f.project_id);
     return p && !p.archiviato && fattAperta(f);
@@ -5582,6 +5763,108 @@ function esterniRiepilogo() {
     + '</div>';
 }
 
+/* ---------------------------------------------------------------------------
+   ISA: IL QUADRO C, COMPILATO
+   Si sceglie l'anno di competenza e il gestionale mette in fila le tipologie
+   con numero di incarichi, importo e percentuale - le due colonne di destra
+   del modello. Quello che non e' stato classificato viene detto, non nascosto:
+   una percentuale calcolata su meta' dei dati e' peggio di nessuna percentuale.
+   --------------------------------------------------------------------------- */
+function openIsa(anno) {
+  const conDati = isaAnniConDati();
+  const scelto = anno || conDati[0] || today().getFullYear();
+  el('isa-anno').innerHTML = isaAnni().map(a => '<option value="' + a + '"'
+    + (a === Number(scelto) ? ' selected' : '') + '>' + a
+    + (conDati.indexOf(a) >= 0 ? '' : ' (nessun dato)') + '</option>').join('');
+  el('isa-anno').onchange = () => disegnaIsa(el('isa-anno').value);
+  disegnaIsa(scelto);
+  openM('m-isa');
+}
+
+function disegnaIsa(anno) {
+  const r = isaRiepilogo(anno);
+
+  const righe = r.righe.map(g =>
+    '<tr>'
+    + '<td style="width:44px"><b>' + g.tipo + '</b></td>'
+    + '<td style="font-size:12px" title="' + esc(isaCompleto(g.tipo)) + '">'
+      + esc(isaBreve(g.tipo)) + '</td>'
+    + '<td class="ac" style="width:80px"><b>' + g.incarichi + '</b></td>'
+    + '<td style="text-align:right;width:120px">' + feuro(g.importo) + '</td>'
+    + '<td style="text-align:right;width:90px"><b>' + g.perc.toFixed(2).replace('.', ',') + ' %</b></td>'
+    + '</tr>').join('');
+
+  const somma = r2(r.righe.reduce((a, g) => a + g.perc, 0));
+
+  el('isa-body').innerHTML = !r.righe.length && !r.senzaTipo.length
+    ? '<div class="empty"><i>📊</i><p>Nessuna fattura con competenza ' + esc(String(r.anno)) + '.</p>'
+      + '<p style="font-size:12px;margin-top:6px">La tipologia e l’anno si indicano sullo scaglione, '
+      + 'o su ogni servizio, dalla scheda <b>Fatturazione</b> della commessa.</p></div>'
+    : (r.senzaTipo.length
+        ? '<div class="wbox mb16"><b>' + r.senzaTipo.length
+          + (r.senzaTipo.length === 1 ? ' voce non è classificata' : ' voci non sono classificate')
+          + '</b> (' + feuro(r.importoSenzaTipo) + '): restano fuori da questo conto, quindi le '
+          + 'percentuali qui sotto non le comprendono. '
+          + '<div style="margin-top:6px;font-size:12px">'
+          + r.senzaTipo.slice(0, 8).map(v => '· ' + esc(pn(v.pid)) + ' — ' + esc(v.cosa || '')
+              + ' <b>' + feuro(v.importo) + '</b>').join('<br>')
+          + (r.senzaTipo.length > 8 ? '<br>… e altre ' + (r.senzaTipo.length - 8) : '')
+          + '</div></div>'
+        : '')
+      + '<div class="tw"><table class="tsm"><thead><tr>'
+        + '<th></th><th>Tipologia dell’attività</th>'
+        + '<th class="ac">Incarichi</th><th style="text-align:right">Importo</th>'
+        + '<th style="text-align:right">Attività %</th></tr></thead>'
+        + '<tbody>' + righe + '</tbody>'
+        + '<tfoot><tr style="border-top:2px solid var(--bord)">'
+          + '<td></td><td><b>Totale ' + esc(String(r.anno)) + '</b></td>'
+          + '<td class="ac"><b>' + r.incarichiTotali + '</b></td>'
+          + '<td style="text-align:right"><b>' + feuro(r.totale) + '</b></td>'
+          + '<td style="text-align:right"><b>' + somma.toFixed(2).replace('.', ',') + ' %</b></td>'
+        + '</tr></tfoot></table></div>'
+      + '<div class="hint" style="margin-top:10px">'
+        + '<b>Incarichi</b>: quante commesse diverse hanno almeno una voce di quella tipologia '
+        + 'nell’anno — la stessa commessa conta una volta per ogni casella che tocca. '
+        + '<b>Attività %</b>: la quota di importo di quella tipologia sul totale dell’anno, '
+        + 'aggiustata perché la somma faccia esattamente 100,00 come pretende il modello. '
+        + 'Gli importi sono imponibili: le anticipazioni art. 15 non sono compensi e restano fuori.'
+      + '</div>';
+}
+
+/* La stampa: la stessa tabella su una pagina pulita, da tenere accanto mentre
+   si compila il modello. */
+function stampaIsa() {
+  const r = isaRiepilogo(el('isa-anno').value);
+  const w = window.open('', '_blank');
+  if (!w) return toast('Il browser ha bloccato la finestra di stampa.', 'error');
+  w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">'
+    + '<title>ISA quadro C ' + esc(String(r.anno)) + '</title><style>'
+    + 'body{font-family:system-ui,sans-serif;font-size:12px;padding:24px;color:#111}'
+    + 'h1{font-size:16px;margin:0 0 2px}p.sub{color:#666;margin:0 0 18px;font-size:11px}'
+    + 'table{border-collapse:collapse;width:100%}'
+    + 'th,td{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left}'
+    + 'th{background:#f4f6f8;font-size:10px;text-transform:uppercase;letter-spacing:.05em}'
+    + '.n{text-align:right}.c{text-align:center}tfoot td{border-top:2px solid #333;font-weight:700}'
+    + '</style></head><body>'
+    + '<h1>ISA — quadro C, tipologia dell’attività</h1>'
+    + '<p class="sub">' + esc(STUDIO.denominazione || '') + ' · competenza ' + esc(String(r.anno))
+    + ' · stampato il ' + fdate(todayISO()) + '</p>'
+    + '<table><thead><tr><th></th><th>Tipologia</th><th class="c">Incarichi</th>'
+    + '<th class="n">Importo</th><th class="n">Attività %</th></tr></thead><tbody>'
+    + r.righe.map(g => '<tr><td><b>' + g.tipo + '</b></td><td>' + esc(isaCompleto(g.tipo)) + '</td>'
+        + '<td class="c">' + g.incarichi + '</td><td class="n">' + feuro(g.importo) + '</td>'
+        + '<td class="n">' + g.perc.toFixed(2).replace('.', ',') + '</td></tr>').join('')
+    + '</tbody><tfoot><tr><td></td><td>Totale</td><td class="c">' + r.incarichiTotali + '</td>'
+    + '<td class="n">' + feuro(r.totale) + '</td><td class="n">'
+    + r2(r.righe.reduce((a, g) => a + g.perc, 0)).toFixed(2).replace('.', ',') + '</td></tr></tfoot></table>'
+    + (r.senzaTipo.length ? '<p style="margin-top:14px;color:#b00;font-size:11px">Attenzione: '
+        + r.senzaTipo.length + ' voci senza tipologia (' + feuro(r.importoSenzaTipo)
+        + ') non sono comprese in questi totali.</p>' : '')
+    + '</body></html>');
+  w.document.close();
+  setTimeout(() => w.print(), 250);
+}
+
 /* ----------------------------- MODALE SCAGLIONE ----------------------------- */
 function openFatt(id, presetPid) {
   const f = id ? byId(S.fatture, id) : null;
@@ -5600,10 +5883,16 @@ function openFatt(id, presetPid) {
   el('fa-incimp').value= f && f.importo_incassato !== null ? f.importo_incassato : '';
   el('fa-note2').value = f ? (f.note || '') : '';
   el('fa-notefatt').value = f ? (f.note_fattura || '') : '';
+  el('fa-isa').innerHTML  = isaOpzioni(f ? (f.isa_tipo || '') : '');
+  /* L'anno lo si propone: quello della data prevista se c'e', altrimenti
+     questo. Proporre e' diverso da decidere - resta modificabile. */
+  el('fa-anno').innerHTML = isaOpzAnni(f ? (f.anno_competenza
+      || (f.data_fattura || f.data_prevista || '').slice(0, 4) || '') : today().getFullYear());
   fillSel('fa-fase', fasiOf(pid).map(x => ({v:x.id, l:x.nome})), f ? f.fase_id : '', '- Nessuna: maturazione manuale -');
   el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
   el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
-  FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo }));
+  FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo,
+                                            isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '' }));
   disegnaRigheFatt();
   openM('m-fatt');
 }
@@ -5620,12 +5909,22 @@ function disegnaRigheFatt() {
   const box = el('fa-righe');
   box.innerHTML = FATT_RIGHE.length
     ? FATT_RIGHE.map((r, i) =>
-        '<div class="row" style="gap:8px;margin-bottom:6px;align-items:center">'
-        + '<input class="fc" style="flex:1" data-frig="' + i + '" data-fk="descrizione" '
-          + 'placeholder="Es. Pratica edilizia (SCIA)" value="' + esc(r.descrizione || '') + '">'
-        + '<input class="fc" type="number" step="0.01" style="width:130px" data-frig="' + i + '" '
-          + 'data-fk="importo" placeholder="€" value="' + (r.importo === '' || r.importo === null ? '' : r.importo) + '">'
-        + '<button class="btn btn-xs btn-d" type="button" data-frigdel="' + i + '" title="Togli">&#10005;</button>'
+        '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bord)">'
+        + '<div class="row" style="gap:8px;align-items:center">'
+          + '<input class="fc" style="flex:1" data-frig="' + i + '" data-fk="descrizione" '
+            + 'placeholder="Es. Pratica edilizia (SCIA)" value="' + esc(r.descrizione || '') + '">'
+          + '<input class="fc" type="number" step="0.01" style="width:120px" data-frig="' + i + '" '
+            + 'data-fk="importo" placeholder="€" value="' + (r.importo === '' || r.importo === null ? '' : r.importo) + '">'
+          + '<button class="btn btn-xs btn-d" type="button" data-frigdel="' + i + '" title="Togli">&#10005;</button>'
+        + '</div>'
+        /* Tipologia ISA e anno di competenza: si scelgono adesso, che si sa di
+           che lavoro si tratta, non a fine anno rileggendo le fatture. */
+        + '<div class="row" style="gap:8px;margin-top:6px">'
+          + '<select class="fc" style="flex:1;font-size:12px" data-frig="' + i + '" data-fk="isa_tipo">'
+            + isaOpzioni(r.isa_tipo || '') + '</select>'
+          + '<select class="fc" style="width:150px;font-size:12px" data-frig="' + i + '" data-fk="anno_competenza">'
+            + isaOpzAnni(r.anno_competenza || '') + '</select>'
+        + '</div>'
         + '</div>').join('')
       + '<div class="spread" style="font-size:13px;padding-top:6px;border-top:1px solid var(--bord)">'
         + '<span>Totale dei servizi</span><b>' + feuro(totRighe(FATT_RIGHE)) + '</b></div>'
@@ -5690,7 +5989,9 @@ async function saveFatt() {
     data_incasso: el('fa-inc').value || null,
     importo_incassato: el('fa-incimp').value === '' ? null : parseFloat(el('fa-incimp').value),
     note: el('fa-note2').value.trim() || null,
-    note_fattura: el('fa-notefatt').value.trim() || null
+    note_fattura: el('fa-notefatt').value.trim() || null,
+    isa_tipo: el('fa-isa').value || null,
+    anno_competenza: Number(el('fa-anno').value) || null
   };
   setLoading('fa-save2', true);
   let fid = id;
@@ -5724,7 +6025,9 @@ async function salvaRigheFatt(fid) {
   for (let i = 0; i < FATT_RIGHE.length; i++) {
     const r = FATT_RIGHE[i];
     const riga = { descrizione: String(r.descrizione).trim(),
-                   importo: Number(r.importo) || 0, ordine: i };
+                   importo: Number(r.importo) || 0, ordine: i,
+                   isa_tipo: r.isa_tipo || null,
+                   anno_competenza: Number(r.anno_competenza) || null };
     const { error } = r.id
       ? await SB.from('commessa_fattura_righe').update(riga).eq('id', r.id)
       : await SB.from('commessa_fattura_righe')
@@ -9808,6 +10111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     recalcScadenza();
   };
   el('fa-save').onclick = saveFase;
+  el('isa-stampa').onclick = stampaIsa;
   el('sp-save').onclick = saveSpesa;
   el('sp-del').onclick  = delSpesa;
   el('sp-tipo').onchange = disegnaSpesa;
@@ -9838,16 +10142,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const campi = el('fa-righe').querySelectorAll('[data-fk="descrizione"]');
     if (campi.length) campi[campi.length - 1].focus();
   };
-  el('fa-righe').addEventListener('input', e => {
+  ['input','change'].forEach(ev => el('fa-righe').addEventListener(ev, e => {
     const i = e.target.dataset.frig; if (i === undefined) return;
     const r = FATT_RIGHE[Number(i)]; if (!r) return;
-    r[e.target.dataset.fk] = e.target.dataset.fk === 'importo'
+    const k = e.target.dataset.fk;
+    r[k] = (k === 'importo' || k === 'anno_competenza')
       ? (e.target.value === '' ? '' : Number(e.target.value))
       : e.target.value;
     const tot = el('fa-righe').querySelector('.spread b');
     if (tot) tot.textContent = feuro(totRighe(FATT_RIGHE));
     aggiornaCalcolo();
-  });
+  }));
   el('fa-righe').addEventListener('click', e => {
     const b = e.target.closest('[data-frigdel]'); if (!b) return;
     FATT_RIGHE.splice(Number(b.dataset.frigdel), 1);

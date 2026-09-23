@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -882,6 +882,94 @@ t('pagare una parcella non cambia il costo della commessa',
   conTutte.lordo===tuttePagate.lordo,[conTutte.lordo,tuttePagate.lordo]);
 t('e nemmeno il margine',conTutte.margine===tuttePagate.margine,null);
 ctx.S.time=[]; ctx.S.projects=[];
+
+
+console.log('\n— ISA: IL QUADRO C SI COMPILA DA SÉ —');
+t('il catalogo ha tutte e 29 le caselle',ctx.ISA_TIPI.length===29,ctx.ISA_TIPI.length);
+t('sono C01..C29 in ordine',
+  ctx.ISA_TIPI.every((x,i)=>x[0]==='C'+String(i+1).padStart(2,'0')),
+  ctx.ISA_TIPI.map(x=>x[0]).join(',').slice(0,40));
+t('ognuna ha la dicitura breve e quella intera',
+  ctx.ISA_TIPI.every(x=>x[1]&&x[2]&&x[2].length>=x[1].length),null);
+/* le tre soglie di importo sono il punto in cui si sbaglia casella */
+t('le soglie delle opere private sono quelle del modello',
+  /fino a euro 51\.646,00/.test(ctx.isaCompleto('C03'))
+  &&/oltre euro 51\.646,00 e fino a euro 258\.228,00/.test(ctx.isaCompleto('C04'))
+  &&/oltre euro 258\.228,00/.test(ctx.isaCompleto('C05')),null);
+t('C15 è la sicurezza col suo decreto',/D\.lgs\. 81\/2008/.test(ctx.isaCompleto('C15')),null);
+
+/* LE PERCENTUALI DEVONO FARE ESATTAMENTE 100 */
+const isaP3=ctx.percentualiA100([1,1,1]);
+t('tre quote uguali fanno 100 e non 99,99',
+  ctx.r2(isaP3.reduce((a,b)=>a+b,0))===100,[isaP3,isaP3.reduce((a,b)=>a+b,0)]);
+const isaP7=ctx.percentualiA100([1,1,1,1,1,1,1]);
+t('e nemmeno sette',ctx.r2(isaP7.reduce((a,b)=>a+b,0))===100,isaP7.reduce((a,b)=>a+b,0));
+t('lo scarto non supera un centesimo per voce',
+  isaP3.every(x=>Math.abs(x-100/3)<=0.01),isaP3);
+const isaPd=ctx.percentualiA100([5234,115,390]);
+t('quote diverse fanno 100',ctx.r2(isaPd.reduce((a,b)=>a+b,0))===100,isaPd);
+t('e restano nell ordine di grandezza giusto',isaPd[0]>90&&isaPd[1]<3,isaPd);
+t('a zero non si divide per zero',ctx.percentualiA100([0,0]).join()==='0,0',null);
+
+/* IL RIEPILOGO, SU DATI VERI */
+ctx.S.projects=[{id:'p1',name:'Villa'},{id:'p2',name:'Capannone'},{id:'p3',name:'Scuola'}];
+ctx.S.fatture=[
+  /* con i servizi elencati: due caselle diverse nello stesso acconto */
+  {id:'f1',project_id:'p1',descrizione:'Acconto',imponibile:3000,stato:'pronta'},
+  /* a voce unica: valgono tipo e anno dello scaglione */
+  {id:'f2',project_id:'p2',descrizione:'Saldo',imponibile:2000,stato:'emessa',
+   isa_tipo:'C02',anno_competenza:2026},
+  /* anno diverso: non deve entrare nel 2026 */
+  {id:'f3',project_id:'p3',descrizione:'Vecchia',imponibile:9000,stato:'incassata',
+   isa_tipo:'C02',anno_competenza:2025},
+  /* annullata: fuori dal conto in ogni caso */
+  {id:'f4',project_id:'p3',descrizione:'Annullata',imponibile:5000,stato:'annullata',
+   isa_tipo:'C02',anno_competenza:2026},
+  /* senza tipologia: va contata a parte, non ignorata */
+  {id:'f5',project_id:'p1',descrizione:'Da classificare',imponibile:500,stato:'pronta',
+   anno_competenza:2026}];
+ctx.S.fattRighe=[
+  {id:'r1',fattura_id:'f1',ordine:0,descrizione:'Progetto',importo:2000,isa_tipo:'C06',anno_competenza:2026},
+  {id:'r2',fattura_id:'f1',ordine:1,descrizione:'Direzione lavori',importo:1000,isa_tipo:'C12',anno_competenza:2026}];
+
+const R=ctx.isaRiepilogo(2026);
+t('le righe di una fattura contano una per una',
+  R.righe.length===3,R.righe.map(g=>g.tipo));
+t('C02 vale 2000 (la fattura a voce unica)',
+  (R.righe.find(g=>g.tipo==='C02')||{}).importo===2000,null);
+t('C06 vale 2000 e C12 vale 1000',
+  (R.righe.find(g=>g.tipo==='C06')||{}).importo===2000
+  &&(R.righe.find(g=>g.tipo==='C12')||{}).importo===1000,null);
+t('l anno diverso resta fuori',!R.righe.some(g=>g.importo===9000),null);
+t('la fattura annullata pure',R.totale===5000,R.totale);
+t('le percentuali fanno 100',
+  ctx.r2(R.righe.reduce((a,g)=>a+g.perc,0))===100,R.righe.map(g=>g.perc));
+t('C06 e il 40% di 5000',(R.righe.find(g=>g.tipo==='C06')||{}).perc===40,null);
+t('le caselle escono in ordine di modello',
+  R.righe.map(g=>g.tipo).join()==='C02,C06,C12',R.righe.map(g=>g.tipo).join());
+
+/* INCARICHI: quante commesse diverse toccano quella casella */
+t('C02 e di una commessa sola',(R.righe.find(g=>g.tipo==='C02')||{}).incarichi===1,null);
+t('le commesse classificate nell anno sono due',R.incarichiTotali===2,R.incarichiTotali);
+
+/* QUELLO CHE NON E CLASSIFICATO SI DICE */
+t('la voce senza tipologia e contata a parte',R.senzaTipo.length===1,R.senzaTipo.length);
+t('con il suo importo',R.importoSenzaTipo===500,R.importoSenzaTipo);
+t('e NON entra nel totale su cui si fanno le percentuali',R.totale===5000,R.totale);
+
+/* La stessa commessa che tocca due caselle conta in tutte e due */
+ctx.S.fattRighe=ctx.S.fattRighe.concat([
+  {id:'r3',fattura_id:'f1',ordine:2,descrizione:'Altro progetto',importo:1000,isa_tipo:'C02',anno_competenza:2026}]);
+const R2=ctx.isaRiepilogo(2026);
+t('una commessa che tocca due caselle conta in tutte e due',
+  (R2.righe.find(g=>g.tipo==='C02')||{}).incarichi===2,
+  (R2.righe.find(g=>g.tipo==='C02')||{}).incarichi);
+t('ma nel totale incarichi conta una volta sola',R2.incarichiTotali===2,R2.incarichiTotali);
+
+/* Gli anni proposti sono quelli su cui c e davvero qualcosa */
+t('gli anni con dati sono 2026 e 2025',
+  ctx.isaAnniConDati().join()==='2026,2025',ctx.isaAnniConDati().join());
+ctx.S.fatture=[]; ctx.S.fattRighe=[]; ctx.S.projects=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

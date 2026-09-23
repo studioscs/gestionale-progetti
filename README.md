@@ -47,6 +47,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 26. [`sql/027_spese_anticipate.sql`](sql/027_spese_anticipate.sql) — spese anticipate per il committente, art. 15
 27. [`sql/028_esterni_pagamento.sql`](sql/028_esterni_pagamento.sql) — parcelle dei collaboratori esterni: pagate e da pagare
 28. [`sql/029_ore_zero_esterni.sql`](sql/029_ore_zero_esterni.sql) — **una parcella non ha ore: lo zero va ammesso, da eseguire**
+29. [`sql/030_isa.sql`](sql/030_isa.sql) — tipologia ISA e anno di competenza su ogni riga di fattura
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -603,6 +604,56 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+## ISA: il quadro C si compila da sé
+
+Ogni anno il modello ISA (EK23U, studi tecnici) chiede, per ognuna delle
+tipologie da **C01 a C29**, quanti incarichi e che percentuale del lavoro
+rappresentano. Quelle percentuali si ricostruivano a fine anno rileggendo le
+fatture una per una e decidendo a posteriori a quale casella apparteneva
+ciascuna: un lavoro lungo, fatto quando i dettagli si sono dimenticati.
+
+**La tipologia si sceglie quando si sa**: alla firma del contratto, mentre si
+predispongono gli scaglioni. Nel modulo dello scaglione ci sono due tendine —
+*Tipologia ISA* e *Anno di competenza* — e le stesse due su **ogni servizio
+elencato**, perché lo stesso acconto può coprire progettazione e direzione
+lavori, che sono caselle diverse. Quando ci sono i servizi, vince quello scritto
+sul servizio.
+
+L'**anno di competenza non è per forza quello della fattura**: un acconto
+incassato a gennaio può essere competenza dell'anno prima. Per questo è un campo
+suo e non una data dedotta.
+
+### Il pulsante ISA
+
+Nella pagina **Da fatturare**, in alto a destra. Si sceglie l'anno e compare il
+quadro C già fatto:
+
+| | Tipologia | Incarichi | Importo | Attività % |
+|---|---|---|---|---|
+| **C02** | Progettazione opere pubbliche | 12 | 52.340,00 € | 52,34 % |
+| **C06** | Progett. esecutiva privata — fino a 51.646 | 21 | 5.000,00 € | 5,00 % |
+| | **Totale** | **34** | **100.000,00 €** | **100,00 %** |
+
+Le due colonne di destra sono quelle da ricopiare sul modello. Si stampa.
+
+Tre cose che vale la pena sapere su come sono calcolate:
+
+- **Incarichi**: quante commesse *diverse* hanno almeno una voce di quella
+  tipologia nell'anno. La stessa commessa conta una volta per ogni casella che
+  tocca, ma una volta sola nel totale.
+- **Attività %**: la quota di importo sul totale dell'anno, **aggiustata perché
+  la somma faccia esattamente 100,00** come pretende il modello. Arrotondando
+  ogni quota per conto suo verrebbe 99,99 o 100,01; il resto si assegna alle
+  voci che hanno perso di più nell'arrotondamento, e sposta al massimo un
+  centesimo per voce.
+- Gli importi sono **imponibili**: le anticipazioni art. 15 non sono compensi e
+  restano fuori, e le fatture annullate pure.
+
+> **Quello che non è classificato viene detto, non nascosto.** Se ci sono voci
+> senza tipologia, in cima compare quante sono, quanto valgono e da quali
+> commesse: restano fuori dai totali, quindi le percentuali non le comprendono.
+> Una percentuale calcolata su metà dei dati è peggio di nessuna percentuale.
 
 ### Spese collaboratori esterni
 

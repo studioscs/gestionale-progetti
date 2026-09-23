@@ -19,6 +19,10 @@ function launchOpts(){
   build();
   const b=await chromium.launch(launchOpts());
   const p=await b.newPage({viewport:{width:1440,height:960}});
+  /* Un click che non trova il suo bersaglio aspettava 30 secondi: dieci di
+     seguito facevano cinque minuti di niente, e il guasto vero si vedeva solo
+     alla fine. Otto secondi bastano e fanno emergere subito chi si e' rotto. */
+  p.setDefaultTimeout(8000);
   const errs=[];
   /* Un solo gestore per tutti i dialoghi: i p.once() sparsi restavano appesi
      quando la finestra non compariva, e due gestori sullo stesso dialogo
@@ -29,7 +33,17 @@ function launchOpts(){
   p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   await p.goto('file://'+__dirname+'/app-test.html');
   const ok=[],bad=[];
-  const t=async(n,fn)=>{ try{ await fn(); ok.push(n); }catch(e){ bad.push(n+' → '+e.message.split('\n')[0]); } };
+  /* Un controllo che fallisce lasciava aperto il modale su cui stava
+     lavorando, e da li' in poi ogni click finiva sul velo: un solo guasto ne
+     faceva comparire venti, tutti falsi. Dopo ogni controllo - passato o no -
+     si richiude quello che e' rimasto aperto, cosi' il primo guasto resta
+     l'unico. */
+  const ripulisci=async()=>{ try{
+    await p.evaluate(()=>{ if(typeof closeAll==='function') closeAll();
+                           document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show')); });
+  }catch(e){} };
+  const t=async(n,fn)=>{ try{ await fn(); ok.push(n); }
+                         catch(e){ bad.push(n+' → '+e.message.split('\n')[0]); await ripulisci(); } };
   const must=(c,m)=>{ if(!c) throw new Error(m||'falso'); };
 
   await p.waitForSelector('#app.show',{timeout:8000});
@@ -1042,6 +1056,89 @@ function launchOpts(){
        altrove li farebbe fallire per un motivo che non c'entra niente. */
     await p.evaluate(pid=>{ goProject(pid,'fatture'); },global.__PIDEST);
     await p.waitForTimeout(500);
+  });
+  await t('lo scaglione ha le tendine ISA e anno di competenza',async()=>{
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>{ S.tab='fatture'; render(); });
+    await p.waitForTimeout(400);
+    await p.locator('tbody tr[data-fatt]').first().click();
+    await p.waitForSelector('#m-fatt.show');
+    must(await p.locator('#fa-isa').count()===1,'manca la tendina della tipologia ISA');
+    must(await p.locator('#fa-anno').count()===1,'manca la tendina dell anno');
+    const n=await p.evaluate(()=>document.querySelectorAll('#fa-isa option').length);
+    must(n===30,'la tendina ha '+n+' voci invece di 29 più «non classificata»');
+    /* la casella giusta si riconosce dalla dicitura per intero */
+    const tit=await p.evaluate(()=>document.querySelector('#fa-isa option[value="C04"]').title);
+    must(/51\.646,00 e fino a euro 258\.228,00/.test(tit),'la soglia di C04 non è quella del modello: '+tit);
+  });
+  await t('si classifica una fattura e resta scritto',async()=>{
+    await p.selectOption('#fa-isa','C02');
+    await p.selectOption('#fa-anno','2026');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>{
+      const f=S.fatture.find(x=>x.isa_tipo==='C02');
+      return {tipo:f&&f.isa_tipo, anno:f&&f.anno_competenza,
+              nelDb:(__DB.commessa_fatture.find(x=>x.isa_tipo==='C02')||{}).anno_competenza};
+    });
+    must(g.tipo==='C02'&&g.anno===2026,'non salvata: '+JSON.stringify(g));
+    must(g.nelDb===2026,'nel database non c è: '+g.nelDb);
+  });
+  await t('anche ogni singolo servizio ha la sua tipologia e il suo anno',async()=>{
+    await p.locator('tbody tr[data-fatt]').first().click();
+    await p.waitForSelector('#m-fatt.show');
+    await p.click('#fa-addriga');
+    await p.fill('#fa-righe [data-fk="descrizione"] >> nth=-1','Direzione lavori');
+    await p.fill('#fa-righe [data-fk="importo"] >> nth=-1','1500');
+    must(await p.locator('#fa-righe [data-fk="isa_tipo"]').count()>0,'la riga non ha la tendina ISA');
+    await p.selectOption('#fa-righe [data-fk="isa_tipo"] >> nth=-1','C12');
+    await p.selectOption('#fa-righe [data-fk="anno_competenza"] >> nth=-1','2026');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>{
+      const r=__DB.commessa_fattura_righe.find(x=>x.descrizione==='Direzione lavori');
+      return r?{tipo:r.isa_tipo,anno:r.anno_competenza}:null;
+    });
+    must(g&&g.tipo==='C12'&&g.anno===2026,'la riga non ha conservato tipologia e anno: '+JSON.stringify(g));
+  });
+  await t('il pulsante ISA c è, e apre il quadro C dell anno',async()=>{
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>go('fatturare')); await p.waitForTimeout(700);
+    must(await p.locator('#isa-btn').count()===1,'il pulsante ISA non c è nella pagina Da fatturare');
+    await p.click('#isa-btn');
+    await p.waitForSelector('#m-isa.show',{timeout:4000});
+    await p.selectOption('#isa-anno','2026'); await p.waitForTimeout(400);
+    const txt=await p.textContent('#isa-body');
+    must(/C12/.test(txt),'la tipologia della riga non compare: '+txt.slice(0,120));
+    must(/Incarichi/.test(txt)&&/Attività %/.test(txt),'mancano le due colonne del modello');
+  });
+  await t('e le percentuali fanno esattamente 100',async()=>{
+    const g=await p.evaluate(()=>{
+      const r=isaRiepilogo(2026);
+      return {somma:r2(r.righe.reduce((a,x)=>a+x.perc,0)), n:r.righe.length, tot:r.totale};
+    });
+    must(g.n>0,'nessuna tipologia nel riepilogo');
+    must(g.somma===100,'le percentuali fanno '+g.somma+' invece di 100');
+  });
+  await t('quello che non è classificato viene detto, non nascosto',async()=>{
+    const g=await p.evaluate(async()=>{
+      /* siamo sulla pagina generale: S.projId qui e' nullo, la commessa si
+         prende da una fattura che c'e' gia' */
+      const pid=S.fatture[0].project_id;
+      const {error}=await SB.from('commessa_fatture').insert({project_id:pid,
+        descrizione:'Senza tipologia',imponibile:700,stato:'pronta',ordine:99,
+        anno_competenza:2026});
+      await loadAll(true);
+      const r=isaRiepilogo(2026);
+      return {errore:error&&error.message, senza:r.senzaTipo.length,
+              importo:r.importoSenzaTipo, tot:r.totale};
+    });
+    must(!g.errore,'non si è riusciti a inserirla: '+g.errore);
+    must(g.senza>=1,'la voce senza tipologia non viene segnalata — '+JSON.stringify(g));
+    must(g.importo>=700,'non ne dice l importo: '+g.importo);
+    await p.evaluate(()=>{ disegnaIsa(2026); });
+    await p.waitForTimeout(300);
+    const txt=await p.textContent('#isa-body');
+    must(/non (è classificata|sono classificate)/.test(txt),'l avviso non compare: '+txt.slice(0,160));
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   });
   await t('la generazione passa dalla finestra di revisione',async()=>{
     await p.locator('[data-fxml]').first().click();
