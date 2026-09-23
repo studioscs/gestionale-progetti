@@ -966,6 +966,47 @@ t('una commessa che tocca due caselle conta in tutte e due',
   (R2.righe.find(g=>g.tipo==='C02')||{}).incarichi);
 t('ma nel totale incarichi conta una volta sola',R2.incarichiTotali===2,R2.incarichiTotali);
 
+/* L'ANNO DELLA RIGA VINCE SU QUELLO DELLO SCAGLIONE
+   E' il caso per cui il campo esiste: un contratto firmato nel 2026 con un
+   acconto di competenza 2025, o viceversa. Lo scaglione dice una cosa, la
+   singola riga ne dice un'altra, e deve valere la riga. */
+ctx.S.projects=[{id:'pX',name:'A cavallo d anno'}];
+ctx.S.fatture=[{id:'fX',project_id:'pX',descrizione:'Acconto',imponibile:3000,stato:'pronta',
+  isa_tipo:'C02',anno_competenza:2026}];
+ctx.S.fattRighe=[
+  /* segue lo scaglione: niente scritto sulla riga */
+  {id:'x1',fattura_id:'fX',ordine:0,descrizione:'Progetto 2026',importo:1000},
+  /* dice la sua, ed e' un altro anno */
+  {id:'x2',fattura_id:'fX',ordine:1,descrizione:'Progetto 2025',importo:2000,anno_competenza:2025}];
+
+t('la riga senza anno segue lo scaglione',
+  ctx.isaVoci(2026).some(v=>v.importo===1000),ctx.isaVoci(2026).map(v=>[v.anno,v.importo]));
+t('ma la riga con un anno suo vince',
+  ctx.isaVoci(2025).length===1&&ctx.isaVoci(2025)[0].importo===2000,
+  ctx.isaVoci(2025).map(v=>[v.anno,v.importo]));
+t('e nel 2026 quei 2000 non ci sono',
+  !ctx.isaVoci(2026).some(v=>v.importo===2000),ctx.isaVoci(2026).map(v=>v.importo));
+t('cosi il 2025 vale 2000 e il 2026 vale 1000',
+  ctx.isaRiepilogo(2025).totale===2000&&ctx.isaRiepilogo(2026).totale===1000,
+  [ctx.isaRiepilogo(2025).totale,ctx.isaRiepilogo(2026).totale]);
+/* la tipologia si comporta allo stesso modo: quella della riga vince */
+ctx.S.fattRighe[1].isa_tipo='C12';
+t('e la stessa cosa vale per la tipologia',
+  ctx.isaRiepilogo(2025).righe[0].tipo==='C12'
+  &&ctx.isaRiepilogo(2026).righe[0].tipo==='C02',
+  [ctx.isaRiepilogo(2025).righe[0].tipo,ctx.isaRiepilogo(2026).righe[0].tipo]);
+ctx.S.fatture=[]; ctx.S.fattRighe=[]; ctx.S.projects=[
+  {id:'p1',name:'Villa'},{id:'p2',name:'Capannone'},{id:'p3',name:'Scuola'}];
+ctx.S.fatture=[
+  {id:'f1',project_id:'p1',descrizione:'Acconto',imponibile:3000,stato:'pronta'},
+  {id:'f2',project_id:'p2',descrizione:'Saldo',imponibile:2000,stato:'emessa',
+   isa_tipo:'C02',anno_competenza:2026},
+  {id:'f3',project_id:'p3',descrizione:'Vecchia',imponibile:9000,stato:'incassata',
+   isa_tipo:'C02',anno_competenza:2025}];
+ctx.S.fattRighe=[
+  {id:'r1',fattura_id:'f1',ordine:0,descrizione:'Progetto',importo:2000,isa_tipo:'C06',anno_competenza:2026},
+  {id:'r2',fattura_id:'f1',ordine:1,descrizione:'Direzione lavori',importo:1000,isa_tipo:'C12',anno_competenza:2026}];
+
 /* Gli anni proposti sono quelli su cui c e davvero qualcosa */
 t('gli anni con dati sono 2026 e 2025',
   ctx.isaAnniConDati().join()==='2026,2025',ctx.isaAnniConDati().join());
