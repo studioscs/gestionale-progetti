@@ -8,7 +8,7 @@
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
-    commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[]
+    commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[], costi_generali:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -35,6 +35,7 @@
     commessa_fatture:['project_id','descrizione','stato'],
     commessa_fattura_righe:['fattura_id','descrizione','importo'],
     commessa_spese:['project_id','tipo','importo','data_spesa'],
+    costi_generali:['categoria','descrizione','importo','data_spesa'],
     profili_costi:['profile_id','valido_dal']
   };
   /* VINCOLI DI COERENZA, come li dichiara il database vero. Senza, in
@@ -49,6 +50,14 @@
             return h>0; },                        // ore dello studio: positive
        'ck_ore_o_parcella'],
       [r=>!(r.data_pagamento&&!r.pagato), 'ck_pagamento_coerente']
+    ],
+    costi_generali:[
+      [r=>r.categoria===undefined||['qualita','consulenze','utenze','affitto',
+        'software','hardware','assicurazioni','formazione','ordini_professionali',
+        'veicoli','cancelleria','banca','altro'].includes(r.categoria),
+       'costi_generali_categoria_check'],
+      [r=>r.importo===undefined||Number(r.importo)>=0, 'costi_generali_importo_check'],
+      [r=>!(r.data_pagamento&&!r.pagato), 'ck_costi_pagamento_coerente']
     ]
   };
   function verificaVincoli(table,rec){

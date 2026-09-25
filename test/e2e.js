@@ -3245,6 +3245,106 @@ function launchOpts(){
     must(orf===0,'record orfani: '+orf);
   });
 
+  /* ---------------- COSTI GENERALI: fuori da ogni commessa ---------------- */
+  await t('la voce Costi generali c è nel menu dell amministrazione',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });
+    must(await p.locator('.sn[data-page="costi"]').count()===1,'manca la voce nel menu');
+    await p.click('.sn[data-page="costi"]'); await p.waitForTimeout(500);
+    must(await p.locator('#co-nuovo').count()===1,'manca il pulsante + Costo');
+  });
+  await t('si registra una bolletta, senza commessa',async()=>{
+    await p.click('#co-nuovo'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    must(await p.locator('#co-cat option').count()===13,'le categorie non sono 13');
+    await p.selectOption('#co-cat','utenze');
+    await p.fill('#co-desc','Bolletta luce marzo');
+    await p.fill('#co-forn','Enel Energia');
+    await p.fill('#co-imp','245.30');
+    await p.fill('#co-data','2026-03-31');
+    await p.selectOption('#co-anno','2026');
+    await p.click('#co-save'); await p.waitForTimeout(600);
+    const g=await p.evaluate(()=>{ const c=__DB.costi_generali.find(x=>x.descrizione==='Bolletta luce marzo');
+      return c&&{cat:c.categoria,imp:Number(c.importo),anno:c.anno_competenza,pag:c.pagato,
+        forn:c.fornitore,chi:c.created_by,proj:'project_id' in c}; });
+    must(g,'il costo non è arrivato nel database');
+    must(g.cat==='utenze'&&g.imp===245.3&&g.anno===2026&&g.pag===false&&g.forn==='Enel Energia',
+      'dati salvati male: '+JSON.stringify(g));
+    must(!g.proj,'il costo generale non deve avere una commessa');
+    must(g.chi==='u-me','non si sa chi lo ha registrato');
+    const txt=await p.textContent('#page');
+    must(/Bolletta luce marzo/.test(txt)&&/Utenze e bollette/.test(txt),'non compare nella pagina');
+    must(/da pagare/.test(txt),'non risulta da pagare');
+  });
+  await t('un secondo costo, già pagato, e i totali tornano',async()=>{
+    await p.click('#co-nuovo'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    await p.selectOption('#co-cat','qualita');
+    await p.fill('#co-desc','Consulenza sistema qualità');
+    await p.fill('#co-imp','1200');
+    await p.fill('#co-data','2026-02-10');
+    await p.selectOption('#co-anno','2026');
+    await p.selectOption('#co-pag','1');
+    must(await p.isVisible('#co-pagdt'),'la data di pagamento non compare');
+    await p.fill('#co-pagdt','2026-02-28');
+    await p.click('#co-save'); await p.waitForTimeout(600);
+    const r=await p.evaluate(()=>{ const r=riepilogoCosti(2026); return {tot:r.totale,pag:r.pagato,dp:r.daPagare,
+      prima:r.categorie[0].k}; });
+    must(r.tot===1445.3&&r.pag===1200&&r.dp===245.3,'totali sbagliati: '+JSON.stringify(r));
+    must(r.prima==='qualita','la categoria più pesante non è in cima: '+r.prima);
+    const c=await p.evaluate(()=>__DB.costi_generali.find(x=>x.categoria==='qualita'));
+    must(c.pagato===true&&c.data_pagamento==='2026-02-28','pagamento non salvato: '+JSON.stringify(c));
+  });
+  await t('segna pagato dalla lista, e si torna indietro',async()=>{
+    const id=await p.evaluate(()=>__DB.costi_generali.find(x=>x.descrizione==='Bolletta luce marzo').id);
+    await p.click('[data-costopag="'+id+'"]'); await p.waitForTimeout(500);
+    must(!(await p.evaluate(()=>document.querySelector('#m-costo.show'))),'il clic sul pulsante apre anche la scheda');
+    let c=await p.evaluate(i=>__DB.costi_generali.find(x=>x.id===i),id);
+    must(c.pagato===true&&!!c.data_pagamento,'non risulta pagato nel database: '+JSON.stringify(c));
+    await p.click('[data-costonon="'+id+'"]'); await p.waitForTimeout(500);
+    c=await p.evaluate(i=>__DB.costi_generali.find(x=>x.id===i),id);
+    must(c.pagato===false&&!c.data_pagamento,'tornato da pagare ma con la data di pagamento: '+JSON.stringify(c));
+  });
+  await t('l anno scritto vince: la bolletta di dicembre pagata a gennaio',async()=>{
+    await p.click('#co-nuovo'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    await p.fill('#co-desc','Bolletta gas dicembre');
+    await p.fill('#co-imp','180');
+    await p.fill('#co-data','2026-01-12');
+    await p.selectOption('#co-anno','2025');
+    await p.click('#co-save'); await p.waitForTimeout(600);
+    const sel=await p.inputValue('#co-annosel');
+    must(sel==='2025','dopo il salvataggio non mostra l anno del costo: '+sel);
+    const txt=await p.textContent('#page');
+    must(/Bolletta gas dicembre/.test(txt)&&!/Bolletta luce marzo/.test(txt),'il 2025 mostra le voci sbagliate');
+    await p.selectOption('#co-annosel','2026'); await p.waitForTimeout(400);
+    must(!/Bolletta gas dicembre/.test(await p.textContent('#page')),'la bolletta 2025 compare nel 2026');
+  });
+  await t('si corregge e si elimina un costo',async()=>{
+    const id=await p.evaluate(()=>__DB.costi_generali.find(x=>x.descrizione==='Bolletta luce marzo').id);
+    await p.click('[data-costo="'+id+'"] td >> nth=1'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    must(await p.inputValue('#co-desc')==='Bolletta luce marzo','la scheda non si apre con i dati');
+    await p.fill('#co-imp','250'); await p.click('#co-save'); await p.waitForTimeout(600);
+    must(await p.evaluate(i=>Number(__DB.costi_generali.find(x=>x.id===i).importo),id)===250,'importo non corretto');
+    await p.click('[data-costo="'+id+'"] td >> nth=1'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    await p.click('#co-del'); await p.waitForTimeout(600);
+    must(!(await p.evaluate(i=>__DB.costi_generali.some(x=>x.id===i),id)),'non è stato eliminato');
+  });
+  await t('un importo mancante non si salva',async()=>{
+    await p.click('#co-nuovo'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    const n=await p.evaluate(()=>__DB.costi_generali.length);
+    await p.fill('#co-desc','Senza importo'); await p.click('#co-save'); await p.waitForTimeout(400);
+    must(await p.evaluate(()=>__DB.costi_generali.length)===n,'ha salvato un costo senza importo');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>document.querySelectorAll('.ov.show').forEach(m=>m.classList.remove('show')));
+  });
+  await t('un collaboratore non vede i costi dello studio',async()=>{
+    const txt=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('costi');
+      return document.getElementById('page').textContent; });
+    must(!/Bolletta|Consulenza sistema/.test(txt),'il collaboratore vede le voci');
+    must(/amministrazione/.test(txt),'non spiega perché non li vede');
+    const conFlag=await p.evaluate(()=>{ S.prof.vede_tutto=true; go('costi');
+      return document.getElementById('page').textContent; });
+    must(/Consulenza sistema/.test(conFlag),'chi ha "vede tutto" non li vede');
+    await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; go('oggi'); });
+  });
+
   /* Gli scatti finali non sono un test: se falliscono lo si annota e si va
      avanti, altrimenti un'eccezione qui butta via il resoconto di tutti i
      test precedenti e non si capisce piu' niente. */

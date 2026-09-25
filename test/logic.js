@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,CATEGORIE_COSTO,nomeCategoria,annoCosto,costiAnno,totCosti,riepilogoCosti,anniCosti,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -1011,6 +1011,37 @@ ctx.S.fattRighe=[
 t('gli anni con dati sono 2026 e 2025',
   ctx.isaAnniConDati().join()==='2026,2025',ctx.isaAnniConDati().join());
 ctx.S.fatture=[]; ctx.S.fattRighe=[]; ctx.S.projects=[];
+
+/* ------------------------- COSTI GENERALI DELLO STUDIO ------------------------- */
+console.log('\n# Costi generali (fuori dalle commesse)');
+ctx.S.costiGen=[
+  {id:'c1',categoria:'qualita',descrizione:'Consulenza ISO 9001',importo:1800,data_spesa:'2026-03-10',pagato:true,data_pagamento:'2026-03-20'},
+  {id:'c2',categoria:'utenze',descrizione:'Bolletta luce',importo:240.5,data_spesa:'2026-05-02',pagato:false},
+  {id:'c3',categoria:'utenze',descrizione:'Bolletta gas',importo:119.5,data_spesa:'2026-06-02',pagato:true},
+  {id:'c4',categoria:'software',descrizione:'Canone CAD',importo:2400,data_spesa:'2026-01-15',pagato:false},
+  /* dicembre 2025 pagata a gennaio: l'anno scritto vince sulla data */
+  {id:'c5',categoria:'utenze',descrizione:'Bolletta dicembre',importo:300,data_spesa:'2026-01-10',anno_competenza:2025,pagato:true},
+  {id:'c6',categoria:null,descrizione:'Senza categoria',importo:50,data_spesa:'2024-07-01',pagato:false}];
+t('l anno scritto vince sulla data',ctx.annoCosto(ctx.S.costiGen[4])===2025,ctx.annoCosto(ctx.S.costiGen[4]));
+t('senza anno scritto vale quello della data',ctx.annoCosto(ctx.S.costiGen[0])===2026);
+const C26=ctx.riepilogoCosti(2026);
+t('2026: quattro voci (la bolletta di dicembre no)',C26.voci.length===4,C26.voci.map(v=>v.id));
+t('2026: totale 4560',C26.totale===4560,C26.totale);
+t('2026: pagato 1919,5',C26.pagato===1919.5,C26.pagato);
+t('2026: da pagare 2640,5',C26.daPagare===2640.5,C26.daPagare);
+t('pagato + da pagare = totale',ctx.r2(C26.pagato+C26.daPagare)===C26.totale);
+t('categorie dalla piu pesante',C26.categorie.map(c=>c.k).join()==='software,qualita,utenze',C26.categorie.map(c=>c.k).join());
+const ut=C26.categorie.find(c=>c.k==='utenze');
+t('utenze 2026: due voci, 360, 240,5 da pagare',ut.voci===2&&ut.totale===360&&ut.daPagare===240.5,ut);
+t('nome leggibile della categoria',ut.nome==='Utenze e bollette',ut.nome);
+t('2025: solo la bolletta di dicembre',ctx.riepilogoCosti(2025).totale===300);
+t('senza categoria finisce in Altro',ctx.riepilogoCosti(2024).categorie[0].k==='altro'
+  &&ctx.riepilogoCosti(2024).categorie[0].nome==='Altro');
+t('anni con costi, dal piu recente',ctx.anniCosti().join()==='2026,2025,2024',ctx.anniCosti().join());
+t('anno vuoto: tutto a zero',(r=>r.totale===0&&r.voci.length===0&&r.categorie.length===0)(ctx.riepilogoCosti(2030)));
+t('le categorie sono quelle che accetta il database',ctx.CATEGORIE_COSTO.map(c=>c[0]).join()===
+  'qualita,consulenze,utenze,affitto,software,hardware,assicurazioni,formazione,ordini_professionali,veicoli,cancelleria,banca,altro');
+ctx.S.costiGen=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

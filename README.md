@@ -48,6 +48,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 27. [`sql/028_esterni_pagamento.sql`](sql/028_esterni_pagamento.sql) — parcelle dei collaboratori esterni: pagate e da pagare
 28. [`sql/029_ore_zero_esterni.sql`](sql/029_ore_zero_esterni.sql) — **una parcella non ha ore: lo zero va ammesso, da eseguire**
 29. [`sql/030_isa.sql`](sql/030_isa.sql) — tipologia ISA e anno di competenza su ogni riga di fattura
+30. [`sql/031_costi_generali.sql`](sql/031_costi_generali.sql) — costi generali dello studio, fuori dalle commesse
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -604,6 +605,36 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+## Costi generali dello studio
+
+Non tutto quello che lo studio paga appartiene a una commessa: la consulenza
+per il sistema qualità, le bollette, l'affitto, gli abbonamenti e la
+manutenzione dei programmi, le assicurazioni, le quote dell'Ordine. Queste
+spese hanno una pagina loro: **Amministrazione → Costi generali**.
+
+Ogni costo ha una **categoria** (sistema qualità, consulenze, utenze e
+bollette, affitto, software e abbonamenti, computer e manutenzione,
+assicurazioni, formazione, ordini e casse, veicoli, cancelleria, banca, altro),
+una descrizione, il fornitore (quelli già usati vengono proposti), l'importo,
+la data e se è già stato pagato.
+
+In cima alla pagina si sceglie l'anno e si legge:
+
+- **quanto è costato lo studio** in quell'anno, quanto è già stato pagato e
+  quanto resta da pagare;
+- **dove vanno i soldi**: le categorie dalla più pesante, ognuna con la sua
+  quota da pagare;
+- l'elenco delle voci, con **Segna pagato** direttamente sulla riga.
+
+L'**anno di competenza** è un campo suo, come per l'ISA: la bolletta di
+dicembre pagata a gennaio si scrive col 2025 e resta nel 2025. Se non lo si
+indica vale l'anno della data.
+
+> **Chi li vede.** Solo chi tiene l'amministrazione: gli amministratori e chi
+> ha il contrassegno *vede tutte le commesse*. Il blocco è nel database (regole
+> RLS della migrazione 031), non solo nell'interfaccia: un collaboratore non li
+> legge nemmeno interrogando Supabase direttamente.
 
 ## ISA: il quadro C si compila da sé
 

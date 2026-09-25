@@ -470,6 +470,7 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="ssec" id="sec-admin">
       <span class="slbl">Amministrazione</span>
       <button class="sn" data-page="redditivita"><span class="snic">&#128200;</span>Redditivit&agrave;</button>
+      <button class="sn" data-page="costi"><span class="snic">&#129534;</span>Costi generali</button>
       <button class="sn" data-page="users"><span class="snic">&#128101;</span>Utenti</button>
     </div>
     <div class="sfoot">
@@ -761,6 +762,43 @@ tbody tr:hover td { background:#f0f4f9; }
     </div>
     <div class="mf"><button class="btn" data-close="m-chiedi">Annulla</button>
       <button class="btn btn-p" id="ch-go">&#9993;&#65039; Avvisa l&rsquo;amministrazione</button></div>
+  </div>
+</div>
+
+<div class="ov" id="m-costo">
+  <div class="modal modal-sm">
+    <div class="mh"><h3 id="mco-t">Nuovo costo generale</h3><button class="mx" data-close="m-costo">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg2">
+        <div class="fg"><label class="fl">Categoria *</label><select class="fc" id="co-cat"></select></div>
+        <div class="fg"><label class="fl">Importo &euro; *</label>
+          <input type="number" class="fc" id="co-imp" step="0.01" min="0"></div>
+      </div>
+      <div class="fg"><label class="fl">Descrizione *</label>
+        <input class="fc" id="co-desc" placeholder="Es. Canone annuo software di calcolo strutturale"></div>
+      <div class="fg"><label class="fl">Fornitore</label>
+        <input class="fc" id="co-forn" list="co-fornitori" placeholder="Es. Certiquality, Enel, Autodesk">
+        <datalist id="co-fornitori"></datalist></div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Data</label><input type="date" class="fc" id="co-data"></div>
+        <div class="fg"><label class="fl">Anno di competenza</label><select class="fc" id="co-anno"></select></div>
+      </div>
+      <div class="hint" style="margin:-8px 0 14px">L&rsquo;anno di competenza non &egrave; per forza
+        quello della data: la bolletta di dicembre pagata a gennaio &egrave; dell&rsquo;anno prima.</div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Stato del pagamento</label>
+          <select class="fc" id="co-pag"><option value="0">Da pagare</option><option value="1">Pagato</option></select></div>
+        <div class="fg" id="co-pagdt-box"><label class="fl">Pagato il</label>
+          <input type="date" class="fc" id="co-pagdt"></div>
+      </div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="co-note" rows="2"></textarea></div>
+      <input type="hidden" id="co-id">
+    </div>
+    <div class="mf">
+      <span class="left"><button class="btn btn-d" id="co-del" style="display:none">Elimina</button></span>
+      <button class="btn" data-close="m-costo">Chiudi</button>
+      <button class="btn btn-p" id="co-save">Salva</button>
+    </div>
   </div>
 </div>
 
@@ -1267,7 +1305,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.23.1';
+const VERSIONE = '2026.09.25.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1290,7 +1328,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [],
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1467,7 +1505,8 @@ const MIGRAZIONI = {
   '027_spese_anticipate':    ['commessa_spese','data_spesa'],
   '028_esterni_pagamento':   ['pagato','data_pagamento'],
   '029_ore_zero_esterni':    ['ck_ore_o_parcella'],
-  '030_isa':                 ['isa_tipo','anno_competenza']
+  '030_isa':                 ['isa_tipo','anno_competenza'],
+  '031_costi_generali':      ['costi_generali']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2793,7 +2832,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2811,7 +2850,8 @@ async function loadAll(silent) {
       SB.from('task_messaggi').select('*').order('created_at', {ascending:false}).limit(300),
       SB.from('commessa_contratti').select('*').order('numero'),
       SB.from('commessa_fattura_righe').select('*').order('ordine'),
-      SB.from('commessa_spese').select('*').order('data_spesa')
+      SB.from('commessa_spese').select('*').order('data_spesa'),
+      SB.from('costi_generali').select('*').order('data_spesa', {ascending:false})
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2835,6 +2875,9 @@ async function loadAll(silent) {
     S.contratti = rct.error ? [] : (rct.data || []);
     S.fattRighe = rfr.error ? [] : (rfr.data || []);
     S.spese     = rsp.error ? [] : (rsp.data || []);
+    /* Li legge solo chi tiene l'amministrazione: per gli altri la RLS
+       risponde con un elenco vuoto, ed e' giusto cosi'. */
+    S.costiGen  = rcg.error ? [] : (rcg.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2845,7 +2888,8 @@ async function loadAll(silent) {
                      [rsa, 'commessa_sal'],     [rva, 'commessa_varianti'],
                      [rms, 'task_messaggi'],   [rct, 'commessa_contratti'],
                      [rfr, 'commessa_fattura_righe'],
-                     [rsp, 'commessa_spese']]);
+                     [rsp, 'commessa_spese'],
+                     [rcg, 'costi_generali']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -2884,6 +2928,51 @@ const giaPagate    = ee => ee.filter(e => !!e.pagato);
 const totEsterni   = ee => r2(ee.reduce((a, e) => a + Number(e.costo_totale || 0), 0));
 /* Su tutto lo studio: quanto e' uscito e quanto deve ancora uscire. */
 const esterniTutti = () => S.time.filter(eEsterna);
+
+/* ---------------------------------------------------------------------------
+   COSTI GENERALI DELLO STUDIO
+   Quello che si paga per tenere aperto lo studio e che non appartiene a
+   nessuna commessa: sistema qualita', utenze, abbonamenti, software.
+   --------------------------------------------------------------------------- */
+const CATEGORIE_COSTO = [
+  ['qualita',              'Sistema qualità'],
+  ['consulenze',           'Consulenze (commercialista, legale, …)'],
+  ['utenze',               'Utenze e bollette'],
+  ['affitto',              'Affitto e spese dei locali'],
+  ['software',             'Software e abbonamenti'],
+  ['hardware',             'Computer, stampanti, manutenzione'],
+  ['assicurazioni',        'Assicurazioni'],
+  ['formazione',           'Formazione e aggiornamento'],
+  ['ordini_professionali', 'Ordini e casse professionali'],
+  ['veicoli',              'Veicoli e trasferte'],
+  ['cancelleria',          'Cancelleria e materiali'],
+  ['banca',                'Banca e commissioni'],
+  ['altro',                'Altro']
+];
+const nomeCategoria = k => (CATEGORIE_COSTO.find(x => x[0] === k) || [, k || 'Altro'])[1];
+/* L'anno del costo: quello scritto, altrimenti quello della data. La bolletta
+   di dicembre pagata a gennaio si scrive col suo anno e resta dov'e'. */
+const annoCosto  = c => Number(c.anno_competenza) || Number(String(c.data_spesa || '').slice(0, 4)) || null;
+const costiAnno  = anno => S.costiGen.filter(c => annoCosto(c) === Number(anno));
+const totCosti   = cc => r2(cc.reduce((a, c) => a + Number(c.importo || 0), 0));
+
+/* Il riepilogo di un anno: totale, pagato, da pagare, e voce per voce dalla
+   piu' pesante. Si legge cosi': dove vanno i soldi, e quanto resta da uscire. */
+function riepilogoCosti(anno) {
+  const cc = costiAnno(anno);
+  const per = {};
+  cc.forEach(c => { const k = c.categoria || 'altro';
+    (per[k] = per[k] || []).push(c); });
+  const categorie = Object.keys(per).map(k => ({ k, nome: nomeCategoria(k),
+      voci: per[k].length, totale: totCosti(per[k]),
+      daPagare: totCosti(per[k].filter(c => !c.pagato)) }))
+    .sort((a, b) => b.totale - a.totale);
+  return { anno: Number(anno), voci: cc, categorie, totale: totCosti(cc),
+           pagato: totCosti(cc.filter(c => c.pagato)),
+           daPagare: totCosti(cc.filter(c => !c.pagato)) };
+}
+const anniCosti = () => Array.from(new Set(S.costiGen.map(annoCosto).filter(Boolean)))
+  .sort((a, b) => b - a);
 /* Un'attivita' e' ancora DA FARE solo se la sua fase e' ancora aperta. Chiusa la
    fase, quello che sta dentro non e' piu' in scadenza: continuare a mostrarlo
    nello scadenzario riempirebbe la pagina di cose gia' archiviate e chi la
@@ -3611,7 +3700,8 @@ async function doLogout() {
    =========================================================================== */
 const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
-                 files:'File Commesse', users:'Gestione Utenti', project:'Commessa' };
+                 files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
+                 costi:'Costi generali dello studio' };
 
 /* IL CASSETTO DEL MENU (solo su telefono)
    Su iPad e su computer la barra laterale e' sempre li' e queste funzioni non
@@ -3656,7 +3746,7 @@ function render() {
     oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
-    time:rTime, chat:rChat, redditivita:rRedditivita, users:rUsers
+    time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, users:rUsers
   };
   (P[S.page] || rOggi)();
   updBadges();
@@ -5863,6 +5953,140 @@ function stampaIsa() {
     + '</body></html>');
   w.document.close();
   setTimeout(() => w.print(), 250);
+}
+
+/* ---------------------------------------------------------------------------
+   PAGINA: COSTI GENERALI DELLO STUDIO
+   Quanto costa tenere aperto lo studio in un anno, voce per voce, e quanto
+   resta da pagare. Li vede e li scrive chi tiene l'amministrazione.
+   --------------------------------------------------------------------------- */
+function rCosti() {
+  if (!vedeTutto()) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>🔒</i>'
+      + '<p>I costi generali li vede chi tiene l’amministrazione dello studio.</p></div></div>';
+    return;
+  }
+  const anni = Array.from(new Set(anniCosti().concat([today().getFullYear()]))).sort((a, b) => b - a);
+  if (!S.costiAnno || anni.indexOf(Number(S.costiAnno)) < 0) S.costiAnno = anni[0];
+  el('crumb').textContent = 'Quello che si paga per tenere aperto lo studio, fuori dalle commesse.';
+  el('top-act').innerHTML = '<select class="sel" id="co-annosel">'
+      + anni.map(a => '<option value="' + a + '"' + (a === Number(S.costiAnno) ? ' selected' : '') + '>' + a + '</option>').join('')
+    + '</select> <button class="btn btn-sm btn-p" id="co-nuovo">&#43; Costo</button>';
+  el('co-annosel').onchange = e => { S.costiAnno = Number(e.target.value); render(); };
+  el('co-nuovo').onclick = () => openCosto();
+
+  const r = riepilogoCosti(S.costiAnno);
+  const kpis = '<div class="kgrid">'
+    + kpi('Costi ' + r.anno, feuro(r.totale), r.voci.length + (r.voci.length === 1 ? ' voce' : ' voci'), 100, 'var(--navy)')
+    + kpi('Già pagati', feuro(r.pagato), '', r.totale ? r.pagato / r.totale * 100 : 0, 'var(--grn)')
+    + kpi('Da pagare', feuro(r.daPagare), '', r.totale ? r.daPagare / r.totale * 100 : 0, 'var(--ora)')
+    + '</div>';
+
+  if (!r.voci.length) {
+    el('page').innerHTML = kpis + '<div class="card"><div class="empty"><i>🧾</i>'
+      + '<p>Nessun costo registrato per il ' + r.anno + '.</p>'
+      + '<p style="font-size:12px;margin-top:6px">Sistema qualità, bollette, abbonamenti, software, '
+      + 'assicurazioni: tutto quello che lo studio paga e che non appartiene a una commessa.</p></div></div>';
+    return;
+  }
+
+  const cat = '<div class="card mb16"><div class="card-h"><span class="card-t">Dove vanno i soldi</span></div>'
+    + r.categorie.map(c => '<div style="margin-bottom:9px">'
+        + '<div class="spread" style="font-size:12.5px;margin-bottom:3px"><span>' + esc(c.nome)
+          + ' <span style="color:var(--mut)">· ' + c.voci + '</span></span>'
+          + '<span><b>' + feuro(c.totale) + '</b>'
+          + (c.daPagare ? ' <span style="color:var(--ora);font-size:11px">(' + feuro(c.daPagare) + ' da pagare)</span>' : '')
+          + '</span></div>'
+        + '<div class="pb"><div class="pbf" style="width:' + (r.totale ? c.totale / r.totale * 100 : 0)
+          + '%;background:var(--navy)"></div></div></div>').join('')
+    + '</div>';
+
+  const righe = r.voci.slice().sort((a, b) => String(b.data_spesa).localeCompare(String(a.data_spesa)))
+    .map(c => '<tr data-costo="' + c.id + '" style="cursor:pointer">'
+      + '<td style="width:88px;font-size:12px;color:var(--mut)">' + fdate(c.data_spesa) + '</td>'
+      + '<td><b>' + esc(c.descrizione) + '</b><div style="font-size:11px;color:var(--mut)">'
+        + esc(nomeCategoria(c.categoria)) + (c.fornitore ? ' · ' + esc(c.fornitore) : '') + '</div></td>'
+      + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(c.importo) + '</b></td>'
+      + '<td style="font-size:11.5px;white-space:nowrap">' + (c.pagato
+          ? '<span style="color:var(--grn)">✓ pagato' + (c.data_pagamento ? ' il ' + fdate(c.data_pagamento) : '') + '</span>'
+          : '<span style="color:var(--ora);font-weight:600">da pagare</span>') + '</td>'
+      + '<td class="ac">' + (c.pagato
+          ? '<button class="btn btn-xs" data-costonon="' + c.id + '" title="Segna come da pagare">↺</button>'
+          : '<button class="btn btn-xs btn-p" data-costopag="' + c.id + '">Segna pagato</button>') + '</td>'
+      + '</tr>').join('');
+
+  el('page').innerHTML = kpis + cat
+    + '<div class="card"><div class="card-h"><span class="card-t">Tutte le voci del ' + r.anno + '</span></div>'
+    + '<div class="tw"><table class="tsm"><tbody>' + righe + '</tbody></table></div></div>';
+}
+
+function openCosto(id) {
+  const c = id ? byId(S.costiGen, id) : null;
+  el('mco-t').textContent = c ? 'Costo generale' : 'Nuovo costo generale';
+  el('co-id').value   = id || '';
+  el('co-cat').innerHTML = CATEGORIE_COSTO.map(x => '<option value="' + x[0] + '"'
+    + ((c ? c.categoria : 'altro') === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('');
+  el('co-desc').value = c ? c.descrizione : '';
+  el('co-forn').value = c ? (c.fornitore || '') : '';
+  el('co-imp').value  = c && c.importo != null ? c.importo : '';
+  el('co-data').value = c ? (c.data_spesa || todayISO()) : todayISO();
+  el('co-anno').innerHTML = isaOpzAnni(c ? annoCosto(c) : (S.costiAnno || today().getFullYear()));
+  el('co-pag').value  = c && c.pagato ? '1' : '0';
+  el('co-pagdt').value = c ? (c.data_pagamento || '') : '';
+  el('co-note').value = c ? (c.note || '') : '';
+  /* i fornitori gia' usati, per non doverli riscrivere */
+  el('co-fornitori').innerHTML = Array.from(new Set(S.costiGen.map(x => (x.fornitore || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'it')).map(f => '<option value="' + esc(f) + '">').join('');
+  el('co-del').style.display = c ? 'inline-flex' : 'none';
+  disegnaCosto();
+  openM('m-costo');
+}
+function disegnaCosto() {
+  const pagato = el('co-pag').value === '1';
+  el('co-pagdt-box').style.display = pagato ? '' : 'none';
+  if (pagato && !el('co-pagdt').value) el('co-pagdt').value = todayISO();
+}
+async function saveCosto() {
+  const desc = el('co-desc').value.trim();
+  if (!desc) return toast('Scrivi di che costo si tratta.', 'error');
+  const imp = parseFloat(el('co-imp').value);
+  if (isNaN(imp) || imp < 0) return toast('Indica l’importo.', 'error');
+  const pagato = el('co-pag').value === '1';
+  const pay = {
+    categoria: el('co-cat').value, descrizione: desc,
+    fornitore: el('co-forn').value.trim() || null, importo: imp,
+    data_spesa: el('co-data').value || todayISO(),
+    anno_competenza: Number(el('co-anno').value) || null,
+    pagato, data_pagamento: pagato ? (el('co-pagdt').value || todayISO()) : null,
+    note: el('co-note').value.trim() || null
+  };
+  const id = el('co-id').value;
+  setLoading('co-save', true);
+  const { error } = id
+    ? await SB.from('costi_generali').update(pay).eq('id', id)
+    : await SB.from('costi_generali').insert(Object.assign({ created_by: S.me.id }, pay));
+  setLoading('co-save', false);
+  if (error) return sbErr(error, 'costo generale');
+  /* si resta sull'anno del costo appena scritto, per vederlo */
+  if (pay.anno_competenza) S.costiAnno = pay.anno_competenza;
+  closeM('m-costo'); await loadAll(true); render();
+  toast(id ? 'Costo aggiornato' : 'Costo registrato', 'success');
+}
+async function delCosto() {
+  const id = el('co-id').value; const c = byId(S.costiGen, id); if (!c) return;
+  if (!confirm('Eliminare «' + c.descrizione + '» (' + feuro(c.importo) + ')?')) return;
+  const { error } = await SB.from('costi_generali').delete().eq('id', id);
+  if (error) return sbErr(error, 'costo generale');
+  closeM('m-costo'); await loadAll(true); render(); toast('Costo eliminato');
+}
+async function segnaCostoPagato(id, si) {
+  const c = byId(S.costiGen, id); if (!c) return;
+  const pay = si ? { pagato: true, data_pagamento: c.data_pagamento || todayISO() }
+                 : { pagato: false, data_pagamento: null };
+  Object.assign(c, pay); render();
+  const { error } = await SB.from('costi_generali').update(pay).eq('id', id);
+  if (error) { await loadAll(true); render(); return sbErr(error, 'pagamento'); }
+  toast(si ? 'Segnato come pagato' : 'Segnato come da pagare', 'success');
 }
 
 /* ----------------------------- MODALE SCAGLIONE ----------------------------- */
@@ -10112,6 +10336,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   el('fa-save').onclick = saveFase;
   el('isa-stampa').onclick = stampaIsa;
+  el('co-save').onclick = saveCosto;
+  el('co-del').onclick  = delCosto;
+  el('co-pag').onchange = disegnaCosto;
   el('sp-save').onclick = saveSpesa;
   el('sp-del').onclick  = delSpesa;
   el('sp-tipo').onchange = disegnaSpesa;
@@ -10211,6 +10438,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-newfatt'))) { e.stopPropagation(); return openFatt(null, S.projId); }
     if ((n = f('data-fatt')))    { return openFatt(n.dataset.fatt); }
     if ((n = f('data-spesa')))   { return openSpesa(n.dataset.spesa); }
+    if ((n = f('data-costopag'))) { e.stopPropagation(); return segnaCostoPagato(n.dataset.costopag, true); }
+    if ((n = f('data-costonon'))) { e.stopPropagation(); return segnaCostoPagato(n.dataset.costonon, false); }
+    if ((n = f('data-costo')))    { return openCosto(n.dataset.costo); }
     if ((n = f('data-paga')))    { e.stopPropagation(); return segnaPagata(n.dataset.paga, true); }
     if ((n = f('data-nonpag')))  { e.stopPropagation(); return segnaPagata(n.dataset.nonpag, false); }
     if ((n = f('data-delprat'))) { e.stopPropagation(); return delPratica(n.dataset.delprat); }
