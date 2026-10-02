@@ -43,7 +43,7 @@ function launchOpts(){
                            document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show')); });
   }catch(e){} };
   const t=async(n,fn)=>{ try{ await fn(); ok.push(n); }
-                         catch(e){ bad.push(n+' → '+e.message.split('\n')[0]); await ripulisci(); } };
+                         catch(e){ bad.push(n+' → '+e.message.split('\n').slice(0,6).join(' | ')); await ripulisci(); } };
   const must=(c,m)=>{ if(!c) throw new Error(m||'falso'); };
 
   await p.waitForSelector('#app.show',{timeout:8000});
@@ -957,6 +957,74 @@ function launchOpts(){
     must(await p.isDisabled('#sp-imp'),'l importo di una spesa già fatturata è ancora modificabile');
     must(await p.isVisible('#sp-chiusa'),'non spiega perché non si tocca');
     await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  });
+  /* IL CASO SEGNALATO: dopo aver generato l'XML se ne aggiunge una terza e si
+     rigenera. Il file reimportato deve averle tutte e tre. */
+  await t('una spesa aggiunta dopo la generazione entra nel file rigenerato',async()=>{
+    await p.click('[data-act="nuovaspesa"]');
+    await p.waitForSelector('#m-spesa.show',{timeout:4000});
+    await p.selectOption('#sp-tipo','catasto'); await p.fill('#sp-imp','15.50');
+    await p.click('#sp-save'); await p.waitForTimeout(600);
+    const fid=await p.evaluate(()=>{
+      const f=fattureOf(S.projId)[0], pr=byId(S.projects,f.project_id);
+      Object.assign(STUDIO,{denominazione:'Studio Tecnico SCS S.r.l.',piva:'03512340548',
+        indirizzo:'Via Mazzini',cap:'06121',comune:'Perugia',provincia:'PG'});
+      Object.assign(pr,{client:'Immobiliare Vitelli',cliente_piva:'02345670541',
+        cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+        cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
+      if(!f.numero_fattura) f.numero_fattura='2026/090';
+      if(!f.data_fattura) f.data_fattura='2026-09-15';
+      if(!f.percentuale && !f.imponibile && !righeFattura(f.id).length) f.imponibile=1000;
+      openRevisione(f.id); return f.id; });
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(300);
+    const box=await p.evaluate(()=>Array.from(document.querySelectorAll('[data-revspesa]'))
+      .map(c=>({on:c.checked,dis:c.disabled})));
+    must(box.length===3,'nella revisione non si vedono tre spese: '+box.length);
+    must(box.filter(b=>b.dis).length===2,'le due già in fattura dovrebbero essere fisse');
+    must(box.every(b=>b.on),'la spesa nuova non è spuntata: '+JSON.stringify(box));
+    must(/dopo l’ultima generazione/.test(await p.textContent('#rev-body')),'non avvisa della spesa nuova');
+    must(!(await p.isDisabled('#rev-go')),'generazione bloccata: '+(await p.textContent('#rev-err')));
+    let xml='';
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:8000}).catch(()=>null),p.click('#rev-go')]);
+    must(dl,'nessun download: '+ultimoDialogo);
+    xml=require('fs').readFileSync(await dl.path(),'utf8');
+    must((xml.match(/<DettaglioLinee>(?:(?!<\/DettaglioLinee>).)*<Natura>N1<\/Natura>/g)||[]).length===3,
+      'nel file le spese non sono tre');
+    must(/Spese catasto/.test(xml),'la spesa aggiunta per ultima non è nel file');
+    await p.waitForTimeout(600);
+    const g=await p.evaluate(id=>({agganciate:S.spese.filter(x=>x.fattura_id===id).length,
+      aperte:speseAperte(S.projId).length}),fid);
+    must(g.agganciate===3&&g.aperte===0,'dopo la rigenerazione: '+JSON.stringify(g));
+  });
+  await t('togliendo la spunta la spesa resta per la prossima fattura',async()=>{
+    await p.click('[data-act="nuovaspesa"]');
+    await p.waitForSelector('#m-spesa.show',{timeout:4000});
+    await p.selectOption('#sp-tipo','bolli_comune'); await p.fill('#sp-imp','16');
+    await p.click('#sp-save'); await p.waitForTimeout(600);
+    const fid=await p.evaluate(()=>{
+      /* il ricaricamento dopo la generazione ha riletto la commessa dal
+         database di prova, che i dati del committente non li ha */
+      const f=fattureOf(S.projId)[0], pr=byId(S.projects,f.project_id);
+      Object.assign(pr,{client:'Immobiliare Vitelli',cliente_piva:'02345670541',
+        cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+        cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
+      openRevisione(f.id); return f.id; });
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(300);
+    const nuova=p.locator('[data-revspesa]:not([disabled])');
+    must(!(await p.isDisabled('#rev-go')),'generazione bloccata: '+(await p.textContent('#rev-err')));
+    must(await nuova.count()===1,'la spesa nuova non ha la sua spunta');
+    const prima=await p.evaluate(()=>calcolaDa(REV).anticipazioni);
+    await nuova.uncheck(); await p.waitForTimeout(300);
+    const dopo=await p.evaluate(()=>calcolaDa(REV).anticipazioni);
+    must(prima-dopo===16,'il totale non scende di 16: '+prima+' → '+dopo);
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:8000}).catch(()=>null),p.click('#rev-go')]);
+    must(dl,'nessun download: '+ultimoDialogo);
+    const xml=require('fs').readFileSync(await dl.path(),'utf8');
+    must(!/Bolli Comune/.test(xml),'la spesa senza spunta è finita nel file');
+    await p.waitForTimeout(600);
+    const g=await p.evaluate(id=>({agg:S.spese.filter(x=>x.fattura_id===id).length,
+      aperte:speseAperte(S.projId).length}),fid);
+    must(g.agg===3&&g.aperte===1,'la spesa senza spunta è stata agganciata lo stesso: '+JSON.stringify(g));
   });
   await t('la commessa ha la sezione delle spese per collaboratori esterni',async()=>{
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);

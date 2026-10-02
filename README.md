@@ -755,6 +755,17 @@ fattura**: non torna sulla successiva e non si può più modificare, perché
 cambierebbe il totale di un documento già trasmesso. Non si può né dimenticarne
 una né metterla due volte.
 
+**Una spesa aggiunta dopo aver generato il file** non si perde: rigenera l'XML
+dalla stessa fattura e la trovi nella finestra di revisione, nel riquadro
+*Spese anticipate art. 15*, già spuntata e con l'avviso «ci sono spese
+registrate dopo l'ultima generazione». Il file nuovo le contiene tutte; quelle
+già entrate prima restano fisse. Se invece quella spesa la vuoi far pagare con
+la fattura successiva, **togli la spunta**: resta da farsi restituire e va sulla
+prossima. Le fatture incassate o annullate non prendono più spese nuove.
+
+Le spese possono essere quante vuoi: ognuna esce sulla sua riga `N1`, e il
+riepilogo `N1` ne porta la somma.
+
 Il modello è la parcella 47 dello studio, che questa riga la fa da anni: un
 controllo confronta la riga che generiamo con la sua — quantità, aliquota,
 natura.

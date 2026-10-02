@@ -602,12 +602,57 @@ ctx.S.fatture=[FS,FS2];
 t('gia fatturate, non tornano sulla fattura dopo',ctx.speseDaMettere(FS2).length===0,
   ctx.speseDaMettere(FS2).length);
 t('ma restano su quella che le ha prese',ctx.speseDaMettere(FS).length===3,null);
-/* una fattura gia' generata non se ne prende di nuove */
-const FS3=Object.assign({},FS,{id:'fS3',xml_generato_at:'2026-09-01T10:00:00Z'});
+/* IL CASO SEGNALATO: due spese, si genera l'XML, se ne aggiunge una terza e
+   si rigenera. Prima la fattura gia' generata non la prendeva piu', e il file
+   reimportato usciva senza l'ultima spesa. */
+ctx.S.fatture=[Object.assign(FS,{xml_generato_at:'2026-09-01T10:00:00Z',stato:'emessa'}),FS2];
 ctx.S.spese=ctx.S.spese.concat([{id:'sp4',project_id:'pS',tipo:'bolli_comune',importo:16,fattura_id:null}]);
-t('una fattura gia generata non si prende le spese nuove',
-  ctx.speseDaMettere(FS3).length===0,ctx.speseDaMettere(FS3).length);
-t('che aspettano invece la prossima',ctx.speseAperte('pS').length===1,ctx.speseAperte('pS').length);
+t('rigenerando, la fattura prende anche la spesa aggiunta dopo',
+  ctx.speseDaMettere(FS).length===4,ctx.speseDaMettere(FS).map(x=>x.id));
+const dRig=Object.assign(ctx.datiFattura(FS),{numero:'2026/060',data:'2026-09-16',progressivo:70});
+t('e la riconosce come nuova',dRig.spese.filter(x=>x.nuova).map(x=>x.id).join()==='sp4',
+  dRig.spese.map(x=>[x.id,x.nuova]));
+const rRig=ctx.xmlDaDati(dRig);
+const lRig=(rRig.errori?[]:rRig.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
+t('nel file rigenerato le spese sono quattro',lRig.filter(l=>/<Natura>N1/.test(l)).length===4,lRig.length);
+t('la nuova compresa',lRig.some(l=>/Bolli Comune/i.test(l)&&/16\.00/.test(l)),null);
+t('il riepilogo N1 vale 88,00',/<Natura>N1<\/Natura><ImponibileImporto>88\.00</.test(rRig.xml),null);
+t('e il totale la comprende',(rRig.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]==='1356.80',
+  (rRig.xml.match(/<ImportoTotaleDocumento>([\d.]+)/)||[])[1]);
+/* togliendo la spunta resta per la prossima fattura */
+dRig.spese.find(x=>x.id==='sp4').fuori=true;
+const rRig2=ctx.xmlDaDati(dRig);
+t('senza spunta la nuova resta fuori dal file',
+  (rRig2.xml.match(/<Natura>N1<\/Natura>/g)||[]).length===4  // 3 righe + 1 riepilogo
+  &&/<ImponibileImporto>72\.00</.test(rRig2.xml),(rRig2.xml.match(/<Natura>N1<\/Natura>/g)||[]).length);
+t('e dal totale',ctx.calcolaDa(dRig).anticipazioni===72,ctx.calcolaDa(dRig).anticipazioni);
+t('una fattura incassata non si prende le spese nuove',
+  ctx.speseDaMettere(Object.assign({},FS,{stato:'incassata'})).length===3,null);
+t('nemmeno una annullata',
+  ctx.speseDaMettere(Object.assign({},FS,{stato:'annullata'})).length===3,null);
+t('la spesa nuova resta aperta per la prossima',ctx.speseAperte('pS').length===1,ctx.speseAperte('pS').length);
+
+/* PIU' DI DUE SPESE: cinque, tutte nello stesso file, ognuna sulla sua riga */
+const FS5={id:'fS5',project_id:'pS',descrizione:'Acconto',imponibile:2000,stato:'pronta'};
+ctx.S.fatture=[FS5];
+ctx.S.spese=[['bolli_genio',32],['bolli_comune',16],['catasto',15.5],['diritti_comune',51.65],['altro',10.2]]
+  .map(([tipo,importo],i)=>({id:'q'+i,project_id:'pS',tipo,importo,descrizione:tipo==='altro'?'marca da bollo':null,
+     data_spesa:'2026-03-0'+(i+1),fattura_id:null}));
+const d5=Object.assign(ctx.datiFattura(FS5),{numero:'2026/070',data:'2026-09-20',progressivo:80});
+const r5=ctx.xmlDaDati(d5);
+const l5=(r5.errori?[]:r5.xml.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g))||[];
+t('cinque spese: cinque righe N1',l5.filter(l=>/<Natura>N1/.test(l)).length===5,l5.length);
+t('numerate di seguito, senza buchi',l5.map(l=>cp(l,'NumeroLinea')).join()===
+  l5.map((_,i)=>String(i+1)).join(),l5.map(l=>cp(l,'NumeroLinea')));
+t('un solo riepilogo N1 con la somma',(r5.xml.match(/<DatiRiepilogo>/g)||[]).length===2
+  &&/<Natura>N1<\/Natura><ImponibileImporto>125\.35</.test(r5.xml),null);
+const prezzi5=l5.filter(l=>/N1/.test(l)).reduce((a,l)=>a+Number(cp(l,'PrezzoTotale')),0);
+t('le righe sommano il riepilogo',ctx.r2(prezzi5)===125.35,prezzi5);
+if(!r5.errori){
+  fs.writeFileSync('/tmp/fatt-5spese.xml',r5.xml);
+  let wf=''; try{execSync('xmllint --noout /tmp/fatt-5spese.xml 2>&1');}catch(e){wf=(e.stdout||'')+(e.stderr||'');}
+  t('l XML con cinque spese e ben formato',wf==='',wf.slice(0,300));
+}
 
 /* Senza spese il documento e' identico a prima: un blocco solo, niente N1 */
 ctx.S.spese=[];

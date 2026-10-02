@@ -1305,7 +1305,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.09.25.1';
+const VERSIONE = '2026.10.02.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4497,15 +4497,29 @@ const etichettaSpesa = x => DICITURA_SPESE + ' — '
      : (TIPI_SPESA[x.tipo] || x.tipo) + (x.descrizione ? ' (' + x.descrizione + ')' : ''));
 
 /* QUALI SPESE FINISCONO SU QUESTA FATTURA
-   Quelle gia' agganciate, sempre: una fattura emessa non cambia piu'. E, se il
-   file non e' ancora stato generato, anche tutte quelle ancora da fatturare -
-   e' il significato di "sulla prima fattura utile". Da li' in poi restano
-   attaccate a quella e non possono finire due volte. */
+   Quelle gia' agganciate, sempre. Piu' tutte quelle della commessa ancora da
+   fatturare - e' il significato di "sulla prima fattura utile".
+
+   ANCHE QUANDO IL FILE E' GIA' STATO GENERATO. Prima una fattura generata non
+   prendeva piu' le spese nuove: chi ne aggiungeva una dopo e rigenerava l'XML
+   per reimportarlo si ritrovava il file senza l'ultima spesa, e nessun avviso.
+   Rigenerare vuol dire proprio "rifai il file con quello che c'e' adesso".
+   Nella finestra di revisione ogni spesa nuova ha la sua spunta: chi la vuole
+   lasciare alla fattura successiva la toglie.
+
+   Restano fuori solo le fatture incassate o annullate: quelle sono chiuse, e
+   una spesa nuova li' non ha niente da fare. Una volta generato il file, le
+   spese che ci sono entrate restano attaccate a quella fattura e non possono
+   finire due volte. */
 function speseDaMettere(f) {
   if (!f) return [];
   const gia = speseDiFatt(f.id);
-  return f.xml_generato_at ? gia : gia.concat(speseAperte(f.project_id));
+  if (['incassata', 'annullata'].indexOf(f.stato) >= 0) return gia;
+  return gia.concat(speseAperte(f.project_id));
 }
+/* Le spese che vanno davvero nel file: in revisione se ne puo' togliere una
+   nuova, lasciandola alla prossima fattura. */
+const speseNelFile = d => (d.spese || []).filter(x => !x.fuori);
 
 /* Con le righe l'imponibile e' la loro somma, e vince su tutto: e' il database
    stesso a tenerlo allineato, qui si legge lo stesso numero senza aspettare il
@@ -4713,7 +4727,9 @@ function datiFattura(f) {
                     descrizione: r.descrizione || '', importo: r2(r.importo || 0) })),
     /* Le anticipazioni art. 15 da farsi restituire con questa fattura. */
     spese       : speseDaMettere(f).map(x => ({
-                    id: x.id, descrizione: etichettaSpesa(x), importo: r2(x.importo || 0) })),
+                    id: x.id, descrizione: etichettaSpesa(x), importo: r2(x.importo || 0),
+                    /* nuova = non ancora agganciata a nessuna fattura */
+                    nuova: !x.fattura_id, fuori: false })),
 
     /* Imposte */
     aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
@@ -4748,7 +4764,7 @@ function calcolaDa(d) {
   const imponibile = r2(Number(d.imponibile) || 0);
   /* Le anticipazioni art. 15 restano fuori da cassa e IVA: si sommano solo in
      coda, al totale e a quello da incassare. */
-  const antic = r2((d.spese || []).reduce((a, s) => a + (Number(s.importo) || 0), 0));
+  const antic = r2(speseNelFile(d).reduce((a, s) => a + (Number(s.importo) || 0), 0));
   const cassa = r2(imponibile * (Number(d.aliquotaCassa) || 0) / 100);
   const base  = r2(imponibile + (d.cassaSoggettaIva ? cassa : 0));
   const iva   = r2(base * (Number(d.aliquotaIva) || 0) / 100);
@@ -4880,7 +4896,7 @@ function xmlDaDati(d) {
   /* Le anticipazioni per conto del cliente chiudono il documento, dopo i
      compensi: e' l'ordine in cui le legge chi riceve, e tiene separato quello
      che e' lavoro da quello che e' solo un rimborso. */
-  const tutteLeRighe = linee.concat((d.spese || []).map(x => ({
+  const tutteLeRighe = linee.concat(speseNelFile(d).map(x => ({
     descrizione: x.descrizione, importo: r2(x.importo || 0), spesa: true })));
 
 
@@ -5736,8 +5752,9 @@ function spesePanel(p) {
     + '<div class="hint" style="margin-top:10px">Bolli, visure, diritti di segreteria: quello che lo '
       + 'studio anticipa <b>in nome e per conto del cliente</b>. Finiscono da sole sulla prima fattura '
       + 'che generi, con la dicitura «' + esc(DICITURA_SPESE) + '», <b>senza IVA e senza cassa</b> — '
-      + 'sono un rimborso, non un compenso. Da lì restano attaccate a quella fattura e non possono '
-      + 'uscire due volte.</div>'
+      + 'sono un rimborso, non un compenso. Se ne aggiungi una dopo aver già generato l’XML, '
+      + '<b>rigenera il file</b>: la trovi spuntata nella finestra di revisione. Da lì restano '
+      + 'attaccate a quella fattura e non possono uscire due volte.</div>'
     + '</div>';
 }
 
@@ -6373,6 +6390,8 @@ function disegnaRevisione() {
       + '<div class="hint">È la <b>prima riga della fattura</b>, quella senza importi. '
       + 'I caratteri non ammessi dallo schema vengono convertiti da soli.</div></div>'
 
+    + speseRevisione(d)
+
     /* L'unico campo che finisce nelle note del documento. Arriva dallo
        scaglione ed e' modificabile qui per l'ultima volta prima di generare:
        quello che il committente legge si vede mentre lo si scrive. */
@@ -6432,6 +6451,38 @@ function disegnaRevisione() {
     + '</div>';
 
   aggiornaTotali();
+}
+
+/* Le spese anticipate che entrano in questo file, una per una. Le nuove - non
+   ancora su nessuna fattura - hanno la spunta: di norma ci vanno, ma chi le
+   vuole lasciare alla fattura successiva la toglie. Quelle gia' entrate in
+   questa fattura restano: sono parte di un documento gia' prodotto. */
+function speseRevisione(d) {
+  const ss = d.spese || [];
+  if (!ss.length) return '';
+  const f = byId(S.fatture, d.fattId);
+  const nuoveDopo = f && f.xml_generato_at && ss.some(x => x.nuova);
+  return '<div class="fg"><label class="fl">Spese anticipate art. 15 '
+      + '<span style="font-weight:400;color:var(--mut)">— senza IVA e senza cassa</span></label>'
+    + '<div style="font-size:12.5px;line-height:1.7;border:1px solid var(--bord);border-radius:6px;padding:8px 10px">'
+    + ss.map(x => '<label class="spread" style="gap:12px;align-items:flex-start;cursor:'
+        + (x.nuova ? 'pointer' : 'default') + (x.fuori ? ';color:var(--mut);text-decoration:line-through' : '') + '">'
+        + '<span><input type="checkbox" data-revspesa="' + x.id + '"' + (x.fuori ? '' : ' checked')
+          + (x.nuova ? '' : ' disabled') + ' style="margin-right:6px">' + esc(x.descrizione)
+          + (x.nuova ? '' : ' <span style="color:var(--grn);font-size:11px">già in questa fattura</span>')
+        + '</span><b style="white-space:nowrap">' + feuro(x.importo) + '</b></label>').join('')
+    + '</div><div class="hint">'
+    + (nuoveDopo
+        ? '<b>Ci sono spese registrate dopo l’ultima generazione</b>: con la spunta entrano nel file '
+          + 'che rigeneri. Toglila per lasciarle alla prossima fattura. '
+        : 'Togli la spunta a una spesa per lasciarla alla prossima fattura. ')
+    + 'Le spese si aggiungono dalla scheda Fatturazione della commessa.</div></div>';
+}
+function revSpesa(id, dentro) {
+  const x = (REV && REV.spese || []).find(y => y.id === id);
+  if (!x || !x.nuova) return;
+  x.fuori = !dentro;
+  disegnaRevisione();
 }
 
 /* Riepilogo e avvisi, ricalcolati a ogni battuta */
@@ -6501,7 +6552,9 @@ async function generaDaRevisione() {
      un'altra. Prima di scrivere il numero, perche' e' la cosa che non deve
      sfuggire: una spesa fatturata due volte e' un errore che si scopre tardi
      e si spiega male. */
-  const daSegnare = speseDaMettere(byId(S.fatture, REV.fattId)).filter(x => !x.fattura_id);
+  /* Si segnano quelle finite davvero nel file: non quelle che si sarebbero
+     potute mettere, perche' in revisione se ne puo' togliere qualcuna. */
+  const daSegnare = speseNelFile(REV).filter(x => x.nuova);
   if (daSegnare.length) {
     const { error } = await SB.from('commessa_spese')
       .update({ fattura_id: REV.fattId }).in('id', daSegnare.map(x => x.id));
@@ -10355,7 +10408,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!REV.numero) REV.numero = prossimoNumero();
     disegnaRevisione(); toast('Ripristinati i dati della commessa');
   };
-  const revIn = e => { const k = e.target.dataset.rev; if (k) revCambia(k, e.target.value); };
+  const revIn = e => {
+    if (e.target.dataset.revspesa) {
+      if (e.type === 'change') revSpesa(e.target.dataset.revspesa, e.target.checked);
+      return;
+    }
+    const k = e.target.dataset.rev; if (k) revCambia(k, e.target.value); };
   el('rev-body').addEventListener('input',  revIn);
   el('rev-body').addEventListener('change', revIn);
   el('fa-perc').oninput  = aggiornaCalcolo;
