@@ -935,7 +935,7 @@ function launchOpts(){
          alla fattura e segna il documento come generato */
       const aperte=speseAperte(pid).map(x=>x.id);
       await SB.from('commessa_spese').update({fattura_id:f.id}).in('id',aperte);
-      await SB.from('commessa_fatture').update({xml_generato_at:new Date().toISOString()}).eq('id',f.id);
+      await SB.from('commessa_fatture').update({xml_generato_at:new Date().toISOString(),stato:'emessa'}).eq('id',f.id);
       await loadAll(true);
       const dopo=fattureOf(pid)[1];
       return {prima, suQuella:datiFattura(byId(S.fatture,f.id)).spese.length,
@@ -1025,6 +1025,72 @@ function launchOpts(){
     const g=await p.evaluate(id=>({agg:S.spese.filter(x=>x.fattura_id===id).length,
       aperte:speseAperte(S.projId).length}),fid);
     must(g.agg===3&&g.aperte===1,'la spesa senza spunta è stata agganciata lo stesso: '+JSON.stringify(g));
+  });
+  /* IL CASO SEGNALATO: fattura generata, poi rimessa "da emettere". Le sue
+     spese restavano bloccate per sempre: non si correggevano, non si
+     cancellavano. Con la fattura riaperta devono tornare libere. */
+  const riapri=()=>p.evaluate(async()=>{
+    const f=fattureOf(S.projId)[0];
+    await SB.from('commessa_fatture').update({stato:'da_emettere'}).eq('id',f.id);
+    await loadAll(true); render(); return f.id; });
+  await t('fattura rimessa da emettere: le sue spese si correggono',async()=>{
+    const fid=await riapri();
+    const sid=await p.evaluate(id=>S.spese.find(x=>x.fattura_id===id).id,fid);
+    await p.evaluate(id=>openSpesa(id),sid); await p.waitForTimeout(300);
+    must(!(await p.isDisabled('#sp-imp')),'l importo è ancora bloccato');
+    must(await p.isVisible('#sp-del'),'manca il pulsante Elimina');
+    must(await p.isVisible('#sp-riaperta')&&!(await p.isVisible('#sp-chiusa')),'il messaggio è quello della fattura emessa');
+    must(/rigenera/i.test(await p.textContent('#sp-riaperta')),'non ricorda di rigenerare l XML');
+    await p.fill('#sp-imp','20'); await p.click('#sp-save'); await p.waitForTimeout(600);
+    const x=await p.evaluate(id=>__DB.commessa_spese.find(y=>y.id===id),sid);
+    must(Number(x.importo)===20,'la correzione non è stata salvata: '+x.importo);
+    must(x.fattura_id===fid,'correggendola è uscita dalla fattura');
+  });
+  await t('e si tolgono dalla fattura, per la prossima',async()=>{
+    const fid=await p.evaluate(()=>fattureOf(S.projId)[0].id);
+    const sid=await p.evaluate(id=>S.spese.find(x=>x.fattura_id===id).id,fid);
+    await p.evaluate(id=>openSpesa(id),sid); await p.waitForTimeout(300);
+    await p.click('#sp-stacca'); await p.waitForTimeout(600);
+    const x=await p.evaluate(id=>__DB.commessa_spese.find(y=>y.id===id),sid);
+    must(!x.fattura_id,'è ancora agganciata alla fattura');
+    must(await p.evaluate(id=>speseAperte(S.projId).some(y=>y.id===id),sid),'non risulta da farsi restituire');
+  });
+  await t('e si eliminano',async()=>{
+    const fid=await p.evaluate(()=>fattureOf(S.projId)[0].id);
+    const sid=await p.evaluate(id=>S.spese.find(x=>x.fattura_id===id).id,fid);
+    await p.evaluate(id=>openSpesa(id),sid); await p.waitForTimeout(300);
+    await p.click('#sp-del'); await p.waitForTimeout(600);
+    must(!(await p.evaluate(id=>__DB.commessa_spese.some(y=>y.id===id),sid)),'non è stata eliminata');
+  });
+  await t('in revisione si può togliere anche una spesa già in fattura',async()=>{
+    const fid=await p.evaluate(()=>{
+      const f=fattureOf(S.projId)[0], pr=byId(S.projects,f.project_id);
+      Object.assign(pr,{client:'Immobiliare Vitelli',cliente_piva:'02345670541',
+        cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+        cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
+      openRevisione(f.id); return f.id; });
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(300);
+    const gia=await p.evaluate(()=>REV.spese.filter(x=>!x.nuova).map(x=>x.id));
+    must(gia.length>=1,'nessuna spesa già in fattura da provare');
+    must(await p.locator('[data-revspesa]:disabled').count()===0,'con la fattura riaperta ci sono spese bloccate');
+    await p.locator('[data-revspesa="'+gia[0]+'"]').uncheck(); await p.waitForTimeout(300);
+    must(!(await p.isDisabled('#rev-go')),'generazione bloccata: '+(await p.textContent('#rev-err')));
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:8000}).catch(()=>null),p.click('#rev-go')]);
+    must(dl,'nessun download: '+ultimoDialogo);
+    await p.waitForTimeout(600);
+    const x=await p.evaluate(id=>__DB.commessa_spese.find(y=>y.id===id),gia[0]);
+    must(!x.fattura_id,'la spesa senza spunta è rimasta sulla fattura');
+  });
+  await t('rigenerata, la fattura è di nuovo emessa e le sue spese fisse',async()=>{
+    const fid=await p.evaluate(()=>fattureOf(S.projId)[0].id);
+    const g=await p.evaluate(id=>({stato:byId(S.fatture,id).stato,
+      sid:(S.spese.find(x=>x.fattura_id===id)||{}).id}),fid);
+    must(g.stato==='emessa','la fattura non è tornata emessa: '+g.stato);
+    must(g.sid,'nessuna spesa rimasta sulla fattura');
+    await p.evaluate(id=>openSpesa(id),g.sid); await p.waitForTimeout(300);
+    must(await p.isDisabled('#sp-imp'),'su una fattura emessa la spesa si modifica');
+    must(!(await p.isVisible('#sp-del'))&&await p.isVisible('#sp-chiusa'),'su una fattura emessa si può eliminare');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   });
   await t('la commessa ha la sezione delle spese per collaboratori esterni',async()=>{
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);

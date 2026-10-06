@@ -831,7 +831,12 @@ tbody tr:hover td { background:#f0f4f9; }
         dicitura di legge, <b>senza IVA e senza contributo cassa</b>.</div>
       <div class="wbox mb16" id="sp-chiusa" style="display:none;font-size:12px">Questa spesa &egrave;
         gi&agrave; finita in una fattura emessa: non si modifica pi&ugrave;, perch&eacute; cambierebbe
-        il totale di un documento gi&agrave; trasmesso.</div>
+        il totale di un documento gi&agrave; trasmesso. Se la fattura va rifatta, rimettila
+        &laquo;da emettere&raquo;: la spesa torna modificabile.</div>
+      <div class="ibox mb16" id="sp-riaperta" style="display:none;font-size:12px">
+        <span id="sp-riaperta-t"></span>
+        <div style="margin-top:8px"><button class="btn btn-sm" id="sp-stacca">Togli da questa fattura</button>
+        <span style="color:var(--mut)">&mdash; resta da farsi restituire con la prossima</span></div></div>
       <div class="fg2">
         <div class="fg"><label class="fl">Tipo di spesa *</label>
           <select class="fc" id="sp-tipo">
@@ -1305,7 +1310,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.02.1';
+const VERSIONE = '2026.10.06.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4490,6 +4495,13 @@ const NATURA_SPESE = 'N1';
 const speseDi      = pid => S.spese.filter(x => x.project_id === pid);
 const speseAperte  = pid => speseDi(pid).filter(x => !x.fattura_id);
 const speseDiFatt  = fid => S.spese.filter(x => x.fattura_id === fid);
+/* Una spesa e' FISSA solo finche' la sua fattura e' emessa (o incassata): li'
+   cambiarla sposterebbe il totale di un documento chiuso. Se la fattura viene
+   rimessa "da emettere" il documento si riapre, e con lui le sue spese: si
+   correggono, si eliminano, si tolgono per lasciarle alla fattura dopo. Prima
+   restavano bloccate per sempre, anche su una fattura tornata in lavorazione. */
+const fatturaDiSpesa = x => x && x.fattura_id ? byId(S.fatture, x.fattura_id) : null;
+const spesaFissa = x => { const f = fatturaDiSpesa(x); return !!(f && !fattAperta(f)); };
 const totSpese     = ss => r2(ss.reduce((a, x) => a + Number(x.importo || 0), 0));
 /* Come si chiama in fattura: la dicitura di legge, poi di che spesa si tratta. */
 const etichettaSpesa = x => DICITURA_SPESE + ' — '
@@ -4729,7 +4741,7 @@ function datiFattura(f) {
     spese       : speseDaMettere(f).map(x => ({
                     id: x.id, descrizione: etichettaSpesa(x), importo: r2(x.importo || 0),
                     /* nuova = non ancora agganciata a nessuna fattura */
-                    nuova: !x.fattura_id, fuori: false })),
+                    nuova: !x.fattura_id, fissa: spesaFissa(x), fuori: false })),
 
     /* Imposte */
     aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
@@ -5735,7 +5747,8 @@ function spesePanel(p) {
       + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(x.importo) + '</b></td>'
       + '<td style="font-size:11.5px">' + (x.fattura_id
           ? '<span style="color:var(--grn)">✓ in fattura' + (f && f.numero_fattura ? ' n. ' + esc(f.numero_fattura) : '')
-            + '</span>'
+            + '</span>' + (spesaFissa(x) ? ''
+              : ' <span style="color:var(--ora);font-size:11px">· fattura da emettere: modificabile</span>')
           : '<span style="color:var(--ora);font-weight:600">da farsi restituire</span>') + '</td>'
       + '</tr>';
   };
@@ -5770,13 +5783,23 @@ function openSpesa(id, presetPid) {
   el('sp-data').value  = x ? (x.data_spesa || todayISO()) : todayISO();
   el('sp-note').value  = x ? (x.note || '') : '';
   el('sp-del').style.display = (id && canW()) ? 'inline-flex' : 'none';
-  /* Una spesa gia' finita in fattura non si tocca piu': cambiarla sposterebbe
-     il totale di un documento gia' emesso, e quel documento non cambia piu'. */
-  const chiusa = !!(x && x.fattura_id);
+  /* Una spesa in una fattura EMESSA non si tocca: cambiarla sposterebbe il
+     totale di un documento chiuso. In una fattura rimessa da emettere invece
+     si corregge, si elimina o si toglie per la fattura dopo. */
+  const chiusa = spesaFissa(x);
+  const riaperta = !!(x && x.fattura_id && !chiusa);
   ['sp-tipo','sp-desc','sp-imp','sp-data'].forEach(k => el(k).disabled = chiusa);
   el('sp-save').style.display = chiusa ? 'none' : '';
   el('sp-del').style.display  = (id && canW() && !chiusa) ? 'inline-flex' : 'none';
   el('sp-chiusa').style.display = chiusa ? '' : 'none';
+  el('sp-riaperta').style.display = riaperta ? '' : 'none';
+  if (riaperta) {
+    const f = fatturaDiSpesa(x);
+    el('sp-riaperta-t').innerHTML = 'È nella fattura' + (f.numero_fattura ? ' n. <b>' + esc(f.numero_fattura) + '</b>' : '')
+      + ', rimessa da emettere: puoi correggerla o eliminarla. <b>Poi rigenera l’XML</b>, '
+      + 'altrimenti il file già scaricato resta quello di prima.';
+  }
+  el('sp-stacca').style.display = canW() ? '' : 'none';
   disegnaSpesa();
   openM('m-spesa');
 }
@@ -5811,9 +5834,18 @@ async function saveSpesa() {
   toast(id ? 'Spesa aggiornata' : 'Spesa registrata: andrà sulla prossima fattura', 'success');
 }
 
+/* La spesa resta, ma esce dalla fattura riaperta: andra' sulla prossima. */
+async function staccaSpesa() {
+  const id = el('sp-id').value; const x = byId(S.spese, id); if (!x || spesaFissa(x)) return;
+  const { error } = await SB.from('commessa_spese').update({ fattura_id: null }).eq('id', id);
+  if (error) return sbErr(error, 'spesa anticipata');
+  closeM('m-spesa'); await loadAll(true); render();
+  toast('Spesa tolta dalla fattura: andrà sulla prossima', 'success');
+}
+
 async function delSpesa() {
   const id = el('sp-id').value; const x = byId(S.spese, id); if (!x) return;
-  if (x.fattura_id) return toast('È già in una fattura emessa: non si può eliminare.', 'error');
+  if (spesaFissa(x)) return toast('È in una fattura emessa: per eliminarla rimetti la fattura «da emettere».', 'error');
   if (!confirm('Eliminare la spesa di ' + feuro(x.importo) + '?')) return;
   const { error } = await SB.from('commessa_spese').delete().eq('id', id);
   if (error) return sbErr(error, 'spesa anticipata');
@@ -6466,21 +6498,23 @@ function speseRevisione(d) {
       + '<span style="font-weight:400;color:var(--mut)">— senza IVA e senza cassa</span></label>'
     + '<div style="font-size:12.5px;line-height:1.7;border:1px solid var(--bord);border-radius:6px;padding:8px 10px">'
     + ss.map(x => '<label class="spread" style="gap:12px;align-items:flex-start;cursor:'
-        + (x.nuova ? 'pointer' : 'default') + (x.fuori ? ';color:var(--mut);text-decoration:line-through' : '') + '">'
+        + (x.fissa ? 'default' : 'pointer') + (x.fuori ? ';color:var(--mut);text-decoration:line-through' : '') + '">'
         + '<span><input type="checkbox" data-revspesa="' + x.id + '"' + (x.fuori ? '' : ' checked')
-          + (x.nuova ? '' : ' disabled') + ' style="margin-right:6px">' + esc(x.descrizione)
+          + (x.fissa ? ' disabled' : '') + ' style="margin-right:6px">' + esc(x.descrizione)
           + (x.nuova ? '' : ' <span style="color:var(--grn);font-size:11px">già in questa fattura</span>')
         + '</span><b style="white-space:nowrap">' + feuro(x.importo) + '</b></label>').join('')
     + '</div><div class="hint">'
     + (nuoveDopo
         ? '<b>Ci sono spese registrate dopo l’ultima generazione</b>: con la spunta entrano nel file '
           + 'che rigeneri. Toglila per lasciarle alla prossima fattura. '
-        : 'Togli la spunta a una spesa per lasciarla alla prossima fattura. ')
+        : ss.some(x => x.fissa)
+          ? 'La fattura è emessa: le spese che contiene non cambiano più. Per correggerle rimettila «da emettere». '
+          : 'Togli la spunta a una spesa per lasciarla alla prossima fattura. ')
     + 'Le spese si aggiungono dalla scheda Fatturazione della commessa.</div></div>';
 }
 function revSpesa(id, dentro) {
   const x = (REV && REV.spese || []).find(y => y.id === id);
-  if (!x || !x.nuova) return;
+  if (!x || x.fissa) return;
   x.fuori = !dentro;
   disegnaRevisione();
 }
@@ -6559,6 +6593,14 @@ async function generaDaRevisione() {
     const { error } = await SB.from('commessa_spese')
       .update({ fattura_id: REV.fattId }).in('id', daSegnare.map(x => x.id));
     if (error) sbErr(error, 'spese anticipate in fattura');
+  }
+  /* E quelle che erano su questa fattura - rimessa da emettere - e a cui e'
+     stata tolta la spunta tornano libere, per la fattura successiva. */
+  const daStaccare = (REV.spese || []).filter(x => x.fuori && !x.nuova && !x.fissa);
+  if (daStaccare.length) {
+    const { error } = await SB.from('commessa_spese')
+      .update({ fattura_id: null }).in('id', daStaccare.map(x => x.id));
+    if (error) sbErr(error, 'spese tolte dalla fattura');
   }
 
   const patch = { xml_generato_at: new Date().toISOString() };
@@ -10394,6 +10436,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('co-pag').onchange = disegnaCosto;
   el('sp-save').onclick = saveSpesa;
   el('sp-del').onclick  = delSpesa;
+  el('sp-stacca').onclick = staccaSpesa;
   el('sp-tipo').onchange = disegnaSpesa;
   el('fa-save2').onclick = saveFatt;
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);

@@ -751,9 +751,15 @@ al totale del documento. La base su cui si calcola il contributo cassa resta il
 su soldi che non sono un ricavo: un costo vero, ogni volta.
 
 Dal momento in cui il file viene generato, ogni spesa **resta attaccata a quella
-fattura**: non torna sulla successiva e non si può più modificare, perché
-cambierebbe il totale di un documento già trasmesso. Non si può né dimenticarne
-una né metterla due volte.
+fattura**: non torna sulla successiva e, finché la fattura è emessa, non si può
+più modificare, perché cambierebbe il totale di un documento già trasmesso. Non
+si può né dimenticarne una né metterla due volte.
+
+**Se la fattura va rifatta, rimettila «da emettere».** Le sue spese tornano
+libere: aprendone una puoi correggerla, eliminarla oppure usare **Togli da
+questa fattura** per lasciarla alla prossima. Anche nella finestra di revisione
+le spunte tornano attive su tutte. Poi rigeneri l'XML: la fattura torna emessa e
+le spese che contiene tornano fisse.
 
 **Una spesa aggiunta dopo aver generato il file** non si perde: rigenera l'XML
 dalla stessa fattura e la trovi nella finestra di revisione, nel riquadro
