@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,numeroDoppio});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -734,6 +734,33 @@ t('nessun segnaposto resta scritto',!/\{\{/.test(jV),(jV.match(/\{\{\w+\}\}/g)||
 t('la polizza c e',/PI-00KS4T2550/.test(jV),null);
 t('il telefono del committente noto si scrive, la PEC mancante resta da compilare',
   /PEC\/mail: _{5,}/.test(jV)&&/tel\. 333/.test(jV),null);
+
+/* ====================== NUMERO SUCCESSIVO, NEL FORMATO DELLO STUDIO ====================== */
+console.log('— NUMERAZIONE AUTOMATICA —');
+const NS=(u,a,st)=>ctx.numeroSuccessivo(u,a,st||'X');
+t('2026/014 → 2026/015',NS(['2026/013','2026/014'],2026)==='2026/015',NS(['2026/013','2026/014'],2026));
+t('47 → 48',NS(['46','47'],2026)==='48',NS(['46','47'],2026));
+t('47/26 → 48/26',NS(['47/26','9/26'],2026)==='48/26',NS(['47/26','9/26'],2026));
+t('FPR 12-2026 → FPR 13-2026',NS(['FPR 12-2026'],2026)==='FPR 13-2026',NS(['FPR 12-2026'],2026));
+t('gli zeri davanti restano: 009 → 010',NS(['2026/009'],2026)==='2026/010',NS(['2026/009'],2026));
+t('vince il piu alto, non l ultimo scritto',NS(['2026/020','2026/003'],2026)==='2026/021',null);
+t('26/26 → 27/26 (il contatore e il primo)',NS(['26/26'],2026)==='27/26',NS(['26/26'],2026));
+t('nessun numero: il formato di partenza',NS([],2026,'2026/001')==='2026/001',null);
+ctx.S.fatture=[
+  {id:'a',numero_fattura:'47',data_fattura:'2026-03-01',proforma_numero:'2026/004',proforma_data:'2026-02-01'},
+  {id:'b',numero_fattura:'52',data_fattura:'2026-09-01'},
+  {id:'c',numero_fattura:'118',data_fattura:'2025-12-20',proforma_numero:'2025/031',proforma_data:'2025-12-01'},
+  {id:'d',numero_fattura:null}];
+t('fatture 2026: dopo la 52 viene la 53',ctx.prossimoNumero(2026)==='53',ctx.prossimoNumero(2026));
+t('fatture 2025: dopo la 118 la 119',ctx.prossimoNumero(2025)==='119',ctx.prossimoNumero(2025));
+t('anno nuovo senza fatture: si riparte',ctx.prossimoNumero(2027)==='2027/001',ctx.prossimoNumero(2027));
+t('rinumerando la fattura stessa non conta il suo numero',ctx.prossimoNumero(2026,'b')==='48',ctx.prossimoNumero(2026,'b'));
+t('proforma 2026: dopo la 004 la 005',ctx.prossimaProforma(2026)==='2026/005',ctx.prossimaProforma(2026));
+t('proforma 2025: 2025/032',ctx.prossimaProforma(2025)==='2025/032',ctx.prossimaProforma(2025));
+t('il doppione si riconosce',!!ctx.numeroDoppio('numero_fattura','data_fattura','52',2026,'x'),null);
+t('ma non su se stessa ne in un altro anno',!ctx.numeroDoppio('numero_fattura','data_fattura','52',2026,'b')
+  &&!ctx.numeroDoppio('numero_fattura','data_fattura','118',2026,'x'),null);
+ctx.S.fatture=[];
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

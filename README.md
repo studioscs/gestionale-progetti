@@ -607,6 +607,26 @@ Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
 
+## Numeri dei documenti: proposti, sempre modificabili
+
+Fatture, proforma e preventivi ricevono **da soli il numero successivo**, e il
+campo resta **sempre scrivibile a mano**.
+
+- **Fattura**: nella finestra di revisione il numero è quello dopo il più
+  alto dell'anno della *data fattura*. Nello scaglione c'è il pulsante ↻ accanto
+  a «Numero fattura», e mettendo lo stato su *Emessa* o *Incassata* senza
+  numero lo propone da solo.
+- **Proforma**: stessa regola, sulla *data proforma*, con la sua numerazione.
+- **Preventivo**: il progressivo dopo l'ultimo dell'anno (`36/26` → `37/26`).
+
+Il formato è quello che usate: `2026/014` → `2026/015`, `47` → `48`,
+`47/26` → `48/26`, con gli zeri davanti che avete messo. Finché il numero è
+quello proposto **segue l'anno della data**: una fattura datata 3 gennaio
+riparte dalla numerazione del nuovo anno. **Appena lo scrivi a mano resta
+quello che hai scritto.** Un numero già usato nello stesso anno viene
+segnalato (per i preventivi non si salva; per fatture e proforma compare un
+avviso, perché può essere una correzione voluta).
+
 ## Preventivi
 
 Nel menu, subito sotto **Da fatturare**. Li vede e li prepara chi tiene

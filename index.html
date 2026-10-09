@@ -936,7 +936,9 @@ tbody tr:hover td { background:#f0f4f9; }
         </select>
       </div>
       <div class="fg3">
-        <div class="fg"><label class="fl">Numero fattura</label><input class="fc" id="fa-num" placeholder="2026/014"></div>
+        <div class="fg"><label class="fl">Numero fattura</label>
+          <div class="row" style="gap:4px"><input class="fc" id="fa-num" placeholder="2026/014">
+          <button class="btn btn-sm" id="fa-num-succ" type="button" title="Metti il numero successivo">&#8635;</button></div></div>
         <div class="fg"><label class="fl">Data fattura</label><input type="date" class="fc" id="fa-data"></div>
         <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
       </div>
@@ -1336,7 +1338,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.09.1';
+const VERSIONE = '2026.10.09.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5665,7 +5667,7 @@ let PV = null;
 function nuovoPreventivo(chiave) {
   const m = modelloDi(chiave) || modelliPreventivo()[0];
   const anno = today().getFullYear();
-  PV = { modo: 'prev', id: null, anno, progressivo: prossimoPreventivo(anno), data: todayISO(),
+  PV = { modo: 'prev', id: null, anno, progressivo: prossimoPreventivo(anno), data: todayISO(), _numAuto: true,
          modello: m.chiave, titolo: m.titolo || '', stato: 'bozza', cliente_id: null,
          cliente_nome: '', cliente_indirizzo: '', cliente_cap: '', cliente_comune: '', cliente_prov: '',
          cliente_cf: '', cliente_piva: '', cliente_pec: '', cliente_tel: '',
@@ -5723,7 +5725,8 @@ function disegnaPrev() {
                 + '>' + esc(m.nome) + '</option>').join('') + '</select></div>')
         + '<div class="fg"><label class="fl">Numero</label><div class="row" style="gap:6px;align-items:center">'
           + '<input class="fc" type="number" min="1" data-pv="progressivo" value="' + esc(d.progressivo) + '" style="width:90px">'
-          + '<span>/ ' + String(d.anno).slice(-2) + '</span></div></div>'
+          + '<span id="pv-anno">/ ' + String(d.anno).slice(-2) + '</span></div>'
+          + '<div class="hint">Proposto il successivo: si può cambiare.</div></div>'
         + campo('Data', 'data', 'date')
       + '</div>'
       + '<div class="fg3">'
@@ -5829,6 +5832,16 @@ function pvInput(e) {
   if (k === 'modello') { if (e.type === 'change') applicaModello(t.value); return; }
   if (k === 'cliente_id') { if (e.type === 'change') applicaCliente(t.value); return; }
   PV[k] = k === 'progressivo' ? (parseInt(t.value, 10) || '') : t.value;
+  /* Il numero proposto segue l'anno della data finche' non lo si scrive a mano */
+  if (k === 'progressivo') PV._numAuto = false;
+  if (k === 'data' && t.value) {
+    PV.anno = annoDi(t.value);
+    if (PV._numAuto && !PV.id) {
+      PV.progressivo = prossimoPreventivo(PV.anno);
+      const i = document.querySelector('[data-pv="progressivo"]'); if (i) i.value = PV.progressivo;
+    }
+    const a = el('pv-anno'); if (a) a.textContent = '/ ' + String(PV.anno).slice(-2);
+  }
 }
 function pvClick(e) {
   const b = e.target.closest('button'); if (!b) return;
@@ -7215,22 +7228,73 @@ let REV = null;
 function openRevisione(id) {
   const f = byId(S.fatture, id); if (!f) return;
   REV = datiFattura(f);
-  if (!REV.numero)  REV.numero = prossimoNumero();
-  if (!REV.proformaNumero) REV.proformaNumero = prossimaProforma();
-  if (!REV.proformaData)   REV.proformaData   = todayISO();
+  numeriProposti(REV);
   disegnaRevisione();
   openM('m-rev');
 }
 
+/* IL NUMERO SUCCESSIVO, SEMPRE PROPOSTO E SEMPRE MODIFICABILE
+   Fattura e proforma vuote ricevono il numero dopo l'ultimo usato nell'anno
+   della loro data. Chi lo riscrive a mano decide lui: da li' in poi il numero
+   resta quello scritto. Finche' non lo si tocca, invece, segue la data - una
+   fattura datata 2 gennaio prende la numerazione dell'anno nuovo. */
+function numeriProposti(d) {
+  d._numAuto = !d.numero;
+  d._pfAuto  = !d.proformaNumero;
+  if (!d.proformaData) d.proformaData = todayISO();
+  if (d._numAuto) d.numero = prossimoNumero(annoDi(d.data), d.fattId);
+  if (d._pfAuto)  d.proformaNumero = prossimaProforma(annoDi(d.proformaData), d.fattId);
+}
+const annoDi = data => Number(String(data || '').slice(0, 4)) || today().getFullYear();
+
+/* Il contatore dentro un numero scritto come si vuole: "2026/014", "47",
+   "47/26", "FPR 12-2026". E' l'ultimo gruppo di cifre che non sia l'anno. */
+function contatoreDi(num, anno) {
+  const s = String(num || '').trim();
+  const gruppi = Array.from(s.matchAll(/\d+/g));
+  if (!gruppi.length) return null;
+  const a4 = String(anno), a2 = a4.slice(-2);
+  let cand = gruppi;
+  if (cand.length > 1) {
+    const senza4 = cand.filter(g => g[0] !== a4);
+    if (senza4.length && senza4.length < cand.length) cand = senza4;
+    if (cand.length > 1) {
+      const senza2 = cand.filter(g => g[0] !== a2);
+      cand = senza2.length ? (senza2.length < cand.length ? senza2 : cand) : [cand[0]];
+    }
+  }
+  const g = cand[cand.length - 1];
+  return { n: parseInt(g[0], 10), i: g.index, len: g[0].length, s };
+}
+/* Il numero dopo il piu' alto, scritto nello stesso formato: stessi
+   prefissi, stesso anno, stessi zeri davanti. */
+function numeroSuccessivo(usati, anno, standard) {
+  let best = null;
+  (usati || []).forEach(u => { const c = contatoreDi(u, anno); if (c && (!best || c.n > best.n)) best = c; });
+  if (!best) return standard;
+  const nuovo = String(best.n + 1).padStart(best.len, '0');
+  return best.s.slice(0, best.i) + nuovo + best.s.slice(best.i + best.len);
+}
+/* I numeri gia' usati in un anno. L'anno e' quello della data del documento;
+   senza data, conta il numero se ci si legge l'anno. */
+function numeriDellAnno(campoNum, campoData, anno, escludi) {
+  const a4 = String(anno);
+  return S.fatture.filter(f => f.id !== escludi && f[campoNum])
+    .filter(f => f[campoData] ? annoDi(f[campoData]) === Number(anno) : String(f[campoNum]).indexOf(a4) >= 0)
+    .map(f => String(f[campoNum]));
+}
+/* Lo stesso numero gia' su un altro documento dello stesso anno */
+function numeroDoppio(campoNum, campoData, num, anno, escludi) {
+  const n = String(num || '').trim().toLowerCase(); if (!n) return null;
+  return S.fatture.find(f => f.id !== escludi && String(f[campoNum] || '').trim().toLowerCase() === n
+    && (!f[campoData] || annoDi(f[campoData]) === Number(anno))) || null;
+}
+
 /* Le proforma hanno una numerazione loro, per anno: non sono fatture e non
    devono consumare un numero della sequenza fiscale. */
-function prossimaProforma() {
-  const anno = String(today().getFullYear());
-  const usati = S.fatture.map(f => f.proforma_numero || '')
-    .filter(n => n.indexOf(anno) === 0)
-    .map(n => parseInt(String(n).replace(/^\D*\d{4}\D*/, ''), 10))
-    .filter(n => !isNaN(n));
-  return anno + '/' + String((usati.length ? Math.max.apply(null, usati) : 0) + 1).padStart(3, '0');
+function prossimaProforma(anno, escludi) {
+  anno = anno || today().getFullYear();
+  return numeroSuccessivo(numeriDellAnno('proforma_numero', 'proforma_data', anno, escludi), anno, anno + '/001');
 }
 
 /* LA PROFORMA
@@ -7269,14 +7333,11 @@ async function generaProforma() {
       + 'Quando paga, da qui generi la fattura XML.', 'success');
 }
 
-/* Propone il numero successivo a quello piu' alto gia' usato nell'anno */
-function prossimoNumero() {
-  const anno = String(today().getFullYear());
-  const usati = S.fatture.map(f => f.numero_fattura || '')
-    .filter(n => n.indexOf(anno) === 0)
-    .map(n => parseInt(String(n).replace(/^\D*\d{4}\D*/, ''), 10))
-    .filter(n => !isNaN(n));
-  return anno + '/' + String((usati.length ? Math.max.apply(null, usati) : 0) + 1).padStart(3, '0');
+/* Propone il numero successivo a quello piu' alto gia' usato nell'anno,
+   nel formato in cui lo studio li scrive */
+function prossimoNumero(anno, escludi) {
+  anno = anno || today().getFullYear();
+  return numeroSuccessivo(numeriDellAnno('numero_fattura', 'data_fattura', anno, escludi), anno, anno + '/001');
 }
 
 function disegnaRevisione() {
@@ -7438,6 +7499,15 @@ function aggiornaTotali() {
       + e.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>'
     : '';
   el('rev-go').disabled = e.length > 0;
+  /* Un numero gia' usato non blocca - puo' essere una correzione voluta -
+     ma va detto prima, non scoperto quando lo SdI scarta il documento. */
+  const dF = numeroDoppio('numero_fattura', 'data_fattura', d.numero, annoDi(d.data), d.fattId);
+  const dP = numeroDoppio('proforma_numero', 'proforma_data', d.proformaNumero, annoDi(d.proformaData), d.fattId);
+  const desc = f => '«' + (f.descrizione || '') + '» di ' + pn(f.project_id);
+  el('rev-err').innerHTML += (dF ? '<div class="wbox mb16">Attenzione: la fattura n. <b>' + esc(d.numero)
+      + '</b> esiste già (' + esc(desc(dF)) + ').</div>' : '')
+    + (dP ? '<div class="wbox mb16">Attenzione: la proforma n. <b>' + esc(d.proformaNumero)
+      + '</b> esiste già (' + esc(desc(dP)) + ').</div>' : '');
   /* Alla proforma basta sapere a chi va e quanto chiede: i dati per lo SdI
      servono alla fattura, non al PDF. */
   el('rev-pdf').disabled = !String(d.cliente || '').trim() || !(c.imponibile > 0) || !String(d.proformaNumero || '').trim();
@@ -7475,6 +7545,14 @@ function revCambia(k, v) {
   else if (booleani.indexOf(k) >= 0) REV[k] = v === '1' || v === true;
   else                               REV[k] = v;
   if (k === 'iban') REV.iban = String(v).replace(/\s/g, '').toUpperCase();
+  /* Scritto a mano, il numero non lo tocca piu' nessuno; finche' e' quello
+     proposto, segue l'anno della data. */
+  const segui = (campo, auto, prossimo) => {
+    REV[campo] = prossimo; const i = document.querySelector('[data-rev="' + campo + '"]'); if (i) i.value = prossimo; };
+  if (k === 'numero') REV._numAuto = false;
+  if (k === 'proformaNumero') REV._pfAuto = false;
+  if (k === 'data' && REV._numAuto) segui('numero', true, prossimoNumero(annoDi(v), REV.fattId));
+  if (k === 'proformaData' && REV._pfAuto) segui('proformaNumero', true, prossimaProforma(annoDi(v), REV.fattId));
   if (k === 'pa') { disegnaRevisione(); return; }   /* cambiano i campi mostrati */
   aggiornaTotali();
 }
@@ -11352,6 +11430,15 @@ document.addEventListener('DOMContentLoaded', () => {
   el('sp-stacca').onclick = staccaSpesa;
   el('sp-tipo').onchange = disegnaSpesa;
   el('fa-save2').onclick = saveFatt;
+  /* Il numero successivo, su richiesta o quando lo scaglione diventa emesso */
+  const numScaglione = () => prossimoNumero(annoDi(el('fa-data').value || todayISO()), el('fa-id2').value || null);
+  el('fa-num-succ').onclick = () => { el('fa-num').value = numScaglione(); };
+  el('fa-stato2').addEventListener('change', () => {
+    if (['emessa', 'incassata'].indexOf(el('fa-stato2').value) >= 0 && !el('fa-num').value.trim()) {
+      el('fa-num').value = numScaglione();
+      if (!el('fa-data').value) el('fa-data').value = todayISO();
+    }
+  });
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
   el('fa-xml').onclick   = () => { const id = el('fa-id2').value; closeM('m-fatt'); openRevisione(id); };
 
@@ -11372,7 +11459,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('rev-reset').onclick = () => {
     const f = byId(S.fatture, REV && REV.fattId); if (!f) return;
     REV = datiFattura(f);
-    if (!REV.numero) REV.numero = prossimoNumero();
+    numeriProposti(REV);
     disegnaRevisione(); toast('Ripristinati i dati della commessa');
   };
   const revIn = e => {

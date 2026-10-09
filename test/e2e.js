@@ -1296,6 +1296,51 @@ function launchOpts(){
     must(await p.isDisabled('#rev-go'),'il pulsante Genera è attivo con dati mancanti');
     await p.keyboard.press('Escape');
   });
+  /* ---------------- NUMERO SUCCESSIVO AUTOMATICO, SEMPRE MODIFICABILE ---------------- */
+  await t('il numero della fattura è proposto e segue l anno della data',async()=>{
+    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    const vuoto=await p.evaluate(id=>!byId(S.fatture,id).numero_fattura,fid);
+    await p.evaluate(id=>openRevisione(id),fid);
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(200);
+    const y=new Date().getFullYear();
+    const n0=await p.inputValue('[data-rev="numero"]');
+    must(n0,'nessun numero proposto');
+    if(vuoto){
+      await p.fill('[data-rev="data"]',(y+1)+'-01-03'); await p.waitForTimeout(200);
+      must(await p.inputValue('[data-rev="numero"]')===(y+1)+'/001','con la data dell anno dopo non riparte: '+(await p.inputValue('[data-rev="numero"]')));
+    }
+  });
+  await t('scritto a mano, il numero resta quello',async()=>{
+    const y=new Date().getFullYear();
+    await p.fill('[data-rev="numero"]','77'); await p.waitForTimeout(100);
+    await p.fill('[data-rev="data"]',y+'-05-05'); await p.waitForTimeout(200);
+    must(await p.inputValue('[data-rev="numero"]')==='77','il numero scritto a mano è stato cambiato');
+    must(await p.evaluate(()=>REV.numero)==='77','il numero scritto non è quello che andrà nel file');
+  });
+  await t('un numero già usato viene segnalato',async()=>{
+    const altro=await p.evaluate(()=>{ const f=S.fatture.find(x=>x.id!==REV.fattId);
+      if(!f) return null; f.numero_fattura='2026/050'; f.data_fattura=new Date().getFullYear()+'-02-01'; return f.id; });
+    if(altro){
+      await p.fill('[data-rev="numero"]','2026/050'); await p.waitForTimeout(200);
+      must(/esiste già/.test(await p.textContent('#rev-err')),'nessun avviso sul doppione');
+      await p.evaluate(id=>{ const f=byId(S.fatture,id); f.numero_fattura=null; f.data_fattura=null; },altro);
+    }
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(()=>closeM('m-rev'));
+  });
+  await t('nello scaglione: emessa senza numero prende il successivo, e c è il pulsante',async()=>{
+    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    await p.evaluate(id=>openFatt(id),fid); await p.waitForSelector('#m-fatt.show',{timeout:4000});
+    await p.fill('#fa-num','');
+    await p.selectOption('#fa-stato2','emessa'); await p.waitForTimeout(150);
+    const n=await p.inputValue('#fa-num');
+    must(n&&n===await p.evaluate(id=>prossimoNumero(annoDi(el('fa-data').value),id),fid),'numero non proposto: '+n);
+    await p.fill('#fa-num','X-1'); await p.click('#fa-num-succ');
+    must(await p.inputValue('#fa-num')===n,'il pulsante non rimette il successivo');
+    await p.fill('#fa-num','5bis');
+    must(await p.inputValue('#fa-num')==='5bis','non si può scrivere a mano');
+    await p.evaluate(()=>closeM('m-fatt'));
+  });
   /* ---------------- PROFORMA PDF PRIMA DELLA FATTURA ---------------- */
   await t('lo scaglione ha la proforma, e la revisione il suo numero',async()=>{
     const fid=await p.locator('[data-fproforma]').first().getAttribute('data-fproforma');
@@ -3615,6 +3660,19 @@ function launchOpts(){
     await p.selectOption('[data-pv="stato"]','accettato'); await p.click('#pv-save'); await p.waitForTimeout(600);
     must(await p.evaluate(i=>__DB.preventivi.find(y=>y.id===i).stato,id)==='accettato','stato non salvato');
     must(/11\.926,72/.test(await p.textContent('.kgrid')),'gli accettati non sono contati');
+  });
+  await t('preventivo: il numero proposto segue l anno, e a mano resta',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('preventivi'); });
+    await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    const y=new Date().getFullYear();
+    const n=await p.inputValue('[data-pv="progressivo"]');
+    must(n===String(await p.evaluate(a=>prossimoPreventivo(a),y)),'non è proposto il successivo: '+n);
+    await p.fill('[data-pv="data"]',(y+1)+'-01-10'); await p.waitForTimeout(150);
+    must(await p.inputValue('[data-pv="progressivo"]')==='1','anno nuovo: non riparte da 1');
+    must(/\/ \d\d/.test(await p.textContent('#pv-anno'))&&(await p.textContent('#pv-anno')).includes(String(y+1).slice(-2)),'l anno mostrato non cambia');
+    await p.fill('[data-pv="progressivo"]','40'); await p.fill('[data-pv="data"]',y+'-01-11'); await p.waitForTimeout(150);
+    must(await p.inputValue('[data-pv="progressivo"]')==='40','il numero scritto a mano è stato cambiato');
+    await p.evaluate(()=>closeM('m-prev'));
   });
   await t('un collaboratore non vede i preventivi',async()=>{
     const txt=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('preventivi');
