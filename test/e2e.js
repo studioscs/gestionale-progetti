@@ -1,5 +1,8 @@
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path');
+/* Il testo di un PDF scaricato, per controllare che cosa c'e' scritto davvero */
+const pdfParse=require('pdf-parse/lib/pdf-parse.js');
+const testoPdf=async file=>(await pdfParse(fs.readFileSync(file))).text;
 
 /* Costruisce la pagina di test: index.html con il CDN Supabase sostituito dal mock */
 function build(){
@@ -23,6 +26,13 @@ function launchOpts(){
      seguito facevano cinque minuti di niente, e il guasto vero si vedeva solo
      alla fine. Otto secondi bastano e fanno emergere subito chi si e' rotto. */
   p.setDefaultTimeout(8000);
+  /* La libreria dei PDF l'app la scarica dal CDN quando serve: qui la si
+     serve dalla copia installata per i test, che la rete del laboratorio
+     verso il CDN non c'e'. */
+  await p.route(/cdn\.jsdelivr\.net\/npm\/pdfmake@[^/]+\/build\/([^?]+)/, r=>{
+    const f=r.request().url().match(/build\/([^?]+)/)[1];
+    r.fulfill({path:path.join(__dirname,'node_modules','pdfmake','build',f),contentType:'application/javascript'});
+  });
   const errs=[];
   /* Un solo gestore per tutti i dialoghi: i p.once() sparsi restavano appesi
      quando la finestra non compariva, e due gestori sullo stesso dialogo
@@ -1285,6 +1295,46 @@ function launchOpts(){
     must(/committente|indirizzo|CAP/i.test(err),'non indica cosa manca: '+err);
     must(await p.isDisabled('#rev-go'),'il pulsante Genera è attivo con dati mancanti');
     await p.keyboard.press('Escape');
+  });
+  /* ---------------- PROFORMA PDF PRIMA DELLA FATTURA ---------------- */
+  await t('lo scaglione ha la proforma, e la revisione il suo numero',async()=>{
+    const fid=await p.locator('[data-fproforma]').first().getAttribute('data-fproforma');
+    await p.evaluate(id=>{
+      Object.assign(STUDIO,{denominazione:'Studio Tecnico SCS S.r.l.',piva:'03512340548',
+        indirizzo:'Via Mazzini',cap:'06121',comune:'Perugia',provincia:'PG'});
+      const f=byId(S.fatture,id), pr=byId(S.projects,f.project_id);
+      Object.assign(pr,{client:'Immobiliare Vitelli',amount:60000,cliente_piva:'02345670541',
+        cliente_indirizzo:'Corso Vannucci 30',cliente_cap:'06121',cliente_comune:'Perugia',
+        cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
+      if(!f.percentuale && !f.imponibile) f.imponibile=10000;
+    },fid);
+    await p.locator('[data-fproforma]').first().click();
+    await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(300);
+    const n=await p.inputValue('[data-rev="proformaNumero"]');
+    must(/^\d{4}\/001$/.test(n),'numero di proforma non proposto: '+n);
+    must(!(await p.isDisabled('#rev-pdf')),'il pulsante Proforma PDF è spento');
+  });
+  await t('la proforma si scarica, e dice quello che dirà la fattura',async()=>{
+    const fid=await p.evaluate(()=>REV.fattId);
+    const atteso=await p.evaluate(()=>{ const d=docProforma(REV); return contiDocumento(d.voci,d.spese,d.opz); });
+    const statoPrima=await p.evaluate(id=>byId(S.fatture,id).stato,fid);
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#rev-pdf')]);
+    must(dl,'nessun PDF scaricato');
+    must(/^Proforma-\d{4}_001\.pdf$/.test(dl.suggestedFilename()),dl.suggestedFilename());
+    const txt=await testoPdf(await dl.path());
+    must(/Fattura proforma \d{4}\/001/.test(txt),'manca il titolo: '+txt.slice(0,200));
+    must(/Immobiliare Vitelli/.test(txt),'manca il committente');
+    must(/privo di valore fiscale/.test(txt),'non dice che non è una fattura');
+    const eu=v=>{ const [i,d]=Math.abs(v).toFixed(2).split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' €'; };
+    must(txt.includes(eu(atteso.netto)),'il totale dovuto '+eu(atteso.netto)+' non è nel PDF');
+    await p.waitForTimeout(600);
+    const g=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {n:f.proforma_numero,d:f.proforma_data,at:f.proforma_at,stato:f.stato}; },fid);
+    must(/\/001$/.test(g.n)&&g.d&&g.at,'la proforma non è registrata sullo scaglione: '+JSON.stringify(g));
+    must(g.stato===statoPrima,'la proforma ha cambiato lo stato della fattura: '+g.stato);
+    must(/proforma \d{4}\/001/.test(await p.textContent('#page')),'la lista non dice che la proforma è partita');
+  });
+  await t('la proforma dopo prende il numero successivo',async()=>{
+    must(/\/002$/.test(await p.evaluate(()=>prossimaProforma())),'il numero non avanza');
   });
   await t('XML scaricabile una volta compilati i dati',async()=>{
     const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
@@ -3477,6 +3527,100 @@ function launchOpts(){
       return document.getElementById('page').textContent; });
     must(/Consulenza sistema/.test(conFlag),'chi ha "vede tutto" non li vede');
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; go('oggi'); });
+  });
+
+  /* ---------------- PREVENTIVI ---------------- */
+  await t('la voce Preventivi c è, con i cinque modelli',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });
+    must(await p.locator('.sn[data-page="preventivi"]').count()===1,'manca la voce nel menu');
+    await p.click('.sn[data-page="preventivi"]'); await p.waitForTimeout(500);
+    const m=await p.evaluate(()=>Array.from(document.querySelectorAll('[data-pvmodello]')).map(b=>b.dataset.pvmodello).join());
+    must(m==='strutture,architettonico,perizie,antincendio,sanatoria','modelli: '+m);
+  });
+  await t('un preventivo strutture: i conti di riga comprendono cassa e IVA',async()=>{
+    await p.click('[data-pvmodello="strutture"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.locator('[data-pvv][data-k="descrizione"]').count()===4,'il modello strutture non ha 4 voci');
+    await p.fill('[data-pv="cliente_nome"]','Mario Rossi');
+    await p.fill('[data-pv="cliente_pec"]','mario.rossi@pec.it');
+    await p.fill('[data-pv="immobile"]','VIA ROMA 12 A RECANATI');
+    const imp=[1500,4500,2500,900];
+    for(let i=0;i<4;i++) await p.fill('[data-pvv="'+i+'"][data-k="importo"]',String(imp[i]));
+    await p.waitForTimeout(200);
+    const tot=await p.textContent('#pv-tot');
+    must(/11\.926,72/.test(tot),'il totale non è 11.926,72: '+tot);
+    must(/1\.903,20/.test(await p.textContent('#pv-vt-0')),'la voce A non porta cassa e IVA: '+(await p.textContent('#pv-vt-0')));
+    await p.click('#pv-save'); await p.waitForTimeout(700);
+    const x=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi'));
+    must(x,'il preventivo non è stato salvato');
+    must(x.progressivo===1&&x.anno===new Date().getFullYear()&&x.voci.length===4&&x.articoli.length===12,
+      'salvato male: '+JSON.stringify({p:x.progressivo,a:x.anno,v:x.voci.length,ar:x.articoli.length}));
+    must(x.stato==='bozza'&&x.modello==='strutture','stato o modello sbagliati');
+    must(/Mario Rossi/.test(await p.textContent('#page')),'non compare in elenco');
+  });
+  await t('il PDF del preventivo: numeri giusti e testi corretti',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').id);
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('[data-prevpdf="'+id+'"]')]);
+    must(dl,'nessun PDF scaricato');
+    must(/^Preventivo-1_\d\d\.pdf$/.test(dl.suggestedFilename()),dl.suggestedFilename());
+    const txt=await testoPdf(await dl.path());
+    must(/Preventivo 1\/\d\d/.test(txt),'manca il numero');
+    must(/SITO IN VIA ROMA 12 A RECANATI/.test(txt),'manca l immobile');
+    must(/A\. Relazione geologica/.test(txt)&&/D\. Collaudo/.test(txt),'voci non numerate A-D');
+    must(/1\.903,20 €/.test(txt),'la riga A non ha il totale con cassa e IVA');
+    must(!/1\.830,00/.test(txt),'c è ancora il totale di riga sbagliato del vecchio programma');
+    must(/11\.926,72 €/.test(txt),'manca il totale');
+    must(/Regolamento \(UE\) 2016\/679/.test(txt),'privacy non corretta');
+    must(/art\. 8 \(Termini e penali\)/.test(txt),'clausola 1341 non corretta');
+    must(/PI-00KS4T2550/.test(txt),'manca la polizza');
+    must(/mario\.rossi@pec\.it/.test(txt),'i recapiti del committente non sono riempiti');
+    must(!/\{\{/.test(txt),'è rimasto un segnaposto');
+  });
+  await t('un numero già usato non si salva due volte',async()=>{
+    await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.inputValue('[data-pv="progressivo"]')==='2','il numero proposto non è il successivo');
+    await p.fill('[data-pv="progressivo"]','1'); await p.fill('[data-pv="cliente_nome"]','Doppione');
+    await p.click('#pv-save'); await p.waitForTimeout(500);
+    must(!(await p.evaluate(()=>__DB.preventivi.some(y=>y.cliente_nome==='Doppione'))),'ha salvato un numero doppio');
+    must(await p.isVisible('#m-prev'),'ha chiuso la finestra come se fosse andato bene');
+    await p.evaluate(()=>closeM('m-prev'));
+  });
+  await t('si cambia un modello: vale per i nuovi, non per i vecchi',async()=>{
+    await p.click('[data-pvmodmod="strutture"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    const area=p.locator('[data-pva="0"][data-k="testo"]');
+    await area.fill('Resta escluso tutto. TESTO NUOVO DELLO STUDIO.');
+    await p.click('#pv-save'); await p.waitForTimeout(600);
+    const r=await p.evaluate(()=>__DB.preventivo_modelli.find(x=>x.chiave==='strutture'));
+    must(r&&/TESTO NUOVO/.test(r.articoli[0].testo),'il modello non è stato salvato');
+    const g=await p.evaluate(()=>({nuovo:modelloDi('strutture').articoli[0].testo,
+      vecchio:__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').articoli[0].testo}));
+    must(/TESTO NUOVO/.test(g.nuovo),'il modello in uso non è quello modificato');
+    must(!/TESTO NUOVO/.test(g.vecchio),'il preventivo già fatto è cambiato');
+  });
+  await t('e si torna all originale',async()=>{
+    await p.click('[data-pvmodmod="strutture"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.isVisible('#pv-ripr'),'manca Ripristina');
+    await p.click('#pv-ripr'); await p.waitForTimeout(600);
+    must(!(await p.evaluate(()=>__DB.preventivo_modelli.some(x=>x.chiave==='strutture'))),'la modifica è rimasta');
+    must(!/TESTO NUOVO/.test(await p.evaluate(()=>modelloDi('strutture').articoli[0].testo)),'il testo non è tornato');
+  });
+  await t('il modello architettonico numera nove voci da A a I',async()=>{
+    const d=await p.evaluate(()=>JSON.stringify(pdfDefinizione(docPreventivo(Object.assign({anno:2026,progressivo:9,
+      cliente_nome:'X'},copia(modelloDi('architettonico')))))));
+    must(/"I\. Attestato di certificazione energetica/.test(d)&&/"A\. Accesso e acquisizione/.test(d),'lettere sbagliate');
+    must(!/"A\. Rilievo/.test(d),'ci sono ancora due voci A');
+  });
+  await t('lo stato si cambia e il riepilogo lo conta',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').id);
+    await p.click('[data-prev="'+id+'"] td >> nth=1'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    await p.selectOption('[data-pv="stato"]','accettato'); await p.click('#pv-save'); await p.waitForTimeout(600);
+    must(await p.evaluate(i=>__DB.preventivi.find(y=>y.id===i).stato,id)==='accettato','stato non salvato');
+    must(/11\.926,72/.test(await p.textContent('.kgrid')),'gli accettati non sono contati');
+  });
+  await t('un collaboratore non vede i preventivi',async()=>{
+    const txt=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('preventivi');
+      return document.getElementById('page').textContent; });
+    must(!/Mario Rossi/.test(txt)&&/amministrazione/.test(txt),'il collaboratore vede i preventivi');
+    await p.evaluate(()=>{ S.prof.role='admin'; go('oggi'); });
   });
 
   /* Gli scatti finali non sono un test: se falliscono lo si annota e si va

@@ -13,7 +13,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -662,6 +662,78 @@ t('senza spese non compare nessun blocco di escluse',
   (rV.errori?[]:rV.xml.match(/<DatiRiepilogo>/g)||[]).length);
 ctx.S.projects=SALVA.projects; ctx.S.fatture=SALVA.fatture;
 ctx.S.fattRighe=SALVA.righe; ctx.S.spese=SALVA.spese||[];
+
+/* ============================ PROFORMA E PREVENTIVI ============================ */
+console.log('— PREVENTIVI E PROFORMA: I CONTI DEVONO TORNARE RIGA PER RIGA —');
+/* Il preventivo strutture del vecchio programma: 1.500 + 4.500 + 2.500 + 900 */
+const CS=ctx.contiDocumento([{importo:1500,quantita:1},{importo:4500,quantita:1},{importo:2500,quantita:1},{importo:900,quantita:1}]);
+t('totale prestazioni 9.400',CS.imponibile===9400,CS.imponibile);
+t('cassa 4% 376',CS.cassa===376,CS.cassa);
+t('IVA 22% su 9.776 = 2.150,72',CS.iva===2150.72,CS.iva);
+t('totale 11.926,72 come il riepilogo di allora',CS.totale===11926.72,CS.totale);
+/* L'errore del vecchio programma: accanto alla voce A scriveva 1.830 € (solo IVA) */
+t('la voce A porta anche la cassa: 1.500 + 60 + 343,20 = 1.903,20',CS.righe[0].totale===1903.2,CS.righe[0]);
+t('e non piu 1.830 come prima',CS.righe[0].totale!==1830,null);
+const somma=k=>ctx.r2(CS.righe.reduce((a,r)=>a+r[k],0));
+t('i totali di riga sommano il totale dovuto',somma('totale')===CS.totale,[somma('totale'),CS.totale]);
+t('le quote di cassa sommano la cassa',somma('cassa')===CS.cassa,somma('cassa'));
+t('le quote di IVA sommano l IVA',somma('iva')===CS.iva,somma('iva'));
+/* Al centesimo anche con importi scomodi: cento prove a caso */
+let storti=0;
+for(let k=0;k<100;k++){
+  const vv=Array.from({length:1+(k%7)},(_,i)=>({importo:Math.round(Math.random()*500000)/100,quantita:1+((k+i)%3)}));
+  const c=ctx.contiDocumento(vv);
+  const st=ctx.r2(c.righe.reduce((a,r)=>a+r.totale,0));
+  if(st!==c.totale||ctx.r2(c.righe.reduce((a,r)=>a+r.iva,0))!==c.iva||ctx.r2(c.righe.reduce((a,r)=>a+r.cassa,0))!==c.cassa) storti++;
+}
+t('cento documenti a caso: righe e totali coincidono sempre',storti===0,storti);
+t('la quantita moltiplica: 350 x 3 = 1.050',ctx.contiDocumento([{importo:350,quantita:3}]).imponibile===1050,null);
+t('ripartisci non perde centesimi',ctx.r2(ctx.ripartisci(0.10,[1,1,1]).reduce((a,x)=>a+x,0))===0.1,ctx.ripartisci(0.10,[1,1,1]));
+t('euro con migliaia e virgola',ctx.euroPdf(11926.72)==='11.926,72 €'&&ctx.euroPdf(1903.2)==='1.903,20 €',[ctx.euroPdf(11926.72),ctx.euroPdf(1903.2)]);
+
+/* LA PROFORMA E' LA STESSA FATTURA, IN PDF */
+ctx.S.projects=[{id:'pP',name:'Villa',client:'Bianchi Luca',cliente_cf:'BNCLCU80A01H501U',cliente_indirizzo:'Via Prova 1',
+  cliente_cap:'60100',cliente_comune:'Ancona',cliente_prov:'AN',cliente_sdi:'0000000'}];
+const FP={id:'fP',project_id:'pP',descrizione:'Acconto',imponibile:1000,stato:'pronta'};
+ctx.S.fatture=[FP]; ctx.S.fattRighe=[];
+ctx.S.spese=[{id:'x1',project_id:'pP',tipo:'bolli_genio',importo:32,fattura_id:null}];
+const dP=Object.assign(ctx.datiFattura(FP),{proformaNumero:'2026/001',proformaData:'2026-10-09'});
+const docP=ctx.docProforma(dP), cP=ctx.contiDocumento(docP.voci,docP.spese,docP.opz), cX=ctx.calcolaDa(dP);
+t('la proforma chiede quello che chiedera la fattura',cP.totale===cX.totale&&cP.netto===cX.netto,[cP.totale,cX.totale]);
+t('con le spese anticipate fuori da cassa e IVA',cP.anticipazioni===32&&cP.cassa===40,[cP.anticipazioni,cP.cassa]);
+t('scadenza a 30 giorni dalla proforma',docP.scadenza==='2026-11-08',docP.scadenza);
+t('dice che non e una fattura',/privo di valore fiscale/.test(docP.avviso),null);
+const defP=JSON.stringify(ctx.pdfDefinizione(docP));
+t('nel PDF il titolo e il numero',/Fattura proforma 2026\/001/.test(defP),null);
+t('e il committente',/Bianchi Luca/.test(defP),null);
+ctx.S.fatture=[]; ctx.S.spese=[]; ctx.S.projects=[];
+
+/* I CINQUE MODELLI */
+console.log('— I MODELLI DI PREVENTIVO —');
+const MM=ctx.MODELLI_BASE;
+t('sono cinque',MM.map(m=>m.chiave).join()==='strutture,architettonico,perizie,antincendio,sanatoria',MM.map(m=>m.chiave));
+MM.forEach(m=>{
+  const testo=JSON.stringify(m.articoli);
+  t(m.nome+': gli errori dei vecchi testi sono corretti',
+    !/alloggetto|lesecuzione|dellincarico|arti\. 1341|1341 c 1342|6\/9\/2016|legge il 27|Articolo 6 e/.test(testo),null);
+  t(m.nome+': la clausola 1341 cita i termini all art. 8',/art\. 8 \(Termini e penali\), art\. 9 \(Foro competente\)/.test(testo),null);
+  /* le lettere citate nel pagamento esistono, e ogni voce viene pagata */
+  const pag=(m.articoli.find(a=>/PAGAMENTO/.test(a.titolo))||{}).testo||'';
+  const citate=[...new Set((pag.match(/1([A-Z])\b/g)||[]).map(x=>x[1]))];
+  const lettere=m.voci.map((_,i)=>ctx.lettera(i));
+  t(m.nome+': il pagamento cita solo voci che esistono',citate.every(l=>lettere.includes(l)),{citate,lettere});
+  t(m.nome+': e le cita tutte',lettere.every(l=>citate.includes(l)),{citate,lettere});
+  t(m.nome+': undici articoli e la clausola finale',m.articoli.length===12,m.articoli.length);
+});
+const pvP={anno:2026,progressivo:3,data:'2026-10-09',titolo:'PREVENTIVO TIPO PERIZIE',cliente_nome:'Rossi',
+  immobile:'VIA ROMA 1 A RECANATI',cliente_pec:'',cliente_tel:'333',oggetto:MM[2].oggetto,voci:MM[2].voci,articoli:MM[2].articoli,note:''};
+const docV=ctx.docPreventivo(pvP), jV=JSON.stringify(docV);
+t('numero nel formato 3/26',docV.numero==='3/26',docV.numero);
+t('l immobile va al suo posto',/SITO IN VIA ROMA 1 A RECANATI/.test(docV.oggetto),docV.oggetto);
+t('nessun segnaposto resta scritto',!/\{\{/.test(jV),(jV.match(/\{\{\w+\}\}/g)||[]));
+t('la polizza c e',/PI-00KS4T2550/.test(jV),null);
+t('il telefono del committente noto si scrive, la PEC mancante resta da compilare',
+  /PEC\/mail: _{5,}/.test(jV)&&/tel\. 333/.test(jV),null);
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

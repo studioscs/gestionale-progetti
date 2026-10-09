@@ -8,7 +8,8 @@
     pratica_eventi:[], notifiche:[], time_entries:[], files:[],
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
-    commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[], costi_generali:[]
+    commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[], costi_generali:[],
+    preventivi:[], preventivo_modelli:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -36,6 +37,8 @@
     commessa_fattura_righe:['fattura_id','descrizione','importo'],
     commessa_spese:['project_id','tipo','importo','data_spesa'],
     costi_generali:['categoria','descrizione','importo','data_spesa'],
+    preventivi:['anno','progressivo','data','stato','voci','articoli'],
+    preventivo_modelli:['chiave','nome','voci','articoli'],
     profili_costi:['profile_id','valido_dal']
   };
   /* VINCOLI DI COERENZA, come li dichiara il database vero. Senza, in
@@ -50,6 +53,10 @@
             return h>0; },                        // ore dello studio: positive
        'ck_ore_o_parcella'],
       [r=>!(r.data_pagamento&&!r.pagato), 'ck_pagamento_coerente']
+    ],
+    preventivi:[
+      [r=>r.stato===undefined||['bozza','inviato','accettato','rifiutato'].includes(r.stato),'preventivi_stato_check'],
+      [r=>r.progressivo===undefined||Number(r.progressivo)>0,'preventivi_progressivo_check']
     ],
     costi_generali:[
       [r=>r.categoria===undefined||['qualita','consulenze','utenze','affitto',

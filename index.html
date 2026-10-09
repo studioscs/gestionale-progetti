@@ -452,6 +452,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
       <button class="sn" data-page="firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
       <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Da fatturare<span class="snb" id="b-fatt">0</span></button>
+      <button class="sn" data-page="preventivi" id="sn-prev"><span class="snic">&#128221;</span>Preventivi</button>
     </div>
     <div class="ssec">
       <span class="slbl">Commesse</span>
@@ -656,7 +657,7 @@ tbody tr:hover td { background:#f0f4f9; }
      indietro a correggere la commessa o lo scaglione. -->
 <div class="ov" id="m-rev">
   <div class="modal" style="max-width:860px">
-    <div class="mh"><h3>Revisione della fattura</h3><button class="mx" data-close="m-rev">&#10005;</button></div>
+    <div class="mh"><h3>Revisione della fattura e proforma</h3><button class="mx" data-close="m-rev">&#10005;</button></div>
     <div class="mb">
       <div class="ibox mb16">Controlla e correggi quello che serve: <b>queste modifiche valgono per questo file</b>
         e non cambiano la commessa. Il riepilogo degli importi si aggiorna mentre scrivi.</div>
@@ -670,7 +671,26 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn" id="rev-ant">&#128065; Anteprima XML</button>
       </span>
       <button class="btn" data-close="m-rev">Annulla</button>
+      <button class="btn" id="rev-pdf" title="PDF da mandare al committente prima della fattura">&#128196; Proforma PDF</button>
       <button class="btn btn-p" id="rev-go">&#128229; Genera XML</button>
+    </div>
+  </div>
+</div>
+
+<!-- Preventivo o modello di preventivo -->
+<div class="ov" id="m-prev">
+  <div class="modal modal-lg">
+    <div class="mh"><h3 id="mpv-t">Preventivo</h3><button class="mx" data-close="m-prev">&#10005;</button></div>
+    <div class="mb"><div id="pv-body"></div><div id="pv-tot"></div></div>
+    <div class="mf">
+      <span class="left row">
+        <button class="btn btn-d" id="pv-del" style="display:none">Elimina</button>
+        <button class="btn" id="pv-ripr" style="display:none">Ripristina l’originale</button>
+        <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
+      </span>
+      <button class="btn" data-close="m-prev">Chiudi</button>
+      <button class="btn" id="pv-pdf">&#128196; Salva e scarica PDF</button>
+      <button class="btn btn-p" id="pv-save">Salva</button>
     </div>
   </div>
 </div>
@@ -1276,6 +1296,12 @@ const STUDIO = {
   // servono da comunicare ai fornitori. Restano qui per non doverli cercare.
   codiceUnivocoProprio : 'N92GLON',
   pecPropria           : 'studiotecnicoscssrl@pec.it',
+  // Recapiti stampati in testa a preventivi e proforma
+  telefono      : '0717574632',
+  email         : 'studiotecnicoscs@gmail.com',
+  emailInfo     : 'info@studiotecnicoscs.com',
+  sito          : 'www.studiotecnicoscs.com',
+  piePagina     : 'Iscr. reg. imp.: 02077580435 - Non in liquidazione - Cap. soc. 10.000,00 € - Regime fiscale: Ordinario',
   // Cassa di previdenza: TC04 Inarcassa (ingegneri e architetti) · TC03 Cassa Geometri
   tipoCassa       : 'TC04',
   aliquotaCassa   : 4,           // 0 per non esporre alcun contributo
@@ -1310,7 +1336,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.06.1';
+const VERSIONE = '2026.10.09.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1333,7 +1359,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '',
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1511,7 +1537,8 @@ const MIGRAZIONI = {
   '028_esterni_pagamento':   ['pagato','data_pagamento'],
   '029_ore_zero_esterni':    ['ck_ore_o_parcella'],
   '030_isa':                 ['isa_tipo','anno_competenza'],
-  '031_costi_generali':      ['costi_generali']
+  '031_costi_generali':      ['costi_generali'],
+  '032_proforma_preventivi': ['proforma_numero','proforma_data','proforma_at','preventivi','preventivo_modelli']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2837,7 +2864,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2856,7 +2883,9 @@ async function loadAll(silent) {
       SB.from('commessa_contratti').select('*').order('numero'),
       SB.from('commessa_fattura_righe').select('*').order('ordine'),
       SB.from('commessa_spese').select('*').order('data_spesa'),
-      SB.from('costi_generali').select('*').order('data_spesa', {ascending:false})
+      SB.from('costi_generali').select('*').order('data_spesa', {ascending:false}),
+      SB.from('preventivi').select('*').order('anno', {ascending:false}).order('progressivo', {ascending:false}),
+      SB.from('preventivo_modelli').select('*').order('ordine')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2883,6 +2912,9 @@ async function loadAll(silent) {
     /* Li legge solo chi tiene l'amministrazione: per gli altri la RLS
        risponde con un elenco vuoto, ed e' giusto cosi'. */
     S.costiGen  = rcg.error ? [] : (rcg.data || []);
+    /* Anche i preventivi e i modelli li legge solo l'amministrazione */
+    S.preventivi  = rpv.error ? [] : (rpv.data || []);
+    S.modelliPrev = rpm.error ? [] : (rpm.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2894,7 +2926,8 @@ async function loadAll(silent) {
                      [rms, 'task_messaggi'],   [rct, 'commessa_contratti'],
                      [rfr, 'commessa_fattura_righe'],
                      [rsp, 'commessa_spese'],
-                     [rcg, 'costi_generali']]);
+                     [rcg, 'costi_generali'],
+                     [rpv, 'preventivi'],      [rpm, 'preventivo_modelli']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -3531,6 +3564,8 @@ async function boot() {
   el('snm').title = S.me.email || '';
   el('srl').textContent = ({admin:'Admin', collaboratore:'Collab.', viewer:'Viewer'})[S.prof.role] || '';
   el('sec-admin').style.display = isAd() ? 'block' : 'none';
+  /* I preventivi li prepara chi tiene l'amministrazione, come la RLS (032) */
+  el('sn-prev').style.display = vedeTutto() ? '' : 'none';
   el('sver').textContent = 'versione ' + VERSIONE;
 
   await loadAll();
@@ -3706,7 +3741,7 @@ async function doLogout() {
 const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
-                 costi:'Costi generali dello studio' };
+                 costi:'Costi generali dello studio', preventivi:'Preventivi' };
 
 /* IL CASSETTO DEL MENU (solo su telefono)
    Su iPad e su computer la barra laterale e' sempre li' e queste funzioni non
@@ -3751,7 +3786,7 @@ function render() {
     oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
-    time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, users:rUsers
+    time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, preventivi:rPreventivi, users:rUsers
   };
   (P[S.page] || rOggi)();
   updBadges();
@@ -4721,6 +4756,10 @@ function datiFattura(f) {
     /* Documento */
     numero      : f.numero_fattura || '',
     data        : f.data_fattura || todayISO(),
+    /* La proforma che precede la fattura: numero e data restano sullo
+       scaglione, cosi' si sa cosa e' gia' stato chiesto al committente. */
+    proformaNumero: f.proforma_numero || '',
+    proformaData  : f.proforma_data || '',
     imponibile  : r2(impFattura(f)),
     /* L'oggetto e' la dicitura dell'incarico se c'e', altrimenti la descrizione
        dello scaglione: e' quello che l'ente rilegge per liquidare. */
@@ -5068,6 +5107,821 @@ function xmlDaDati(d) {
 /* Scorciatoia storica: genera direttamente dallo scaglione, senza revisione */
 const xmlFattura = f => xmlDaDati(datiFattura(f));
 
+
+/* ===========================================================================
+   DOCUMENTI PDF: PROFORMA E PREVENTIVI
+
+   Due documenti che vanno al committente come PDF: la PROFORMA, che si manda
+   prima della fattura elettronica e chiede il pagamento, e il PREVENTIVO.
+
+   I CONTI DEVONO TORNARE RIGA PER RIGA
+   I preventivi del vecchio programma mettevano accanto a ogni voce un "totale"
+   fatto di importo piu' IVA, senza il contributo cassa: 1.500 € diventavano
+   1.830 €. In fondo invece la cassa c'era, e l'IVA era calcolata anche sulla
+   cassa. Risultato: la somma dei totali di riga non era il totale del
+   documento, e il committente che rifaceva il conto non ci si ritrovava.
+
+   Qui ogni voce porta le sue quote nell'ordine in cui la legge le applica:
+   imponibile, contributo cassa sull'imponibile, IVA su imponibile piu' cassa,
+   totale. Le quote di riga sono la ripartizione esatta degli importi del
+   documento - calcolati sul totale, come vuole il fisco - quindi la colonna
+   dei totali somma al centesimo il totale dovuto.
+   =========================================================================== */
+
+/* Divide un importo fra le righe in proporzione ai pesi, al centesimo: prima la
+   parte intera di ogni quota, poi i centesimi che avanzano a chi ha perso di
+   piu' nell'arrotondamento. La somma delle quote e' sempre esattamente il
+   totale, che arrotondando ogni riga per conto suo non succede. */
+function ripartisci(totale, pesi) {
+  const cent  = Math.round(r2(totale) * 100);
+  const pp    = pesi.map(p => Math.max(0, Number(p) || 0));
+  const somma = pp.reduce((a, p) => a + p, 0);
+  if (!somma || !cent) return pp.map(() => 0);
+  const esatte = pp.map(p => cent * p / somma);
+  const giu    = esatte.map(x => Math.floor(x + 1e-9));
+  let resto    = cent - giu.reduce((a, x) => a + x, 0);
+  esatte.map((x, i) => [x - giu[i], i])
+    .sort((a, b) => b[0] - a[0] || a[1] - b[1])
+    .forEach(([, i]) => { if (resto > 0) { giu[i]++; resto--; } });
+  return giu.map(c => c / 100);
+}
+
+/* I conti di un documento: le voci con le loro quote, poi i totali. Le
+   anticipazioni art. 15 stanno fuori da cassa e IVA, come in fattura. */
+function contiDocumento(voci, spese, opz) {
+  const o = Object.assign({
+    aliquotaCassa: Number(STUDIO.aliquotaCassa || 0), aliquotaIva: Number(STUDIO.aliquotaIva || 0),
+    cassaSoggettaIva: STUDIO.cassaSoggettaIva !== false, ritenuta: STUDIO.ritenuta || null, split: false
+  }, opz || {});
+  const rr = (voci || []).map(v => {
+    const q = (v.quantita === '' || v.quantita === null || v.quantita === undefined) ? 1 : Number(v.quantita) || 0;
+    const imp = r2(Number(v.importo) || 0);
+    return Object.assign({}, v, { importo: imp, quantita: q, imponibile: r2(imp * q) });
+  });
+  const imponibile = r2(rr.reduce((a, r) => a + r.imponibile, 0));
+  const cassa = r2(imponibile * Number(o.aliquotaCassa || 0) / 100);
+  const base  = r2(imponibile + (o.cassaSoggettaIva ? cassa : 0));
+  const iva   = r2(base * Number(o.aliquotaIva || 0) / 100);
+  const qc = ripartisci(cassa, rr.map(r => r.imponibile));
+  const qi = ripartisci(iva, rr.map((r, i) => r.imponibile + (o.cassaSoggettaIva ? qc[i] : 0)));
+  rr.forEach((r, i) => { r.cassa = qc[i]; r.iva = qi[i]; r.totale = r2(r.imponibile + qc[i] + qi[i]); });
+  const ss = (spese || []).map(s => ({ descrizione: s.descrizione, importo: r2(s.importo || 0) }));
+  const antic = r2(ss.reduce((a, s) => a + s.importo, 0));
+  const rit = o.ritenuta ? r2(imponibile * Number(o.ritenuta.aliquota) / 100) : 0;
+  const totale = r2(base + iva + (o.cassaSoggettaIva ? 0 : cassa) + antic);
+  /* In scissione dei pagamenti l'IVA la versa l'ente all'erario */
+  const netto = r2(totale - (o.split ? iva : 0) - rit);
+  return { righe: rr, spese: ss, imponibile, cassa, base, iva, anticipazioni: antic,
+           totale, ritenuta: rit, netto, opz: o };
+}
+
+/* Il logo dello studio, come compare nei preventivi che gia' mandate. */
+const LOGO_STUDIO = 'data:image/jpeg;base64,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';
+
+/* Scritto a mano invece che con toLocaleString: il separatore delle migliaia
+   dipende dal browser, e su un documento che va al committente non deve. */
+function euroPdf(v) {
+  const n = r2(Number(v) || 0), neg = n < 0;
+  const [i, d] = Math.abs(n).toFixed(2).split('.');
+  return (neg ? '−' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + d + ' €';
+}
+const qtaPdf  = q => Number(q) % 1 ? Number(q).toLocaleString('it-IT', { maximumFractionDigits: 2 }) : String(Number(q));
+const lettera = i => i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(65 + Math.floor(i / 26) - 1) + String.fromCharCode(65 + i % 26);
+
+/* LA DEFINIZIONE DEL DOCUMENTO
+   Pura: dagli stessi dati esce sempre lo stesso documento, e la si puo'
+   controllare senza stamparla. doc = { tipo, numero, data, titolo, cliente,
+   oggetto, lettere, voci, spese, articoli, note, avviso, iban, scadenza, opz } */
+function pdfDefinizione(doc) {
+  const c  = contiDocumento(doc.voci, doc.spese, doc.opz);
+  const o  = c.opz;
+  const nomeDoc = doc.tipo + ' ' + (doc.numero || '');
+  const quando  = fdate(doc.data || todayISO());
+  const grigio  = '#5b6673', fondo = '#eef1f4';
+  const cl = doc.cliente || {};
+  const viaStudio = [STUDIO.indirizzo, STUDIO.civico].filter(Boolean).join(' ')
+    + ', ' + STUDIO.cap + ' ' + STUDIO.comune + ' (' + STUDIO.provincia + ')';
+
+  const da = [
+    { text: 'DA', style: 'etichetta' },
+    { text: STUDIO.denominazione, bold: true, fontSize: 10.5, margin: [0, 2, 0, 3] },
+    viaStudio.toUpperCase(),
+    'P.IVA IT' + STUDIO.piva, 'C.F. ' + (STUDIO.codiceFiscale || STUDIO.piva)
+  ].concat(STUDIO.telefono ? ['Telefono: ' + STUDIO.telefono] : [])
+   .concat(STUDIO.email ? [STUDIO.email] : [])
+   .concat(STUDIO.pecPropria ? ['PEC: ' + STUDIO.pecPropria] : [])
+   .concat(STUDIO.sito ? ['Sito WEB: ' + STUDIO.sito] : []);
+
+  const sedeCl = [cl.indirizzo, [cl.cap, cl.comune].filter(Boolean).join(' ')
+    + (cl.prov ? ' (' + cl.prov + ')' : '')].filter(x => x && x.trim());
+  const a = [
+    { text: 'DESTINATARIO', style: 'etichetta' },
+    { text: cl.nome || '—', bold: true, fontSize: 10.5, margin: [0, 2, 0, 3] }
+  ].concat(sedeCl)
+   .concat(cl.piva ? ['P.IVA ' + cl.piva] : [])
+   .concat(cl.cf ? ['C.F. ' + String(cl.cf).toUpperCase()] : [])
+   .concat(cl.pec ? ['PEC: ' + cl.pec] : []);
+
+  const intest = ['DESCRIZIONE', 'IMPORTO', 'Q.TÀ', 'IMPONIBILE',
+                  'CASSA ' + o.aliquotaCassa + '%', 'IVA ' + o.aliquotaIva + '%', 'TOTALE']
+    .map((t, i) => ({ text: t, style: 'th', alignment: i ? 'right' : 'left' }));
+  const corpo = [intest];
+  if (doc.oggetto) corpo.push([{ text: doc.oggetto, colSpan: 7, bold: true, margin: [0, 3, 0, 3] }, '', '', '', '', '', '']);
+  c.righe.forEach((r, i) => corpo.push([
+    { text: (doc.lettere ? lettera(i) + '. ' : '') + (r.descrizione || '') },
+    { text: euroPdf(r.importo), alignment: 'right' },
+    { text: qtaPdf(r.quantita), alignment: 'right' },
+    { text: euroPdf(r.imponibile), alignment: 'right' },
+    { text: euroPdf(r.cassa), alignment: 'right' },
+    { text: euroPdf(r.iva), alignment: 'right' },
+    { text: euroPdf(r.totale), alignment: 'right', bold: true }
+  ]));
+  c.spese.forEach(s => corpo.push([
+    { text: s.descrizione }, { text: euroPdf(s.importo), alignment: 'right' },
+    { text: '1', alignment: 'right' }, { text: '—', alignment: 'right', color: grigio },
+    { text: 'esclusa', alignment: 'right', color: grigio }, { text: 'esclusa', alignment: 'right', color: grigio },
+    { text: euroPdf(s.importo), alignment: 'right', bold: true }
+  ]));
+  /* La riga dei totali di colonna: chi rifa' il conto trova gli stessi numeri
+     del riepilogo, al centesimo. */
+  corpo.push([
+    { text: 'Totali', bold: true }, '', '',
+    { text: euroPdf(c.imponibile), alignment: 'right', bold: true },
+    { text: euroPdf(c.cassa), alignment: 'right', bold: true },
+    { text: euroPdf(c.iva), alignment: 'right', bold: true },
+    { text: euroPdf(c.totale), alignment: 'right', bold: true }
+  ].map(x => typeof x === 'string' ? { text: x, fillColor: fondo } : Object.assign(x, { fillColor: fondo })));
+
+  const articoli = (doc.articoli || []).filter(x => (x.titolo || '').trim() || (x.testo || '').trim())
+    .map(x => ({ text: [x.titolo ? { text: x.titolo.trim() + ' ', bold: true } : '', x.testo || ''],
+                 margin: [0, 0, 0, 7], alignment: 'justify' }));
+
+  const riga = (l, v, extra) => [Object.assign({ text: l }, extra || {}), Object.assign({ text: v, alignment: 'right' }, extra || {})];
+  const riep = [riga('Totale prestazioni', euroPdf(c.imponibile))];
+  if (c.cassa) riep.push(riga([{ text: 'Cassa previdenziale ' + o.aliquotaCassa + '% (' + (STUDIO.tipoCassa || 'TC04') + ')\n' },
+      { text: 'Cassa nazionale previdenza e assistenza ingegneri e architetti liberi professionisti', fontSize: 7, color: grigio }],
+      euroPdf(c.cassa)));
+  riep.push(riga('Imponibile IVA', euroPdf(c.base)));
+  riep.push(riga('IVA ' + o.aliquotaIva + '% su ' + euroPdf(c.base), euroPdf(c.iva)));
+  if (c.anticipazioni) riep.push(riga('Spese anticipate art. 15 DPR 633/72 (escluse IVA e cassa)', euroPdf(c.anticipazioni)));
+  riep.push(riga('Totale ' + doc.tipo.toLowerCase(), euroPdf(c.totale), { bold: true }));
+  if (o.split) riep.push(riga('IVA versata dall’ente (scissione dei pagamenti)', '− ' + euroPdf(c.iva)));
+  if (c.ritenuta) riep.push(riga('Ritenuta d’acconto ' + o.ritenuta.aliquota + '%', '− ' + euroPdf(c.ritenuta)));
+  riep.push(riga({ text: 'Totale dovuto', fontSize: 13, bold: true }, { text: euroPdf(c.netto), fontSize: 15, bold: true }));
+
+  const contenuto = [
+    { columns: [
+        { image: LOGO_STUDIO, width: 95 },
+        { stack: [
+            { text: nomeDoc, fontSize: 19, bold: true, alignment: 'right' },
+            { text: 'del ' + quando, alignment: 'right', color: grigio },
+            doc.titolo ? { text: doc.titolo, alignment: 'right', bold: true, margin: [0, 6, 0, 0], color: grigio } : ''
+          ] }
+      ], margin: [0, 0, 0, 14] },
+    { columns: [{ stack: da, width: '*' }, { stack: a, width: '*' }], columnGap: 20, margin: [0, 0, 0, 14] },
+    { table: { headerRows: 1, dontBreakRows: true, widths: ['*', 54, 26, 56, 50, 50, 58], body: corpo },
+      layout: { hLineWidth: (i, n) => i === 1 || i === n.table.body.length - 1 ? 0.8 : 0.3,
+                vLineWidth: () => 0, hLineColor: () => '#c9d0d8',
+                fillColor: r => r === 0 ? fondo : null,
+                paddingTop: () => 4, paddingBottom: () => 4 },
+      margin: [0, 0, 0, 12] }
+  ].concat(articoli);
+
+  if ((doc.note || '').trim())
+    contenuto.push({ text: [{ text: 'NOTE ', bold: true, color: '#2f6fb2' }, doc.note.trim()], margin: [0, 6, 0, 10] });
+
+  contenuto.push({ unbreakable: true, stack: [
+    { table: { widths: ['*', 110], body: riep },
+      layout: { hLineWidth: (i, n) => i === n.table.body.length - 1 ? 0.8 : 0, vLineWidth: () => 0,
+                hLineColor: () => '#c9d0d8', paddingTop: () => 3, paddingBottom: () => 3 },
+      margin: [0, 8, 0, 12] },
+    { table: { widths: ['*', 150, 80, 80], body: [
+        ['MODALITÀ DI PAGAMENTO', 'IBAN', 'DATA SCADENZA', 'IMPORTO'].map((t, i) => ({ text: t, style: 'th', alignment: i === 3 ? 'right' : 'left' })),
+        ['Bonifico bancario', doc.iban || '—', doc.scadenza ? fdate(doc.scadenza) : '—',
+         { text: euroPdf(c.netto), alignment: 'right', bold: true }]
+      ] }, layout: 'noBorders', margin: [0, 0, 0, 10] },
+    doc.avviso ? { text: doc.avviso, italics: true, fontSize: 8, color: grigio, margin: [0, 0, 0, 8] } : '',
+    { text: [{ text: STUDIO.denominazione, bold: true }, ' - ' + (STUDIO.piePagina || '')], fontSize: 7.5, color: grigio }
+  ] });
+
+  return {
+    pageSize: 'A4', pageMargins: [36, 36, 36, 44],
+    info: { title: nomeDoc + ' del ' + quando, author: STUDIO.denominazione },
+    defaultStyle: { fontSize: 8.5, lineHeight: 1.15 },
+    styles: { etichetta: { fontSize: 7.5, color: '#2f6fb2', bold: true },
+              th: { fontSize: 7.5, bold: true, color: '#33404d' } },
+    footer: (pag, tot) => ({ text: nomeDoc + ' del ' + quando + ' - Pagina ' + pag + ' di ' + tot,
+                             fontSize: 7.5, color: grigio, margin: [36, 14, 36, 0] }),
+    content: contenuto
+  };
+}
+
+/* La libreria che scrive il PDF si scarica solo quando serve: sono un paio di
+   megabyte che chi non fa proforma ne' preventivi non deve aspettare. */
+const PDF_CDN = 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/';
+let PDF_LIB = null;
+function caricaScript(src) {
+  return new Promise((ok, ko) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = ok;
+    s.onerror = () => ko(new Error('Non riesco a scaricare ' + src));
+    document.head.appendChild(s);
+  });
+}
+function caricaPdfMake() {
+  if (window.pdfMake && window.pdfMake.vfs) return Promise.resolve(window.pdfMake);
+  if (!PDF_LIB) PDF_LIB = caricaScript(PDF_CDN + 'pdfmake.min.js')
+    .then(() => caricaScript(PDF_CDN + 'vfs_fonts.js'))
+    .then(() => window.pdfMake)
+    .catch(e => { PDF_LIB = null; throw e; });
+  return PDF_LIB;
+}
+async function scaricaPdf(doc, nomeFile) {
+  let pm;
+  try { pm = await caricaPdfMake(); }
+  catch (e) { toast('Non riesco a preparare il PDF: controlla la connessione e riprova.', 'error'); return false; }
+  pm.createPdf(pdfDefinizione(doc)).download(nomeFile);
+  return true;
+}
+const nomeFilePdf = (tipo, numero) => tipo + '-' + String(numero || 'bozza').replace(/[^\w-]+/g, '_') + '.pdf';
+
+/* ===========================================================================
+   PREVENTIVI
+   Le cinque bozze che lo studio usava in FatturaElettronica APP, diventate
+   modelli: si sceglie il tipo di lavoro, si mette il committente e l'immobile,
+   si aggiustano voci e importi, e il PDF esce con i conti giusti.
+
+   I testi sono quelli dei vostri preventivi, con alcune correzioni:
+   - le voci si numerano da sole (A, B, C...): nel modello architettonico tre
+     voci si chiamavano tutte "A", e le modalita' di pagamento citavano lettere
+     che non corrispondevano;
+   - la clausola degli artt. 1341-1342 citava "art. 9 (Termini...)" e poi di
+     nuovo "art. 9 (Foro competente)": i termini sono all'art. 8;
+   - la privacy rimandava al "termine indicato all'Articolo 6", che parla di
+     obblighi: i termini sono all'art. 8; e il Regolamento e' il (UE) 2016/679;
+   - il recesso rimandava all'art. 5 per gli importi, che stanno all'art. 1;
+   - l'art. 11 si chiamava anche "AUTORIZZAZIONI": le autorizzazioni sono il
+     10 bis;
+   - refusi: "alloggetto", "lesecuzione", "arti. 1341 c 1342", "legge il 27".
+
+   SEGNAPOSTO
+   Nei testi si possono usare: {{immobile}} (l'indirizzo scritto nel
+   preventivo), {{polizza}}, {{pec_studio}}, {{email_studio}}, {{tel_studio}},
+   {{contatti_committente}} (PEC e telefono del committente, o le righe da
+   compilare a mano se non li conosciamo). Cambiata la polizza, si cambia una
+   volta qui e non in cinque modelli.
+   =========================================================================== */
+const POLIZZA_STUDIO = 'n. PI-00KS4T2550 della compagnia ARCH. INSURANCE (EU) DAC con validità sino al '
+  + '09/04/2027 e massimale pari a 3.000.000,00 €';
+
+/* Gli articoli che tutti i preventivi hanno uguali; cambiano solo esclusioni,
+   pagamento e tempi, che sono il cuore di ciascun tipo di lavoro. */
+function articoliPreventivo(o) {
+  return [
+    { titolo: 'ART. 2 ESCLUSIONI:', testo: o.esclusioni },
+    { titolo: 'ART. 3 MODALITÀ DI ESPLETAMENTO DELL’INCARICO:', testo:
+      `I professionisti svolgeranno l'incarico in piena autonomia tecnica ed organizzativa, senza alcun vincolo di subordinazione, avvalendosi, ove lo ritengano opportuno, del contributo di collaboratori di loro fiducia che personalmente dirigeranno e di cui assumono la piena responsabilità senza alcun aggravio di costi per il Committente.` },
+    { titolo: 'ART. 4 RISOLUZIONE DEL CONTRATTO - RECESSO UNILATERALE:', testo:
+      `Il Committente può unilateralmente recedere dal contratto, ai sensi dell'art. 2227 c.c. e dunque provvedendo:
+1) all'integrale pagamento delle spese sostenute dal Professionista e delle prestazioni rese fino al momento dell'intervenuto recesso e comunque non inferiori al 50% del totale della progettazione esecutiva il cui importo è definito all'art. 1 del presente contratto;
+ovvero
+2) al pagamento di una somma aggiuntiva pari al 10% (aumento percentuale) dei corrispettivi dovuti fino alla conclusione dell'incarico, ai sensi degli artt. 2237 c.c. e 18 e 10 L. n. 143/1949.
+A fronte del pagamento di quanto previsto ai punti che precedono, il Professionista fornirà al Committente la documentazione elaborata fino al momento della revoca dell'incarico, ferma restando la proprietà intellettuale della medesima.
+Nel caso in cui, per motivi non imputabili ai Professionisti, il Committente decidesse di interrompere l'incarico e recedere dal contratto, il Committente non ha diritto ad alcun rimborso per l'importo fino a quel momento pagato.
+La documentazione progettuale, già consegnata al Committente, rimarrà di sua proprietà.
+Il Professionista può recedere dal contratto per giusta causa, ovvero qualora, a suo insindacabile giudizio, ritenga venuto meno il rapporto fiduciario con il Committente.
+Le parti riconoscono che costituiscono esplicitamente giusta causa di recesso:
+- il mancato adempimento degli obblighi di cui al presente contratto;
+- il disaccordo del Committente sulle disposizioni di pertinenza del Professionista relative all'oggetto del contratto.
+In tale circostanza egli ha diritto al corrispettivo per l'opera svolta, senza che il Committente possa pretendere il risarcimento di alcun danno conseguente stante il mancato rispetto del presente accordo.
+Il recesso del Professionista avverrà dandone comunicazione scritta al Committente, a mezzo di lettera raccomandata A/R oppure tramite PEC (quest'ultima per i soggetti per i quali ne è previsto l'obbligo di legge), con un preavviso di 15 giorni, decorrenti dal ricevimento, durante i quali il Professionista si impegna ad adempiere agli atti, derivanti dal presente incarico, che avranno scadenza nel corso di tale periodo al fine di evitare disagi e ritardi in ordine all'esecuzione delle opere e dei servizi professionali oggetto del contratto.` },
+    { titolo: 'ART. 5 MODALITÀ DI PAGAMENTO:', testo: o.pagamento },
+    { titolo: 'ART. 6 OBBLIGHI DELLE PARTI E DIRITTI D’AUTORE:', testo:
+      `I Professionisti, oltre quanto descritto negli articoli precedenti:
+- si impegnano a rispettare il segreto professionale e a non divulgare informazioni di cui si è a conoscenza in ragione dell'espletamento dell'incarico, avendo cura che anche i collaboratori mantengano lo stesso segreto professionale;
+- custodiscono la documentazione fornita dal Committente per il tempo strettamente necessario, mentre gli elaborati prodotti su commissione, dopo che sarà interamente pagato il relativo corrispettivo, resteranno di piena e assoluta proprietà del Committente, fatte salve le norme in merito al diritto d'autore.
+Il Committente si impegna:
+- a fornire ai Professionisti la documentazione necessaria per l'espletamento dell'incarico, della quale garantisce la perfetta corrispondenza allo stato di fatto e a verità;
+- a consentire al Professionista ogni attività di accesso e controllo ai documenti e ai dati necessari per l'esecuzione dell'incarico conferito;
+- a comunicare al Professionista incaricato qualsiasi circostanza o variazione che, sopravvenendo, possa risultare utile od inerente all'incarico in oggetto.
+I lavori originali, i disegni, i progetti e quanto altro rappresenta oggetto dell'incarico restano di esclusiva proprietà del professionista. Il Committente potrà, a suo insindacabile giudizio, darne o meno esecuzione e utilizzarli, ai soli fini per i quali la prestazione col presente contratto è richiesta, senza che dal professionista possa essere sollevata eccezione di sorta. Sono in ogni caso fatti salvi i diritti d'autore ai sensi della Legge 633/41 e della Legge 306/77 e successive modifiche ed integrazioni.` },
+    { titolo: 'ART. 7 POLIZZA ASSICURATIVA:', testo:
+      `Lo studio SCS, ai sensi dell'art. 9 del D.L. 1/2012 come convertito dalla Legge n. 27/2012, informa il Committente che a sua tutela è in vigore la polizza assicurativa RC per danni provocati nell'esercizio dell'attività professionale {{polizza}}.` },
+    { titolo: 'ART. 8 TERMINI E PENALI:', testo:
+      `L'incarico, fatto salvo cause di forza maggiore ed impedimenti non dipendenti dai professionisti, verrà espletato nei seguenti tempi:
+` + o.termini + `
+Diverse programmazioni o suddivisione delle fasi, eventuali proroghe o differimenti temporali, dovute ad esigenze del progetto o richieste del Committente, verranno preventivamente concordate tra le parti. I termini per l'espletamento dell'incarico subiranno automaticamente le dilatazioni corrispondenti alle proroghe o differimenti di cui al capoverso precedente. Il mancato rispetto dei termini sopra indicati determinerà una penale pari allo 0,5 per mille del compenso stabilito (ai sensi di legge) per ogni giorno di ritardo, con un massimo del 10% dell'importo contrattuale, trattenuto sul saldo delle competenze spettanti al professionista.` },
+    { titolo: 'ART. 9 FORO COMPETENTE:', testo:
+      `In tutti i casi di controversia derivanti dal presente Contratto sarà competente in via esclusiva il Foro del Tribunale di Macerata.` },
+    { titolo: 'ART. 10 PRIVACY:', testo:
+      `Le Parti si impegnano, nel trattamento dei dati personali di cui vengano a conoscenza nell'esecuzione del presente Contratto, ad osservare e a far osservare ai propri dipendenti, anche oltre la scadenza dei termini indicati all'articolo 8 e le eventuali proroghe, le disposizioni del Regolamento (UE) 2016/679 (GDPR). I dati personali di cui dovessero venire a conoscenza nell'esecuzione del presente contratto verranno trattati esclusivamente per le finalità connesse all'esecuzione del presente incarico e conservati per i tempi necessari alla predetta esecuzione.` },
+    { titolo: 'ART. 10 bis AUTORIZZAZIONI PUBBLICAZIONI:', testo:
+      `Il Committente
+____ AUTORIZZA
+____ NON AUTORIZZA
+espressamente lo Studio a realizzare fotografie e/o riprese video dell'opera durante l'esecuzione dei lavori e una volta ultimati gli stessi.
+Tale materiale potrà essere utilizzato dallo Studio a fini promozionali, documentativi o formativi, mediante pubblicazione su siti internet, social network, riviste di settore, presentazioni, o altri mezzi di comunicazione, anche digitali, nel rispetto della dignità, della riservatezza e dei diritti del Committente.
+La presente autorizzazione è concessa a titolo gratuito, senza limiti di tempo e con facoltà di modificare, adattare o elaborare le immagini per finalità esclusivamente illustrative e non commerciali dirette.
+SI PREGA DI COMPILARE I DATI SOPRA.` },
+    { titolo: 'ART. 11 COMUNICAZIONI E INDIRIZZI:', testo:
+      `Tutte le comunicazioni relative al contratto saranno effettuate attraverso le seguenti modalità:
+verso i Professionisti: PEC: {{pec_studio}} - mail: {{email_studio}} - tel. {{tel_studio}}
+verso il Committente: {{contatti_committente}}
+Il Committente dichiara sotto la propria responsabilità che l'incarico oggetto del presente Contratto non è stato in precedenza affidato a soggetti o organismi professionali, ovvero che eventuali precedenti sono stati regolarmente risolti.
+Dichiara inoltre che le prestazioni di cui al presente incarico sono state oggetto di compiuta ed esauriente illustrazione da parte del Professionista che, ai sensi dell'art. 9 della L. 27/2012, ha fornito ogni informazione utile circa gli oneri ipotizzabili dal momento di conferimento fino alla conclusione dell'incarico, nonché tutte le spiegazioni richieste per la piena comprensione di quanto riportato e dichiara quindi di accettarne il contenuto.
+
+FIRMA ____________________________________________` },
+    { titolo: '', testo:
+      `Ai sensi e per gli effetti degli artt. 1341 e 1342 del Codice Civile, il Committente dichiara di aver letto e di approvare specificamente le seguenti clausole: art. 1 (Premesse ed oggetto dell'incarico), art. 2 (Esclusioni), art. 4 (Risoluzione del contratto e recesso unilaterale), art. 5 (Modalità di pagamento), art. 8 (Termini e penali), art. 9 (Foro competente).
+
+FIRMA ____________________________________________` }
+  ];
+}
+
+const OGGETTO_IMMOBILE = 'Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN {{immobile}}';
+const ALTRI_SERVIZI = '\nOGNI ALTRO SERVIZIO AGGIUNTIVO SARÀ OGGETTO DI RELATIVO ADDENDUM CONTRATTUALE.';
+const voce = d => ({ descrizione: d, importo: 1, quantita: 1 });
+
+/* I cinque modelli. Gli importi sono simbolici: si scrivono nel preventivo. */
+const MODELLI_BASE = [
+  { chiave: 'strutture', nome: 'Strutture', titolo: 'PREVENTIVO TIPO STRUTTURE', oggetto: OGGETTO_IMMOBILE,
+    voci: [
+      voce('Relazione geologica e relazione geotecnica da depositare al Genio civile di Ancona'),
+      voce('Progettazione strutturale per sottofondazione - allargamento fondale mediante micropali del blocco strutturale in ampliamento realizzato in calcestruzzo armato'),
+      voce('Direzione lavori strutturale, comunicazione di fine lavori (R.S.U.)'),
+      voce('Collaudo (da tecnico esterno che non abbia preso parte alla progettazione strutturale)')],
+    articoli: articoliPreventivo({
+      esclusioni: 'Resta escluso tutto quello non espressamente indicato sopra.',
+      pagamento: `- Acconto alla firma pari al 50% della spesa indicata ai punti 1A, 1B;
+- Alla consegna della documentazione presso gli enti competenti (Genio civile Regione Marche - P.T. Ancona) un importo pari al 100% dei punti 1A, 1B, detratto quanto già pagato in precedenza;
+- Alla consegna della documentazione di fine lavori, il saldo relativo al 100% dei punti 1C, 1D.` + ALTRI_SERVIZI,
+      termini: `1. Relazione geologica e geotecnica (30 giorni lavorativi dalla consegna della documentazione di accesso agli atti completa al Genio civile)
+2. Progettazione strutturale (45 giorni dal termine della fase 1)
+3. Direzione lavori (tempistica dipendente dal cantiere)` }),
+    note: 'BOLLI, DIRITTI DI SEGRETERIA, SPESE CATASTALI, INDAGINI VARIE IN LOCO E QUALSIASI COSA NON ESPRESSAMENTE INDICATA SOPRA RESTANO ESCLUSI E A CARICO DEL CLIENTE.' },
+
+  { chiave: 'architettonico', nome: 'Architettonico', titolo: 'PREVENTIVO TIPO ARCHITETTONICO', oggetto: OGGETTO_IMMOBILE,
+    voci: [
+      voce('Accesso e acquisizione documentale presso gli archivi del SUE (Sportello Unico per l’Edilizia) e presso gli uffici catastali competenti, comprensivo di ricerche, estrazioni e reperimento degli atti necessari'),
+      voce('Rilievo geometrico confermativo, accesso agli atti al comune di competenza e verifica di conformità dello stato attuale rispetto allo stato assentito'),
+      voce('Progettazione architettonica e redazione elaborati grafici, relazioni specialistiche, modulistica per presentazione della pratica autorizzativa al comune di competenza'),
+      voce('Deposito opere prive di rilevanza'),
+      voce('Direzione lavori, redazione di fine lavori'),
+      voce('Eventuale piano di sicurezza'),
+      voce('Relazione energetica (ex Legge 10/91)'),
+      voce('Aggiornamento catastale'),
+      voce('Attestato di certificazione energetica (APE)')],
+    articoli: articoliPreventivo({
+      esclusioni: `Resta escluso tutto quello non espressamente indicato sopra. In particolare si vuole specificare che la direzione lavori consiste nella verifica della conformità alla regola dell'arte e alle leggi vigenti, nonché al progetto consegnato, delle lavorazioni eseguite e non si identifica con la direzione tecnica di cantiere (ossia il coordinamento temporale e operativo delle ditte operanti sul cantiere).`,
+      pagamento: `- Acconto alla firma relativo al 50% delle somme indicate ai precedenti punti 1A, 1B, 1C, 1D;
+- Alla consegna della documentazione al cliente ed agli enti competenti, la somma pari al 100% delle prestazioni indicate ai precedenti punti 1A, 1B, 1C, 1D (detratto quanto in precedenza già versato);
+- Alla consegna della documentazione finale agli enti competenti, il saldo delle prestazioni di cui ai punti 1E, 1F, 1G, 1H, 1I.` + ALTRI_SERVIZI,
+      termini: `Fase 0. Accesso agli atti (inizio procedura entro 7 giorni dalla firma del contratto: la tempistica finale risulta dipendente dall'ente);
+Fase 1. Rilievo (20 giorni lavorativi dal termine della fase 0);
+Fase 2. Verifica di conformità urbanistica (10 giorni lavorativi dalla conclusione della prestazione indicata al punto 1);
+Fase 3. Progettazione architettonica (20 giorni lavorativi dalla conclusione della prestazione indicata al punto 2);
+Fase 4. Direzione lavori (tempistica dipendente dal cantiere);
+Fase 5. Agibilità (10 giorni dal termine del cantiere e dalla comunicazione di fine lavori);
+Fase 6. Aggiornamento catastale (20 giorni lavorativi dalla conclusione della prestazione indicata al punto 5).` }),
+    note: 'BOLLI, DIRITTI DI SEGRETERIA, SPESE CATASTALI, SPESE PER ACCESSO AGLI ATTI, ECC. SONO A CARICO DEL CLIENTE.' },
+
+  { chiave: 'perizie', nome: 'Perizie', titolo: 'PREVENTIVO TIPO PERIZIE', oggetto: OGGETTO_IMMOBILE,
+    voci: [
+      voce('Sopralluogo e rilievo del danno'),
+      voce('Redazione perizia con individuazione della/e problematica/che e individuazione delle possibili cause')],
+    articoli: articoliPreventivo({
+      esclusioni: `Resta escluso tutto quello non espressamente indicato sopra ed in particolare l'eventuale progetto degli interventi atti a risolvere la problematica in essere.`,
+      pagamento: `- Acconto alla firma pari al 50% delle prestazioni di cui ai punti 1A, 1B;
+- Alla consegna della documentazione al cliente ed agli enti competenti, un importo pari al 100% (detratto quanto già pagato) delle prestazioni 1A, 1B.`,
+      termini: `1. Sopralluogo e rilievo del danno (5 giorni lavorativi dalla firma del contratto)
+2. Redazione della perizia (15 giorni lavorativi dalla conclusione della prestazione indicata al punto 1)` }),
+    note: '' },
+
+  { chiave: 'antincendio', nome: 'Antincendio', titolo: 'PREVENTIVO TIPO ANTINCENDIO', oggetto: OGGETTO_IMMOBILE,
+    voci: [
+      voce('Segnalazione Certificata di Inizio Attività ai fini della sicurezza antincendio (SCIA) completa di relazione tecnica ed elaborati grafici'),
+      { descrizione: 'Allegati obbligatori alla SCIA - Certificazioni di resistenza al fuoco delle strutture (n. 3 per solai, travi ribassate, pilastri)', importo: 1, quantita: 3 },
+      voce('Allegati obbligatori alla SCIA - Certificazioni di resistenza al fuoco delle compartimentazioni (parete divisoria tra autorimesse)'),
+      voce('Allegati obbligatori alla SCIA - Certificazioni di resistenza al fuoco di accessori per compartimentazione (es. collarini impianti di scarico e/o sacchetti antincendio)')],
+    articoli: articoliPreventivo({
+      esclusioni: `Resta escluso tutto quello non espressamente indicato sopra. In particolare qualora vi fossero altri elementi da certificare all'interno dei locali chiusi, questi verranno valutati a parte. Risulta obbligatorio disporre del progetto dell'impianto elettrico redatto da professionista abilitato per le attività soggette al controllo dei VV.F. (DM 37/2008 art. 5 comma 2 lettera d).`,
+      pagamento: `- Acconto alla firma relativo al 30% delle somme indicate ai precedenti punti 1A, 1B, 1C, 1D;
+- Alla consegna della documentazione al cliente ed agli enti competenti, la somma pari al 100% delle prestazioni indicate ai precedenti punti 1A, 1B, 1C, 1D (detratto quanto in precedenza già versato).` + ALTRI_SERVIZI,
+      termini: `Fase 0. Acquisizione documentazione esistente e/o accesso agli atti (inizio procedura entro 5 giorni dalla firma del contratto: la tempistica finale risulta dipendente dall'ente);
+Fase 1. Rilievo delle strutture (5 giorni lavorativi dal termine della fase 0);
+Fase 2. Verifica delle strutture ai fini antincendio (10 giorni lavorativi dal termine della fase 1).` }),
+    note: 'BOLLI, DIRITTI DI SEGRETERIA, SPESE PER ACCESSO AGLI ATTI, ECC. SONO A CARICO DEL CLIENTE.' },
+
+  { chiave: 'sanatoria', nome: 'Sanatoria', titolo: 'PREVENTIVO TIPO SANATORIA',
+    oggetto: 'Art. 1 OGGETTO DEL SERVIZIO DA REALIZZARE SU IMMOBILE SITO IN {{immobile}}',
+    voci: [
+      voce('Rilievo geometrico confermativo, accesso agli atti al Genio civile e accesso agli atti al comune'),
+      voce('Pratica edilizia in sanatoria per difformità interne (compreso soppalco)'),
+      voce('Verifica di conformità strutturale del soppalco abusivo e presentazione pratica (qualora conforme senza opere di adeguamento) al Genio civile regionale'),
+      voce('Aggiornamento catastale')],
+    articoli: articoliPreventivo({
+      esclusioni: `Resta escluso tutto quello non espressamente indicato sopra ed in particolare: 1. l'eventuale progetto degli interventi di rinforzo per l'adeguamento delle opere strutturali abusive (soppalco); 2. direzione lavori degli interventi di rinforzo e conformità finale; 3. collaudo delle opere strutturali abusive; 4. relazione geologica (somma variabile tra 1.000 e 2.000 €). I punti 1-2-3 saranno quantificati a seguito della piena cognizione delle opere da porre in essere dopo la verifica di conformità oggetto della presente prestazione.`,
+      pagamento: `- Acconto alla firma pari al 50% delle prestazioni di cui ai punti 1A, 1B, 1C;
+- Alla consegna della documentazione al cliente ed agli enti competenti, un importo pari al 100% (detratto quanto già pagato) delle prestazioni 1A, 1B, 1C;
+- Alla consegna della documentazione finale, il saldo della prestazione di cui al punto 1D.` + ALTRI_SERVIZI,
+      termini: `1. Rilievo (15 giorni lavorativi dalla firma del contratto)
+2. Pratica edilizia in sanatoria (30 giorni lavorativi dalla conclusione della prestazione indicata al punto 1)
+3. Pratica di violazione alle norme sismiche (30 giorni lavorativi dalla conclusione della prestazione indicata al punto 2)
+4. Aggiornamento catastale (20 giorni lavorativi dalla conclusione della prestazione indicata al punto 3)` }),
+    note: 'BOLLI, DIRITTI DI SEGRETERIA, SPESE PER COPIE PER ACCESSO AGLI ATTI, SPESE PER INDAGINI O ALTRO NON ESPRESSAMENTE SOPRA INDICATO SONO ESCLUSI E A CARICO DEL CLIENTE.' }
+];
+
+/* I modelli in uso: quelli scritti qui, sostituiti dalle versioni che lo
+   studio ha modificato, piu' quelli che lo studio ha creato da se'. */
+function modelliPreventivo() {
+  const db = S.modelliPrev || [];
+  const base = MODELLI_BASE.map(m => {
+    const mod = db.find(x => x.chiave === m.chiave);
+    return mod ? Object.assign({}, m, mod, { base: true, modificato: true })
+               : Object.assign({ base: true, modificato: false }, m);
+  });
+  const propri = db.filter(x => !MODELLI_BASE.some(m => m.chiave === x.chiave))
+    .map(x => Object.assign({ base: false, modificato: true }, x));
+  return base.concat(propri).filter(m => m.attivo !== false)
+    .sort((a, b) => (a.ordine || 0) - (b.ordine || 0));
+}
+const modelloDi = k => modelliPreventivo().find(m => m.chiave === k) || null;
+const copia = x => JSON.parse(JSON.stringify(x));
+
+/* I segnaposto dei testi, riempiti al momento di scrivere il PDF */
+function compilaTesto(t, pv) {
+  const contatti = [pv.cliente_pec ? 'PEC/mail: ' + pv.cliente_pec : 'PEC/mail: __________________________________',
+                    pv.cliente_tel ? 'tel. ' + pv.cliente_tel : 'tel. ____________________'].join(' / ')
+    + (pv.cliente_pec && pv.cliente_tel ? '' : '\nSI PREGA DI COMPILARE I DATI SOPRA.');
+  const sost = {
+    immobile: (pv.immobile || '').trim() || '________________________________',
+    polizza: POLIZZA_STUDIO,
+    pec_studio: STUDIO.pecPropria || '', email_studio: STUDIO.emailInfo || STUDIO.email || '',
+    tel_studio: STUDIO.telefono || '', contatti_committente: contatti
+  };
+  return String(t || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => k in sost ? sost[k] : m);
+}
+
+const numeroPreventivo = pv => pv.progressivo + '/' + String(pv.anno).slice(-2);
+function prossimoPreventivo(anno) {
+  const usati = (S.preventivi || []).filter(x => Number(x.anno) === Number(anno)).map(x => Number(x.progressivo) || 0);
+  return (usati.length ? Math.max.apply(null, usati) : 0) + 1;
+}
+
+/* Dal preventivo al documento da stampare */
+function docPreventivo(pv) {
+  return {
+    tipo: 'Preventivo', numero: numeroPreventivo(pv), data: pv.data || todayISO(), titolo: pv.titolo || '',
+    cliente: { nome: pv.cliente_nome, indirizzo: pv.cliente_indirizzo, cap: pv.cliente_cap,
+               comune: pv.cliente_comune, prov: pv.cliente_prov, cf: pv.cliente_cf,
+               piva: pv.cliente_piva, pec: pv.cliente_pec },
+    oggetto: compilaTesto(pv.oggetto, pv), lettere: true,
+    voci: (pv.voci || []).filter(v => (v.descrizione || '').trim() || Number(v.importo)),
+    articoli: (pv.articoli || []).map(a => ({ titolo: a.titolo, testo: compilaTesto(a.testo, pv) })),
+    note: compilaTesto(pv.note, pv), iban: (STUDIO.pagamento || {}).iban, scadenza: pv.scadenza || null
+  };
+}
+const totalePreventivo = pv => contiDocumento(pv.voci || []).totale;
+
+const ST_PREV = {
+  bozza:     ['Bozza',     'bgr'],
+  inviato:   ['Inviato',   'bb'],
+  accettato: ['Accettato', 'bg'],
+  rifiutato: ['Rifiutato', 'br']
+};
+
+/* ---------------------------------------------------------------------------
+   PAGINA: PREVENTIVI
+   --------------------------------------------------------------------------- */
+function rPreventivi() {
+  if (!vedeTutto()) {
+    el('page').innerHTML = '<div class="card"><div class="empty"><i>🔒</i>'
+      + '<p>I preventivi li prepara chi tiene l’amministrazione dello studio.</p></div></div>';
+    return;
+  }
+  const filtro = S.prevStato || '';
+  el('crumb').textContent = 'Si parte da un modello, si mette il committente, e il PDF esce con i conti giusti.';
+  el('top-act').innerHTML = '<select class="sel" id="pv-filtro"><option value="">Tutti gli stati</option>'
+    + Object.keys(ST_PREV).map(k => '<option value="' + k + '"' + (k === filtro ? ' selected' : '') + '>'
+        + ST_PREV[k][0] + '</option>').join('') + '</select> '
+    + '<button class="btn btn-sm btn-p" id="pv-nuovo">&#43; Preventivo</button>';
+  el('pv-filtro').onchange = e => { S.prevStato = e.target.value; render(); };
+  el('pv-nuovo').onclick = () => nuovoPreventivo(modelliPreventivo()[0].chiave);
+
+  const anno = today().getFullYear();
+  const tutti = S.preventivi || [];
+  const dellAnno = tutti.filter(x => Number(x.anno) === anno);
+  const somma = arr => r2(arr.reduce((a, x) => a + totalePreventivo(x), 0));
+  const inAttesa = dellAnno.filter(x => x.stato === 'inviato');
+  const accettati = dellAnno.filter(x => x.stato === 'accettato');
+  const decisi = dellAnno.filter(x => ['accettato', 'rifiutato'].indexOf(x.stato) >= 0).length;
+  const kpis = '<div class="kgrid">'
+    + kpi('Preventivi ' + anno, String(dellAnno.length), '', 100, 'var(--navy)')
+    + kpi('In attesa di risposta', feuro(somma(inAttesa)), inAttesa.length + ' inviati', 0, 'var(--ora)')
+    + kpi('Accettati', feuro(somma(accettati)), accettati.length + (decisi ? ' su ' + decisi + ' decisi' : ''),
+          decisi ? accettati.length / decisi * 100 : 0, 'var(--grn)')
+    + '</div>';
+
+  const modelli = '<div class="card mb16"><div class="card-h"><span class="card-t">Modelli</span>'
+    + '<span style="font-size:12px;color:var(--mut)">si parte da uno di questi</span></div>'
+    + '<div class="row" style="flex-wrap:wrap;gap:8px">'
+    + modelliPreventivo().map(m => '<span class="row" style="gap:0">'
+        + '<button class="btn btn-sm" data-pvmodello="' + esc(m.chiave) + '" title="Nuovo preventivo da questo modello">'
+          + '&#43; ' + esc(m.nome) + (m.modificato ? ' <span style="color:var(--blue)">•</span>' : '') + '</button>'
+        + '<button class="btn btn-sm" data-pvmodmod="' + esc(m.chiave) + '" title="Modifica il modello" '
+          + 'style="margin-left:-1px">&#9998;</button></span>').join('')
+    + '</div><div class="hint" style="margin-top:8px">Con la matita si cambia il modello per i preventivi '
+    + 'che verranno: quelli già fatti tengono il loro testo. Il pallino indica un modello già personalizzato.</div></div>';
+
+  const lista = tutti.filter(x => !filtro || x.stato === filtro)
+    .sort((a, b) => (b.anno - a.anno) || (b.progressivo - a.progressivo));
+  const righe = lista.map(x => '<tr data-prev="' + x.id + '" style="cursor:pointer">'
+      + '<td style="white-space:nowrap"><b>' + esc(numeroPreventivo(x)) + '</b>'
+        + '<div style="font-size:11px;color:var(--mut)">' + fdate(x.data) + '</div></td>'
+      + '<td><b>' + esc(x.cliente_nome || '—') + '</b><div style="font-size:11px;color:var(--mut)">'
+        + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + (x.immobile ? ' · ' + esc(x.immobile) : '') + '</div></td>'
+      + '<td>' + bdg(x.stato, ST_PREV) + '</td>'
+      + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(totalePreventivo(x)) + '</b></td>'
+      + '<td class="ac"><button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196;</button></td>'
+      + '</tr>').join('');
+
+  el('page').innerHTML = kpis + modelli
+    + '<div class="card"><div class="card-h"><span class="card-t">Preventivi</span></div>'
+    + (lista.length
+        ? '<div class="tw"><table class="tsm"><thead><tr><th>N.</th><th>Committente</th><th>Stato</th>'
+          + '<th style="text-align:right">Totale</th><th></th></tr></thead><tbody>' + righe + '</tbody></table></div>'
+        : '<div class="empty"><i>📝</i><p>' + (filtro ? 'Nessun preventivo in questo stato.'
+            : 'Nessun preventivo ancora. Scegli un modello qui sopra.') + '</p></div>')
+    + '</div>';
+}
+
+/* ---------------------------------------------------------------------------
+   L'EDITOR: lo stesso per un preventivo e per un modello
+   PV.modo = 'prev' | 'modello'. Si scrive dentro PV, e solo il riepilogo si
+   ridisegna mentre si digita: ridisegnare tutto farebbe perdere il cursore.
+   --------------------------------------------------------------------------- */
+let PV = null;
+
+function nuovoPreventivo(chiave) {
+  const m = modelloDi(chiave) || modelliPreventivo()[0];
+  const anno = today().getFullYear();
+  PV = { modo: 'prev', id: null, anno, progressivo: prossimoPreventivo(anno), data: todayISO(),
+         modello: m.chiave, titolo: m.titolo || '', stato: 'bozza', cliente_id: null,
+         cliente_nome: '', cliente_indirizzo: '', cliente_cap: '', cliente_comune: '', cliente_prov: '',
+         cliente_cf: '', cliente_piva: '', cliente_pec: '', cliente_tel: '',
+         immobile: '', oggetto: m.oggetto || '', voci: copia(m.voci || []), articoli: copia(m.articoli || []),
+         note: m.note || '', scadenza: null };
+  apriEditorPrev();
+}
+function openPreventivo(id) {
+  const x = byId(S.preventivi, id); if (!x) return;
+  PV = Object.assign({ modo: 'prev' }, copia(x));
+  PV.voci = PV.voci || []; PV.articoli = PV.articoli || [];
+  apriEditorPrev();
+}
+function apriModello(chiave) {
+  const m = modelloDi(chiave); if (!m) return;
+  PV = { modo: 'modello', chiave: m.chiave, base: m.base, modificato: m.modificato, nome: m.nome,
+         titolo: m.titolo || '', oggetto: m.oggetto || '', voci: copia(m.voci || []),
+         articoli: copia(m.articoli || []), note: m.note || '', ordine: m.ordine || 0 };
+  apriEditorPrev();
+}
+
+function apriEditorPrev() {
+  const mod = PV.modo === 'modello';
+  el('mpv-t').textContent = mod ? 'Modello: ' + PV.nome
+    : (PV.id ? 'Preventivo ' + numeroPreventivo(PV) : 'Nuovo preventivo');
+  el('pv-del').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
+  el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
+  el('pv-dup').style.display = mod ? 'inline-flex' : 'none';
+  el('pv-pdf').style.display = mod ? 'none' : 'inline-flex';
+  disegnaPrev();
+  openM('m-prev');
+}
+
+function disegnaPrev() {
+  const d = PV, mod = d.modo === 'modello';
+  const campo = (l, k, tipo, ph, extra) => '<div class="fg"><label class="fl">' + l + '</label>'
+    + '<input class="fc" type="' + (tipo || 'text') + '" data-pv="' + k + '" value="'
+    + esc(d[k] === null || d[k] === undefined ? '' : d[k]) + '" placeholder="' + esc(ph || '') + '"' + (extra || '') + '></div>';
+  const area = (l, k, righe, hint) => '<div class="fg"><label class="fl">' + l + '</label>'
+    + '<textarea class="fc" data-pv="' + k + '" rows="' + (righe || 2) + '">' + esc(d[k] || '') + '</textarea>'
+    + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+
+  let h = '';
+  if (mod) {
+    h += '<div class="ibox mb16" style="font-size:12px">Le modifiche valgono per i <b>preventivi che verranno</b>: '
+      + 'quelli già fatti tengono il loro testo. Nei testi puoi usare {{immobile}}, {{polizza}}, {{pec_studio}}, '
+      + '{{email_studio}}, {{tel_studio}}, {{contatti_committente}}.</div>'
+      + '<div class="fg2">' + campo('Nome del modello', 'nome') + campo('Titolo sul documento', 'titolo') + '</div>';
+  } else {
+    h += '<div class="fg3">'
+        + (d.id ? campo('Tipo di preventivo', '_modello', 'text', '', ' disabled')
+            .replace('value=""', 'value="' + esc((modelloDi(d.modello) || {}).nome || d.titolo || '') + '"')
+          : '<div class="fg"><label class="fl">Modello di partenza</label><select class="fc" data-pv="modello">'
+            + modelliPreventivo().map(m => '<option value="' + esc(m.chiave) + '"' + (m.chiave === d.modello ? ' selected' : '')
+                + '>' + esc(m.nome) + '</option>').join('') + '</select></div>')
+        + '<div class="fg"><label class="fl">Numero</label><div class="row" style="gap:6px;align-items:center">'
+          + '<input class="fc" type="number" min="1" data-pv="progressivo" value="' + esc(d.progressivo) + '" style="width:90px">'
+          + '<span>/ ' + String(d.anno).slice(-2) + '</span></div></div>'
+        + campo('Data', 'data', 'date')
+      + '</div>'
+      + '<div class="fg3">'
+        + '<div class="fg"><label class="fl">Stato</label><select class="fc" data-pv="stato">'
+          + Object.keys(ST_PREV).map(k => '<option value="' + k + '"' + (k === d.stato ? ' selected' : '') + '>'
+              + ST_PREV[k][0] + '</option>').join('') + '</select></div>'
+        + campo('Titolo sul documento', 'titolo')
+        + campo('Data di pagamento', 'scadenza', 'date')
+      + '</div>'
+      + sez('Committente')
+      + '<div class="fg"><label class="fl">Dall’anagrafica</label><select class="fc" data-pv="cliente_id">'
+        + '<option value="">— scritto a mano —</option>'
+        + S.clienti.filter(c => c.attivo !== false).map(c => '<option value="' + c.id + '"'
+            + (c.id === d.cliente_id ? ' selected' : '') + '>' + esc(c.denominazione) + '</option>').join('')
+      + '</select></div>'
+      + '<div class="fg2">' + campo('Nome o ragione sociale *', 'cliente_nome') + campo('Indirizzo', 'cliente_indirizzo') + '</div>'
+      + '<div class="fg3">' + campo('CAP', 'cliente_cap') + campo('Comune', 'cliente_comune') + campo('Provincia', 'cliente_prov') + '</div>'
+      + '<div class="fg2">' + campo('Codice fiscale', 'cliente_cf') + campo('Partita IVA', 'cliente_piva') + '</div>'
+      + '<div class="fg2">' + campo('PEC o mail', 'cliente_pec') + campo('Telefono', 'cliente_tel') + '</div>'
+      + sez('Immobile e oggetto')
+      + campo('Immobile (va al posto di {{immobile}})', 'immobile', 'text', 'VIA ROMA 12 A RECANATI');
+  }
+  h += area('Intestazione dell’art. 1', 'oggetto', 2)
+    + sez('Voci', 'si numerano da sole: A, B, C…')
+    + '<div id="pv-voci">' + d.voci.map((v, i) => '<div class="card" style="padding:10px;margin-bottom:8px">'
+        + '<div class="spread" style="gap:8px;align-items:flex-start">'
+          + '<b style="padding-top:8px">' + lettera(i) + '.</b>'
+          + '<textarea class="fc" rows="2" data-pvv="' + i + '" data-k="descrizione" style="flex:1">' + esc(v.descrizione || '') + '</textarea>'
+          + '<button class="btn btn-xs" data-pvvdel="' + i + '" title="Togli la voce">&#10005;</button></div>'
+        + '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center">'
+          + '<label class="fl" style="margin:0">Importo €</label><input class="fc" type="number" step="0.01" data-pvv="' + i
+            + '" data-k="importo" value="' + esc(v.importo) + '" style="width:120px">'
+          + '<label class="fl" style="margin:0">Q.tà</label><input class="fc" type="number" step="1" min="0" data-pvv="' + i
+            + '" data-k="quantita" value="' + esc(v.quantita === undefined ? 1 : v.quantita) + '" style="width:80px">'
+          + '<span id="pv-vt-' + i + '" style="font-size:12px;color:var(--mut)"></span></div></div>').join('')
+    + '</div><button class="btn btn-sm" data-pvvadd="1">&#43; Voce</button>'
+    + sez('Articoli del contratto')
+    + '<div id="pv-art">' + d.articoli.map((a, i) => '<div class="card" style="padding:10px;margin-bottom:8px">'
+        + '<div class="spread" style="gap:8px"><input class="fc" data-pva="' + i + '" data-k="titolo" value="'
+          + esc(a.titolo || '') + '" placeholder="ART. … (vuoto per un paragrafo senza titolo)" style="font-weight:600">'
+          + '<span class="row" style="gap:4px">'
+          + (i ? '<button class="btn btn-xs" data-pvasu="' + i + '" title="Sposta su">&#8593;</button>' : '')
+          + '<button class="btn btn-xs" data-pvadel="' + i + '" title="Togli l’articolo">&#10005;</button></span></div>'
+        + '<textarea class="fc" rows="4" data-pva="' + i + '" data-k="testo" style="margin-top:6px">' + esc(a.testo || '') + '</textarea>'
+        + '</div>').join('')
+    + '</div><button class="btn btn-sm" data-pvaadd="1">&#43; Articolo</button>'
+    + sez('Note in fondo')
+    + area('Note', 'note', 2, 'Escono in fondo, sopra il riepilogo degli importi.');
+
+  el('pv-body').innerHTML = h;
+  aggiornaPrev();
+}
+
+/* Il riepilogo: le stesse cifre che usciranno nel PDF, riga per riga */
+function aggiornaPrev() {
+  const c = contiDocumento(PV.voci);
+  c.righe.forEach((r, i) => { const s = el('pv-vt-' + i);
+    if (s) s.textContent = '= ' + feuro(r.imponibile) + ' + cassa ' + feuro(r.cassa) + ' + IVA ' + feuro(r.iva)
+      + ' → ' + feuro(r.totale); });
+  const riga = (l, v, forte) => '<div class="spread" style="font-size:13px;padding:3px 0'
+    + (forte ? ';border-top:1px solid var(--bord);margin-top:5px;padding-top:7px;font-weight:700' : '') + '">'
+    + '<span>' + l + '</span><span>' + feuro(v) + '</span></div>';
+  el('pv-tot').innerHTML = '<div class="card" style="margin-top:16px">'
+    + '<div class="card-h"><span class="card-t">Riepilogo</span></div>'
+    + riga('Totale prestazioni', c.imponibile)
+    + riga('Cassa ' + (STUDIO.tipoCassa || '') + ' ' + c.opz.aliquotaCassa + '%', c.cassa)
+    + riga('Imponibile IVA', c.base)
+    + riga('IVA ' + c.opz.aliquotaIva + '%', c.iva)
+    + riga('Totale dovuto', c.netto, true)
+    + '<div class="hint" style="margin-top:8px">Ogni voce porta la sua quota di cassa e di IVA: '
+    + 'la somma dei totali di riga è esattamente il totale dovuto.</div></div>';
+}
+
+function applicaModello(chiave) {
+  const m = modelloDi(chiave); if (!m) return;
+  Object.assign(PV, { modello: m.chiave, titolo: m.titolo || '', oggetto: m.oggetto || '',
+    voci: copia(m.voci || []), articoli: copia(m.articoli || []), note: m.note || '' });
+  disegnaPrev();
+}
+function applicaCliente(id) {
+  const c = id ? byId(S.clienti, id) : null;
+  PV.cliente_id = c ? c.id : null;
+  if (c) Object.assign(PV, {
+    cliente_nome: c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' '),
+    cliente_indirizzo: c.indirizzo || '', cliente_cap: c.cap || '', cliente_comune: c.comune || '',
+    cliente_prov: c.provincia || '', cliente_cf: c.cf || '', cliente_piva: c.piva || '',
+    cliente_pec: c.pec || c.referente_email || '', cliente_tel: c.referente_tel || '' });
+  disegnaPrev();
+}
+
+function pvInput(e) {
+  const t = e.target;
+  if (t.dataset.pvv !== undefined) {
+    const v = PV.voci[Number(t.dataset.pvv)]; if (!v) return;
+    v[t.dataset.k] = t.dataset.k === 'descrizione' ? t.value : (t.value === '' ? '' : Number(t.value));
+    return aggiornaPrev();
+  }
+  if (t.dataset.pva !== undefined) {
+    const a = PV.articoli[Number(t.dataset.pva)]; if (a) a[t.dataset.k] = t.value;
+    return;
+  }
+  const k = t.dataset.pv; if (!k) return;
+  if (k === 'modello') { if (e.type === 'change') applicaModello(t.value); return; }
+  if (k === 'cliente_id') { if (e.type === 'change') applicaCliente(t.value); return; }
+  PV[k] = k === 'progressivo' ? (parseInt(t.value, 10) || '') : t.value;
+}
+function pvClick(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  const ds = b.dataset;
+  if (ds.pvvadd)  { PV.voci.push({ descrizione: '', importo: 0, quantita: 1 }); return disegnaPrev(); }
+  if (ds.pvaadd)  { PV.articoli.push({ titolo: '', testo: '' }); return disegnaPrev(); }
+  if (ds.pvvdel !== undefined) { PV.voci.splice(Number(ds.pvvdel), 1); return disegnaPrev(); }
+  if (ds.pvadel !== undefined) { PV.articoli.splice(Number(ds.pvadel), 1); return disegnaPrev(); }
+  if (ds.pvasu !== undefined) { const i = Number(ds.pvasu);
+    const a = PV.articoli; [a[i - 1], a[i]] = [a[i], a[i - 1]]; return disegnaPrev(); }
+}
+
+/* Voci e articoli come vanno salvati: senza le righe lasciate vuote */
+const vociPulite = vv => (vv || []).filter(v => String(v.descrizione || '').trim() || Number(v.importo))
+  .map(v => ({ descrizione: String(v.descrizione || '').trim(), importo: r2(Number(v.importo) || 0),
+               quantita: v.quantita === '' || v.quantita === undefined ? 1 : Number(v.quantita) }));
+const articoliPuliti = aa => (aa || []).filter(a => String(a.titolo || '').trim() || String(a.testo || '').trim())
+  .map(a => ({ titolo: String(a.titolo || '').trim(), testo: String(a.testo || '') }));
+
+async function salvaPreventivo(silenzioso) {
+  const d = PV;
+  if (!String(d.cliente_nome || '').trim()) { toast('Scrivi a chi va il preventivo.', 'error'); return null; }
+  const prog = parseInt(d.progressivo, 10);
+  if (!(prog > 0)) { toast('Il numero del preventivo deve essere un numero intero.', 'error'); return null; }
+  if (!vociPulite(d.voci).length) { toast('Il preventivo non ha nessuna voce.', 'error'); return null; }
+  const anno = Number(String(d.data || todayISO()).slice(0, 4)) || d.anno;
+  const dop = (S.preventivi || []).find(x => x.id !== d.id && Number(x.anno) === anno && Number(x.progressivo) === prog);
+  if (dop) { toast('Il numero ' + prog + '/' + String(anno).slice(-2) + ' è già usato da un altro preventivo.', 'error'); return null; }
+  const pay = { anno, progressivo: prog, data: d.data || todayISO(), modello: d.modello || null,
+    titolo: d.titolo || null, stato: d.stato || 'bozza', cliente_id: d.cliente_id || null,
+    cliente_nome: d.cliente_nome.trim(), cliente_indirizzo: d.cliente_indirizzo || null,
+    cliente_cap: d.cliente_cap || null, cliente_comune: d.cliente_comune || null,
+    cliente_prov: d.cliente_prov || null, cliente_cf: d.cliente_cf || null, cliente_piva: d.cliente_piva || null,
+    cliente_pec: d.cliente_pec || null, cliente_tel: d.cliente_tel || null,
+    immobile: d.immobile || null, oggetto: d.oggetto || null, voci: vociPulite(d.voci),
+    articoli: articoliPuliti(d.articoli), note: d.note || null, scadenza: d.scadenza || null };
+  setLoading('pv-save', true);
+  const r = d.id
+    ? await SB.from('preventivi').update(pay).eq('id', d.id).select().single()
+    : await SB.from('preventivi').insert(Object.assign({ created_by: S.me.id }, pay)).select().single();
+  setLoading('pv-save', false);
+  if (r.error) { sbErr(r.error, 'preventivo'); return null; }
+  PV.id = d.id || (r.data && r.data.id); PV.anno = anno;
+  await loadAll(true); render();
+  if (!silenzioso) { closeM('m-prev'); toast('Preventivo ' + numeroPreventivo(pay) + ' salvato', 'success'); }
+  return byId(S.preventivi, PV.id) || r.data || Object.assign({ id: PV.id }, pay);
+}
+
+async function pdfDaEditor() {
+  const x = await salvaPreventivo(true); if (!x) return;
+  if (await scaricaPdf(docPreventivo(x), nomeFilePdf('Preventivo', numeroPreventivo(x)))) {
+    closeM('m-prev'); toast('Preventivo ' + numeroPreventivo(x) + ' scaricato', 'success');
+  }
+}
+async function pdfPreventivo(id) {
+  const x = byId(S.preventivi, id); if (!x) return;
+  if (await scaricaPdf(docPreventivo(x), nomeFilePdf('Preventivo', numeroPreventivo(x))))
+    toast('Preventivo ' + numeroPreventivo(x) + ' scaricato', 'success');
+}
+async function eliminaPreventivo() {
+  if (!PV || !PV.id) return;
+  if (!confirm('Eliminare il preventivo ' + numeroPreventivo(PV) + '?')) return;
+  const { error } = await SB.from('preventivi').delete().eq('id', PV.id);
+  if (error) return sbErr(error, 'preventivo');
+  closeM('m-prev'); await loadAll(true); render(); toast('Preventivo eliminato');
+}
+
+/* I modelli: salvati come riga della tabella, che vince su quello scritto qui */
+async function salvaModello(nuovo) {
+  const d = PV;
+  if (!String(d.nome || '').trim()) return toast('Dai un nome al modello.', 'error');
+  const chiave = nuovo ? 'mod_' + Date.now().toString(36) : d.chiave;
+  const pay = { chiave, nome: nuovo ? d.nome.trim() + ' (copia)' : d.nome.trim(), titolo: d.titolo || null,
+    oggetto: d.oggetto || null, voci: vociPulite(d.voci), articoli: articoliPuliti(d.articoli),
+    note: d.note || null, ordine: d.ordine || 0, updated_by: S.me.id };
+  const esiste = (S.modelliPrev || []).find(x => x.chiave === chiave);
+  setLoading('pv-save', true);
+  const { error } = esiste
+    ? await SB.from('preventivo_modelli').update(pay).eq('id', esiste.id)
+    : await SB.from('preventivo_modelli').insert(pay);
+  setLoading('pv-save', false);
+  if (error) return sbErr(error, 'modello di preventivo');
+  closeM('m-prev'); await loadAll(true); render();
+  toast(nuovo ? 'Creato il modello «' + pay.nome + '»' : 'Modello «' + pay.nome + '» aggiornato', 'success');
+}
+async function ripristinaModello() {
+  const esiste = (S.modelliPrev || []).find(x => x.chiave === PV.chiave); if (!esiste) return;
+  if (!confirm('Tornare al testo originale del modello «' + PV.nome + '»? Le modifiche fatte al modello si perdono '
+      + '(i preventivi già fatti non cambiano).')) return;
+  const { error } = await SB.from('preventivo_modelli').delete().eq('id', esiste.id);
+  if (error) return sbErr(error, 'modello di preventivo');
+  closeM('m-prev'); await loadAll(true); render(); toast('Modello ripristinato');
+}
 
 /* ===========================================================================
    CONTABILITÀ DEI LAVORI: SAL E VARIANTI
@@ -5562,7 +6416,8 @@ function fatturePanel(pid) {
             + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut)">' + esc(f.richiesta_note) + '</div>' : '')
           : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
+      + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
+            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '') + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
         + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
@@ -5572,6 +6427,7 @@ function fatturePanel(pid) {
       + '<td class="ac" style="white-space:nowrap">'
         + (canW() && fattAperta(f)
             ? '<button class="btn btn-xs" data-chiedi="' + f.id + '" title="Dì all’amministrazione che si può fatturare">&#128227;</button> ' : '')
+        + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF da mandare prima della fattura">&#128196;</button> ' : '')
         + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '')
         + (canW() && p.referente_email && ['emessa','incassata'].indexOf(f.stato) >= 0
             ? ' <button class="btn btn-xs" data-mailfatt="' + f.id + '" title="Invia copia al referente amministrativo">&#9993;&#65039;</button>' : '')
@@ -5682,7 +6538,8 @@ function rFatturare() {
         + '<div style="color:var(--mut)">' + esc((byId(S.projects, f.project_id) || {}).client || '') + '</div></td>'
       + '<td>' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT)
+      + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
+            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '')
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
             + '📣 ' + esc(un(f.richiesta_da)) + ' · ' + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
@@ -5690,7 +6547,8 @@ function rFatturare() {
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
-      + '<td class="ac">' + (canW() ? '<button class="btn btn-xs" data-fxml="' + f.id + '">&#128229;</button>' : '') + '</td></tr>';
+      + '<td class="ac" style="white-space:nowrap">' + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
+        + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
   };
   const tabella = (arr, titolo, colore) => !arr.length ? '' :
       '<div class="card mb16"><div class="card-h"><span class="card-t"' + (colore ? ' style="color:' + colore + '"' : '') + '>'
@@ -6358,8 +7216,57 @@ function openRevisione(id) {
   const f = byId(S.fatture, id); if (!f) return;
   REV = datiFattura(f);
   if (!REV.numero)  REV.numero = prossimoNumero();
+  if (!REV.proformaNumero) REV.proformaNumero = prossimaProforma();
+  if (!REV.proformaData)   REV.proformaData   = todayISO();
   disegnaRevisione();
   openM('m-rev');
+}
+
+/* Le proforma hanno una numerazione loro, per anno: non sono fatture e non
+   devono consumare un numero della sequenza fiscale. */
+function prossimaProforma() {
+  const anno = String(today().getFullYear());
+  const usati = S.fatture.map(f => f.proforma_numero || '')
+    .filter(n => n.indexOf(anno) === 0)
+    .map(n => parseInt(String(n).replace(/^\D*\d{4}\D*/, ''), 10))
+    .filter(n => !isNaN(n));
+  return anno + '/' + String((usati.length ? Math.max.apply(null, usati) : 0) + 1).padStart(3, '0');
+}
+
+/* LA PROFORMA
+   Lo stesso documento che diventera' la fattura - righe, oggetto in testa,
+   spese anticipate, cassa, IVA, IBAN - ma in PDF e senza valore fiscale. Si
+   manda al committente; quando paga, dallo stesso scaglione si genera l'XML.
+   Il sistema di fatturazione non cambia: la proforma ci si mette davanti. */
+function docProforma(d) {
+  const voci = (d.righe && d.righe.length)
+    ? d.righe.map(r => ({ descrizione: r.descrizione || d.descrizione, importo: r.importo, quantita: 1 }))
+    : [{ descrizione: d.oggetto || d.descrizione, importo: d.imponibile, quantita: 1 }];
+  const quando = d.proformaData || todayISO();
+  return {
+    tipo: 'Fattura proforma', numero: d.proformaNumero, data: quando,
+    cliente: { nome: d.cliente, indirizzo: d.clienteInd, cap: d.clienteCap, comune: d.clienteCom,
+               prov: d.clienteProv, cf: d.clienteCf, piva: d.clientePiva, pec: d.pec },
+    oggetto: premessaDa(d), voci, spese: speseNelFile(d),
+    opz: { aliquotaCassa: Number(d.aliquotaCassa) || 0, aliquotaIva: Number(d.aliquotaIva) || 0,
+           cassaSoggettaIva: !!d.cassaSoggettaIva, ritenuta: d.ritenuta, split: !!d.split },
+    note: d.causale, iban: d.iban,
+    scadenza: iso(addD(pd(quando), Number(d.giorni) || 30)),
+    avviso: 'Documento privo di valore fiscale ai sensi dell’art. 21 del DPR 633/72. '
+          + 'La fattura elettronica sarà emessa al ricevimento del pagamento.'
+  };
+}
+async function generaProforma() {
+  const d = REV; if (!d) return;
+  const ok = await scaricaPdf(docProforma(d), nomeFilePdf('Proforma', d.proformaNumero));
+  if (!ok) return;
+  const { error } = await SB.from('commessa_fatture').update({
+    proforma_numero: d.proformaNumero, proforma_data: d.proformaData || todayISO(),
+    proforma_at: new Date().toISOString() }).eq('id', d.fattId);
+  if (error) return sbErr(error, 'proforma');
+  closeM('m-rev'); await loadAll(true); render();
+  toast('Proforma ' + d.proformaNumero + ' scaricata: mandala al committente. '
+      + 'Quando paga, da qui generi la fattura XML.', 'success');
 }
 
 /* Propone il numero successivo a quello piu' alto gia' usato nell'anno */
@@ -6392,6 +7299,9 @@ function disegnaRevisione() {
             + '<input class="fc" value="' + feuro(d.imponibile) + '" disabled>'
             + '<div class="hint">somma dei ' + d.righe.length + ' servizi</div></div>'
           : t('Imponibile €', 'imponibile', '', 'number')) + '</div>'
+    + '<div class="fg2">' + t('N. proforma', 'proformaNumero', '2026/001', 'text',
+        'Solo per il PDF da mandare prima della fattura: ha una numerazione sua.')
+      + t('Data proforma', 'proformaData', '', 'date') + '</div>'
     /* Le righe esattamente come usciranno nel file, e sotto il testo che finira'
        nelle note del documento. Vederli qui e' l'ultimo momento utile per
        accorgersi che l'oggetto e' sbagliato o che manca un importo. */
@@ -6528,6 +7438,9 @@ function aggiornaTotali() {
       + e.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>'
     : '';
   el('rev-go').disabled = e.length > 0;
+  /* Alla proforma basta sapere a chi va e quanto chiede: i dati per lo SdI
+     servono alla fattura, non al PDF. */
+  el('rev-pdf').disabled = !String(d.cliente || '').trim() || !(c.imponibile > 0) || !String(d.proformaNumero || '').trim();
 
   const riga = (l, v, forte) => '<div class="spread" style="font-size:13px;padding:3px 0'
     + (forte ? ';border-top:1px solid var(--bord);margin-top:5px;padding-top:7px' : '') + '">'
@@ -10444,6 +11357,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Revisione della fattura */
   el('rev-go').onclick    = generaDaRevisione;
+  el('rev-pdf').onclick   = generaProforma;
+
+  /* Preventivi */
+  el('pv-body').addEventListener('input',  pvInput);
+  el('pv-body').addEventListener('change', pvInput);
+  el('pv-body').addEventListener('click',  pvClick);
+  el('pv-save').onclick = () => PV && PV.modo === 'modello' ? salvaModello(false) : salvaPreventivo(false);
+  el('pv-dup').onclick  = () => salvaModello(true);
+  el('pv-ripr').onclick = ripristinaModello;
+  el('pv-del').onclick  = eliminaPreventivo;
+  el('pv-pdf').onclick  = pdfDaEditor;
   el('rev-ant').onclick   = anteprimaXml;
   el('rev-reset').onclick = () => {
     const f = byId(S.fatture, REV && REV.fattId); if (!f) return;
@@ -10532,6 +11456,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return openChiedi(fa ? fa.project_id : S.projId, n.dataset.chiedi); }
     if ((n = f('data-nchiedi'))) { e.stopPropagation(); return openChiedi(S.projId, null); }
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
+    if ((n = f('data-fproforma'))) { e.stopPropagation(); return openRevisione(n.dataset.fproforma); }
+    if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
+    if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
+    if ((n = f('data-pvmodmod')))  { return apriModello(n.dataset.pvmodmod); }
+    if ((n = f('data-prev')))      { return openPreventivo(n.dataset.prev); }
     if ((n = f('data-mailfatt'))) { e.stopPropagation(); return mailFattura(n.dataset.mailfatt); }
     if ((n = f('data-mailtec'))) { e.stopPropagation(); return mailTecnico(S.projId); }
     if ((n = f('data-newcli')))  { e.stopPropagation(); return openCliente(null); }

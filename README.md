@@ -49,6 +49,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 28. [`sql/029_ore_zero_esterni.sql`](sql/029_ore_zero_esterni.sql) — **una parcella non ha ore: lo zero va ammesso, da eseguire**
 29. [`sql/030_isa.sql`](sql/030_isa.sql) — tipologia ISA e anno di competenza su ogni riga di fattura
 30. [`sql/031_costi_generali.sql`](sql/031_costi_generali.sql) — costi generali dello studio, fuori dalle commesse
+31. [`sql/032_proforma_preventivi.sql`](sql/032_proforma_preventivi.sql) — proforma PDF prima della fattura, e i preventivi
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -605,6 +606,85 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+## Preventivi
+
+Nel menu, subito sotto **Da fatturare**. Li vede e li prepara chi tiene
+l'amministrazione (amministratori e chi ha *vede tutte le commesse*): il blocco
+è nel database, migrazione 032.
+
+**Si parte da un modello.** Ci sono le cinque bozze che usavate in
+FatturaElettronica APP: *Strutture*, *Architettonico*, *Perizie*,
+*Antincendio*, *Sanatoria*. Con `＋ Strutture` si apre un preventivo già
+scritto: si sceglie il committente dall'anagrafica (o lo si scrive a mano),
+si mette l'immobile, si aggiustano voci, importi e quantità, e con **Salva e
+scarica PDF** esce il documento. Il numero (`36/26`) lo propone il gestionale,
+uno dopo l'ultimo dell'anno; due preventivi con lo stesso numero non si
+possono salvare. Ogni preventivo ha il suo stato: bozza, inviato, accettato,
+rifiutato, e in cima alla pagina si legge quanto è in attesa di risposta e
+quanto è stato accettato.
+
+**I modelli si modificano** con la matita accanto al nome: voci, articoli,
+note. Vale per i preventivi che verranno; quelli già fatti tengono il testo con
+cui sono stati scritti. *Ripristina l'originale* torna al testo di partenza,
+*Duplica come nuovo modello* ne crea un sesto. Nei testi si possono usare
+`{{immobile}}`, `{{polizza}}`, `{{pec_studio}}`, `{{email_studio}}`,
+`{{tel_studio}}`, `{{contatti_committente}}`: quando cambia la polizza si
+cambia una volta sola (`POLIZZA_STUDIO` in `index.html`).
+
+### I conti tornano riga per riga
+
+Il vecchio programma scriveva accanto a ogni voce un totale fatto di importo
+più IVA, **senza il contributo cassa**: 1.500 € diventavano 1.830 €. In fondo
+invece cassa e IVA c'erano, e la somma delle righe non era il totale del
+documento. Ora ogni voce ha le sue colonne nell'ordine in cui si applicano:
+
+| | Importo | Q.tà | Imponibile | Cassa 4% | IVA 22% | Totale |
+|---|---|---|---|---|---|---|
+| A. Relazione geologica… | 1.500,00 | 1 | 1.500,00 | 60,00 | 343,20 | **1.903,20** |
+
+e una riga *Totali* che somma le colonne. Cassa e IVA sono calcolate sul
+totale del documento, come vuole il fisco, e poi ripartite sulle righe al
+centesimo: la colonna dei totali somma **esattamente** il totale dovuto.
+
+### Cosa è stato corretto nei testi dei modelli
+
+- Le voci si numerano da sole (A, B, C…). Nell'architettonico tre voci si
+  chiamavano «A» e il pagamento citava lettere che non tornavano; ora sono
+  A–I e il pagamento le copre tutte (A–D alla consegna, E–I al saldo:
+  **da verificare** che sia la suddivisione che intendete).
+- La clausola degli artt. 1341–1342 citava due volte l'art. 9: i termini
+  sono all'art. 8.
+- Privacy: il rimando era all'art. 6 (obblighi) invece che all'art. 8
+  (termini), e il Regolamento è il (UE) 2016/679.
+- Recesso: gli importi sono all'art. 1, non all'art. 5.
+- L'art. 11 si chiama «Comunicazioni e indirizzi» (le autorizzazioni sono il
+  10 bis), e la PEC e il telefono del committente si riempiono da soli quando
+  li conosciamo.
+- Refusi: «alloggetto», «lesecuzione», «arti. 1341 c 1342», «legge il 27/2012».
+
+## Proforma prima della fattura
+
+Nella scheda **Fatturazione** di ogni commessa, e nella pagina *Da
+fatturare*, ogni scaglione ha ora il pulsante 📄 accanto a 📥. Apre la
+stessa finestra di revisione della fattura, con in più **N. proforma** e
+**Data proforma**, e il pulsante **Proforma PDF**.
+
+La proforma è lo stesso documento che diventerà la fattura — oggetto in
+testa, servizi, spese anticipate art. 15, cassa, IVA, IBAN, scadenza — in
+PDF, con la dicitura *«Documento privo di valore fiscale ai sensi dell'art.
+21 del DPR 633/72. La fattura elettronica sarà emessa al ricevimento del
+pagamento.»* Ha una numerazione sua (`2026/001`, `2026/002`…) che non
+consuma i numeri delle fatture. Numero e data restano scritti sullo
+scaglione («📄 proforma 2026/001 del 09/10/2026»); lo stato non cambia.
+
+Quando il committente paga, dallo stesso scaglione si genera l'XML come
+sempre: **il sistema di fatturazione non è cambiato**, la proforma ci si
+mette davanti.
+
+I PDF si scrivono nel browser con una libreria (pdfmake) che si scarica dal
+CDN la prima volta che serve: senza connessione il gestionale lo dice invece
+di bloccarsi.
 
 ## Costi generali dello studio
 
