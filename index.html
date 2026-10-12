@@ -1435,7 +1435,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.2';
+const VERSIONE = '2026.10.12.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2956,18 +2956,27 @@ const EVENTI_PRATICA = ['invio','protocollo','integrazione','sollecito','soprall
 /* ===========================================================================
    DATI
    =========================================================================== */
+/* Le colonne delle attivita' che l'app usa. Una colonna dimenticata qui non
+   arriva mai: template_key mancava, e l'aggiornamento del percorso credeva
+   aggiunta a mano ogni attivita' generata, quindi non ne riconosceva mai una
+   da togliere. */
 const TASK_COLS = 'id,title,project_id,commessa_fase_id,assignee_id,responsabile_id,status,priority,'
                 + 'due_date,estimated_hours,notes,sort_order,is_milestone,opzionale,ente,rif_normativo,categoria,contenuto,'
-                + 'completed_at,completed_by,created_by,created_at';
+                + 'template_key,completed_at,completed_by,created_by,created_at';
+/* Il collegamento alla pratica (migrazione 033). Chiesto a parte: se la
+   migrazione non e' ancora stata eseguita le attivita' si caricano lo stesso,
+   senza collegamento, e in cima compare l'avviso di eseguirla. pratica_ruolo
+   viene prima perche' e' il nome che l'errore riporta e che porta alla 033. */
+const TASK_COLS_PRATICA = ',pratica_ruolo,pratica_id';
 
 async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm, rpc] = await Promise.all([
+    let [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm, rpc] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
-      SB.from('tasks').select(TASK_COLS).order('sort_order'),
+      SB.from('tasks').select(TASK_COLS + TASK_COLS_PRATICA).order('sort_order'),
       SB.from('commessa_fasi').select('*').order('ordine'),
       SB.from('commessa_pratiche').select('*').order('data_scadenza', {nullsFirst:false}),
       SB.from('notifiche').select('*').order('created_at', {ascending:false}).limit(40),
@@ -2988,6 +2997,14 @@ async function loadAll(silent) {
       SB.from('preventivo_modelli').select('*').order('ordine'),
       SB.from('pratiche_catalogo').select('*').order('ordine')
     ]);
+    /* Migrazione 033 non eseguita: le attivita' si ricaricano senza il collegamento */
+    let rtPrat = { error: null };
+    S.senzaPraticaTask = false;
+    if (rt.error && /pratica_(ruolo|id)/.test(rt.error.message || '')) {
+      rtPrat = { error: rt.error };
+      S.senzaPraticaTask = true;
+      rt = await SB.from('tasks').select(TASK_COLS).order('sort_order');
+    }
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
     S.profs     = rp.data || [];
@@ -3030,7 +3047,7 @@ async function loadAll(silent) {
                      [rsp, 'commessa_spese'],
                      [rcg, 'costi_generali'],
                      [rpv, 'preventivi'],      [rpm, 'preventivo_modelli'],
-                     [rpc, 'pratiche_catalogo']]);
+                     [rpc, 'pratiche_catalogo'], [rtPrat, 'pratica_ruolo']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -11329,6 +11346,8 @@ async function saveTask() {
     pratica_id: el('tt-prat').value || null,
     pratica_ruolo: el('tt-prat').value ? (el('tt-pruolo').value || 'inizio') : null
   };
+  /* senza la migrazione 033 il database non ha queste colonne */
+  if (S.senzaPraticaTask) { delete pay.pratica_id; delete pay.pratica_ruolo; }
   setLoading('st-btn', true);
   const prevFase = id ? (byId(S.tasks, id) || {}).commessa_fase_id : null;
   const { error } = id

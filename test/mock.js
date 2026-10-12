@@ -177,7 +177,13 @@
     let rows=()=>clone(DB[table]||[]);
     const flt=[]; let ord=null, lim=null, single=false, maybe=false;
     const api={
-      select(c,o){ if(o&&o.head){api._count=true;} return api; },
+      /* Come PostgREST: con un elenco di colonne arrivano SOLO quelle. Prima il
+         finto database restituiva sempre tutto, e un elenco dimenticato
+         nell'app (il collegamento attivita'-pratica) passava inosservato. */
+      select(c,o){ if(o&&o.head){api._count=true;}
+        if(typeof c==='string'&&c.trim()&&c.indexOf('*')<0&&c.indexOf('(')<0)
+          api._cols=c.split(',').map(x=>x.trim()).filter(Boolean);
+        return api; },
       order(c,o){ ord={c,asc:!o||o.ascending!==false}; return api; },
       limit(n){ lim=n; return api; },
       eq(c,v){ flt.push(r=>r[c]===v); return api; },
@@ -273,6 +279,13 @@
             if(x==null&&y==null)return 0; if(x==null)return 1; if(y==null)return -1;
             return (x>y?1:x<y?-1:0)*(ord.asc?1:-1);});
           if(lim) d=d.slice(0,lim);
+          if(api._cols){
+            /* una colonna che il database non ha (migrazione non eseguita) e' un errore */
+            const assenti=window.__COLONNE_ASSENTI||[];
+            const manca=api._cols.find(k=>assenti.indexOf(k)>=0);
+            if(manca) return res({data:null,error:{message:'column '+table+'.'+manca+' does not exist'}});
+            d=d.map(r=>{ const o={}; api._cols.forEach(k=>{ o[k]=r[k]===undefined?null:r[k]; }); return o; });
+          }
           return res({data:single||maybe?(d[0]||null):d,error:null});
         }catch(e){ return res({data:null,error:{message:String(e)}}); }
       }

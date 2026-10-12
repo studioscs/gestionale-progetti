@@ -3185,7 +3185,12 @@ function launchOpts(){
     must(Number(f.imponibile)===8000,'quota SAL 3: '+f.imponibile);
   });
   await t('senza gli importi il pannello lo dice invece di sbagliare',async()=>{
-    await p.evaluate(()=>{
+    await p.evaluate(async()=>{
+      /* prima si lascia finire il ricaricamento del salvataggio precedente,
+         che altrimenti rimette gli importi appena tolti */
+      await loadAll(true);
+      /* e l'aggiornamento automatico di ogni minuto non deve cadere qui in mezzo */
+      if(S.pollTimer){ clearInterval(S.pollTimer); S.pollTimer=null; }
       const x=__DB.projects.find(y=>y.name==='DL Palestra comunale');
       const p2=byId(S.projects,x.id); p2.importo_lavori=null; p2.compenso_dl=null;
       S.tab='contabilita'; render();
@@ -3195,6 +3200,7 @@ function launchOpts(){
     must(/Mancano gli importi di riferimento/.test(h),'non segnala gli importi mancanti');
     must(/Importo contrattuale dei lavori/.test(h)&&/Compenso per direzione lavori/.test(h),
       'non dice quali importi servono');
+    await p.evaluate(()=>startPolling());
   });
 
   // --- PFTE SECONDO L'ALLEGATO I.7 ---
@@ -3819,6 +3825,20 @@ function launchOpts(){
     await p.waitForTimeout(150);
     must(await p.inputValue('#tt-prat')==='','scelta «Nessuna» ignorata: la ripropone');
     await p.evaluate(()=>closeM('m-task'));
+  });
+  await t('senza la migrazione 033 le attività si caricano lo stesso, e lo si dice',async()=>{
+    const g=await p.evaluate(async()=>{ window.__COLONNE_ASSENTI=['pratica_id','pratica_ruolo'];
+      const ok=await loadAll(true); const r={ok,n:S.tasks.length,senza:S.senzaPraticaTask,avviso:S.schemaMancante.slice()};
+      window.__COLONNE_ASSENTI=[]; await loadAll(true); return r; });
+    must(g.ok&&g.n>0,'le attività non si caricano più: '+JSON.stringify(g));
+    must(g.senza,'non si accorge che manca la migrazione');
+    must(g.avviso.includes('sql/033_catalogo_pratiche.sql'),'l avviso non indica la 033: '+g.avviso.join());
+  });
+  await t('il collegamento alla pratica resta dopo il ricaricamento',async()=>{
+    const g=await p.evaluate(async()=>{ await loadAll(true);
+      const t=S.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando');
+      return t&&{id:t.pratica_id,r:t.pratica_ruolo}; });
+    must(g&&g.id&&g.r==='inizio','dopo il ricaricamento il collegamento è sparito: '+JSON.stringify(g));
   });
   await t('completata l attività che la avvia, la pratica risulta inviata',async()=>{
     const id=await p.evaluate(()=>__DB.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando').id);
