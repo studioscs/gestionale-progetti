@@ -736,6 +736,13 @@ cui sono stati scritti. *Ripristina l'originale* torna al testo di partenza,
 `{{tel_studio}}`, `{{contatti_committente}}`: quando cambia la polizza si
 cambia una volta sola (`POLIZZA_STUDIO` in `index.html`).
 
+### Duplicare un preventivo
+
+Il pulsante ⧉ nell'elenco (o *Duplica preventivo* nell'editor) apre un
+preventivo nuovo che parte da quello scelto: stesse voci, importi, articoli,
+note e committente, ma **numero nuovo, data di oggi e stato bozza**. Si cambia
+quello che serve — spesso il committente — e si salva; l'originale non cambia.
+
 ### Il committente entra in anagrafica
 
 Salvando un preventivo, il committente scritto a mano diventa una **scheda in
@@ -810,6 +817,8 @@ centesimo: la colonna dei totali somma **esattamente** il totale dovuto.
   10 bis), e la PEC e il telefono del committente si riempiono da soli quando
   li conosciamo.
 - Refusi: «alloggetto», «lesecuzione», «arti. 1341 c 1342», «legge il 27/2012».
+- L'ultimo articolo, con l'approvazione specifica delle clausole (artt. 1341 e
+  1342 c.c.), si intitola **ART. 12 APPROVAZIONI SPECIFICHE**.
 
 ## Proforma prima della fattura
 

@@ -84,6 +84,14 @@ modali.forEach(id => {
 OK(modali.length + ' modali, tutte con chiusura');
 
 console.log('\n— FUNZIONI —');
+/* Due funzioni con lo stesso nome nei blocchi script: nel browser vince
+   l'ultima, in silenzio. Cosi' la scelta del cliente nel preventivo finiva
+   nella funzione omonima della commessa. */
+{ const cnt = {};
+  [...js.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)].forEach(m => cnt[m[1]] = (cnt[m[1]] || 0) + 1);
+  const doppie = Object.keys(cnt).filter(k => cnt[k] > 1);
+  if (doppie.length) doppie.forEach(k => KO('funzione', k + '() è dichiarata ' + cnt[k] + ' volte: vale solo l’ultima'));
+  else OK('nessuna funzione dichiarata due volte'); }
 const definite = new Set();
 [...js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].forEach(m => definite.add(m[1]));
 [...js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)].forEach(m => definite.add(m[1]));

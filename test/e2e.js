@@ -3648,6 +3648,7 @@ function launchOpts(){
     must(/11\.926,72 €/.test(txt),'manca il totale');
     must(/Regolamento \(UE\) 2016\/679/.test(txt),'privacy non corretta');
     must(/art\. 8 \(Termini e penali\)/.test(txt),'clausola 1341 non corretta');
+    must(/ART\. 12 APPROVAZIONI SPECIFICHE/.test(txt),'manca il titolo dell art. 12');
     must(/PI-00KS4T2550/.test(txt),'manca la polizza');
     must(/mario\.rossi@pec\.it/.test(txt),'i recapiti del committente non sono riempiti');
     must(!/\{\{/.test(txt),'è rimasto un segnaposto');
@@ -3813,6 +3814,51 @@ function launchOpts(){
     must(/Mancano:.*codice SDI o PEC/.test(m),'la scheda non dice cosa manca: '+m);
     must(/Preventivi di questo cliente/.test(m),'la scheda non mostra i suoi preventivi');
     await p.evaluate(()=>closeM('m-cli'));
+  });
+  await t('scegliendo un cliente esistente i dati si compilano e il preventivo si salva',async()=>{
+    const id=await p.evaluate(async()=>{ const {data}=await SB.from('clienti').insert({denominazione:'Bianchi Costruzioni Srl',
+        piva:'01234567890',indirizzo:'Via Roma 1',cap:'62019',comune:'Recanati',provincia:'MC',pec:'bianchi@pec.it',
+        referente_tel:'071 123'}).select().single(); await loadAll(true); go('preventivi'); return data.id; });
+    await p.click('[data-pvmodello="antincendio"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    await p.selectOption('[data-pv="cliente_id"]',id); await p.waitForTimeout(300);
+    const g=await p.evaluate(()=>({n:el('pv-body').querySelector('[data-pv="cliente_nome"]').value,
+      piva:el('pv-body').querySelector('[data-pv="cliente_piva"]').value,
+      com:el('pv-body').querySelector('[data-pv="cliente_comune"]').value,
+      pec:el('pv-body').querySelector('[data-pv="cliente_pec"]').value}));
+    must(g.n==='Bianchi Costruzioni Srl'&&g.piva==='01234567890'&&g.com==='Recanati'&&g.pec==='bianchi@pec.it',
+      'i campi non si compilano: '+JSON.stringify(g));
+    await p.click('#pv-save'); await p.waitForTimeout(800);
+    const x=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl'));
+    must(x&&x.cliente_id===id,'il preventivo non è stato salvato col cliente scelto');
+    must(await p.evaluate(()=>__DB.clienti.filter(c=>c.denominazione==='Bianchi Costruzioni Srl').length)===1,'cliente duplicato');
+  });
+  await t('si duplica un preventivo: numero nuovo, stesse voci, originale intatto',async()=>{
+    const orig=await p.evaluate(()=>{ const x=__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl');
+      return {id:x.id,prog:x.progressivo,voci:JSON.stringify(x.voci),stato:x.stato,n:__DB.preventivi.length}; });
+    await p.evaluate(()=>go('preventivi')); await p.waitForTimeout(300);
+    await p.click('[data-prevdup="'+orig.id+'"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(/copia del/.test(await p.textContent('#mpv-t')),'il titolo non dice che è una copia');
+    const prop=await p.inputValue('[data-pv="progressivo"]');
+    must(prop===String(await p.evaluate(()=>prossimoPreventivo(new Date().getFullYear()))),'numero proposto: '+prop);
+    must(await p.inputValue('[data-pv="cliente_nome"]')==='Bianchi Costruzioni Srl','il committente non è stato copiato');
+    await p.fill('[data-pvv="0"][data-k="importo"]','777');
+    await p.click('#pv-save'); await p.waitForTimeout(800);
+    const g=await p.evaluate(o=>{ const c=__DB.preventivi.filter(y=>y.cliente_nome==='Bianchi Costruzioni Srl');
+      const nuovo=c.find(y=>y.id!==o.id), vecchio=c.find(y=>y.id===o.id);
+      return {n:__DB.preventivi.length,nuovo:nuovo&&{prog:nuovo.progressivo,stato:nuovo.stato,imp:nuovo.voci[0].importo,nv:nuovo.voci.length,na:nuovo.articoli.length},
+        vecchio:vecchio&&{voci:JSON.stringify(vecchio.voci)}}; },orig);
+    must(g.n===orig.n+1,'non è stato creato un preventivo nuovo');
+    must(g.nuovo.prog!==orig.prog&&g.nuovo.stato==='bozza','numero o stato della copia sbagliati: '+JSON.stringify(g.nuovo));
+    must(g.nuovo.imp===777&&g.nuovo.nv===JSON.parse(orig.voci).length&&g.nuovo.na===12,'voci della copia: '+JSON.stringify(g.nuovo));
+    must(g.vecchio.voci===orig.voci,'l originale è cambiato');
+  });
+  await t('anche dall editor c è Duplica',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl').id);
+    await p.evaluate(id=>openPreventivo(id),id); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.isVisible('#pv-copia'),'manca Duplica preventivo');
+    await p.click('#pv-copia'); await p.waitForTimeout(300);
+    must(await p.isVisible('#m-prev')&&/copia del/.test(await p.textContent('#mpv-t')),'Duplica non apre la copia');
+    await p.evaluate(()=>closeM('m-prev'));
   });
   await t('un collaboratore non vede i preventivi',async()=>{
     const txt=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('preventivi');

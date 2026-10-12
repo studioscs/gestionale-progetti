@@ -687,6 +687,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn btn-d" id="pv-del" style="display:none">Elimina</button>
         <button class="btn" id="pv-ripr" style="display:none">Ripristina l’originale</button>
         <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
+        <button class="btn" id="pv-copia" style="display:none">&#10697; Duplica preventivo</button>
       </span>
       <button class="btn" data-close="m-prev">Chiudi</button>
       <button class="btn" id="pv-mail">&#9993;&#65039; Invia per email</button>
@@ -1435,7 +1436,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.5';
+const VERSIONE = '2026.10.12.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5364,7 +5365,7 @@ Il Committente dichiara sotto la propria responsabilità che l'incarico oggetto 
 Dichiara inoltre che le prestazioni di cui al presente incarico sono state oggetto di compiuta ed esauriente illustrazione da parte del Professionista che, ai sensi dell'art. 9 della L. 27/2012, ha fornito ogni informazione utile circa gli oneri ipotizzabili dal momento di conferimento fino alla conclusione dell'incarico, nonché tutte le spiegazioni richieste per la piena comprensione di quanto riportato e dichiara quindi di accettarne il contenuto.
 
 FIRMA ____________________________________________` },
-    { titolo: '', testo:
+    { titolo: 'ART. 12 APPROVAZIONI SPECIFICHE:', testo:
       `Ai sensi e per gli effetti degli artt. 1341 e 1342 del Codice Civile, il Committente dichiara di aver letto e di approvare specificamente le seguenti clausole: art. 1 (Premesse ed oggetto dell'incarico), art. 2 (Esclusioni), art. 4 (Risoluzione del contratto e recesso unilaterale), art. 5 (Modalità di pagamento), art. 8 (Termini e penali), art. 9 (Foro competente).
 
 FIRMA ____________________________________________` }
@@ -5576,7 +5577,8 @@ function rPreventivi() {
       + '<td>' + bdg(x.stato, ST_PREV) + '</td>'
       + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(totalePreventivo(x)) + '</b></td>'
       + '<td class="ac" style="white-space:nowrap"><button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196;</button> '
-        + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039;</button></td>'
+        + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039;</button> '
+        + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Duplica: nuovo preventivo con le stesse voci">&#10697;</button></td>'
       + '</tr>').join('');
 
   el('page').innerHTML = kpis + modelli
@@ -5607,6 +5609,19 @@ function nuovoPreventivo(chiave) {
          note: m.note || '', scadenza: null };
   apriEditorPrev();
 }
+/* Un preventivo nuovo che parte da uno gia' fatto: stesse voci, importi,
+   articoli e committente, ma numero nuovo, data di oggi e stato bozza. Si
+   cambia quello che serve - spesso il committente - e si salva. */
+function duplicaPreventivo(id) {
+  const x = byId(S.preventivi, id); if (!x) return;
+  const anno = today().getFullYear();
+  PV = Object.assign({ modo: 'prev' }, copia(x), {
+    id: null, anno, progressivo: prossimoPreventivo(anno), data: todayISO(), _numAuto: true,
+    stato: 'bozza', scadenza: null, project_id: null, _copiaDi: numeroPreventivo(x) });
+  ['created_at', 'updated_at', 'created_by'].forEach(k => delete PV[k]);
+  PV.voci = PV.voci || []; PV.articoli = PV.articoli || [];
+  apriEditorPrev();
+}
 function openPreventivo(id) {
   const x = byId(S.preventivi, id); if (!x) return;
   PV = Object.assign({ modo: 'prev' }, copia(x));
@@ -5624,7 +5639,9 @@ function apriModello(chiave) {
 function apriEditorPrev() {
   const mod = PV.modo === 'modello';
   el('mpv-t').textContent = mod ? 'Modello: ' + PV.nome
-    : (PV.id ? 'Preventivo ' + numeroPreventivo(PV) : 'Nuovo preventivo');
+    : (PV.id ? 'Preventivo ' + numeroPreventivo(PV)
+             : 'Nuovo preventivo' + (PV._copiaDi ? ' — copia del ' + PV._copiaDi : ''));
+  el('pv-copia').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-del').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
   el('pv-dup').style.display = mod ? 'inline-flex' : 'none';
@@ -5755,7 +5772,10 @@ function applicaModello(chiave) {
     voci: copia(m.voci || []), articoli: copia(m.articoli || []), note: m.note || '' });
   disegnaPrev();
 }
-function applicaCliente(id) {
+/* Nome proprio: "applicaCliente" esiste gia' per il modulo della commessa, e
+   con due funzioni omonime nel browser vince l'ultima - che scriveva nella
+   commessa invece che nel preventivo, e i campi restavano vuoti. */
+function applicaClientePrev(id) {
   const c = id ? byId(S.clienti, id) : null;
   PV.cliente_id = c ? c.id : null;
   if (c) Object.assign(PV, {
@@ -5779,7 +5799,7 @@ function pvInput(e) {
   }
   const k = t.dataset.pv; if (!k) return;
   if (k === 'modello') { if (e.type === 'change') applicaModello(t.value); return; }
-  if (k === 'cliente_id') { if (e.type === 'change') applicaCliente(t.value); return; }
+  if (k === 'cliente_id') { if (e.type === 'change') applicaClientePrev(t.value); return; }
   PV[k] = k === 'progressivo' ? (parseInt(t.value, 10) || '') : t.value;
   if (/^cliente_/.test(k)) infoClientePrev();
   /* Il numero proposto segue l'anno della data finche' non lo si scrive a mano */
@@ -11902,6 +11922,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pc-save').onclick = salvaVoceCatalogo;
   el('pc-ripr').onclick = ripristinaVoceCatalogo;
   el('pv-mail').onclick = mailDaEditor;
+  el('pv-copia').onclick = () => { const id = PV && PV.id; closeM('m-prev'); if (id) duplicaPreventivo(id); };
   el('mm-share').onclick  = () => invioPreventivo('share');
   el('mm-eml').onclick    = () => invioPreventivo('eml');
   el('mm-mailto').onclick = () => invioPreventivo('mailto');
@@ -11996,6 +12017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-fproforma'))) { e.stopPropagation(); return openRevisione(n.dataset.fproforma); }
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
+    if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
     if ((n = f('data-pcat')))      { return apriVoceCatalogo(n.dataset.pcat); }
     if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
     if ((n = f('data-pvmodmod')))  { return apriModello(n.dataset.pvmodmod); }

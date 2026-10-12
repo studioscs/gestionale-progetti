@@ -724,6 +724,8 @@ MM.forEach(m=>{
   t(m.nome+': il pagamento cita solo voci che esistono',citate.every(l=>lettere.includes(l)),{citate,lettere});
   t(m.nome+': e le cita tutte',lettere.every(l=>citate.includes(l)),{citate,lettere});
   t(m.nome+': undici articoli e la clausola finale',m.articoli.length===12,m.articoli.length);
+  t(m.nome+': l ultimo articolo e ART. 12 APPROVAZIONI SPECIFICHE',/^ART\. 12 APPROVAZIONI SPECIFICHE/.test(m.articoli[11].titolo)
+    &&/artt\. 1341 e 1342/.test(m.articoli[11].testo),m.articoli[11].titolo);
 });
 const pvP={anno:2026,progressivo:3,data:'2026-10-09',titolo:'PREVENTIVO TIPO PERIZIE',cliente_nome:'Rossi',
   immobile:'VIA ROMA 1 A RECANATI',cliente_pec:'',cliente_tel:'333',oggetto:MM[2].oggetto,voci:MM[2].voci,articoli:MM[2].articoli,note:''};
