@@ -1435,7 +1435,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.4';
+const VERSIONE = '2026.10.12.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1458,7 +1458,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1578,10 +1578,11 @@ function av(id, sz) {
 function toast(msg, t) {
   const d = document.createElement('div');
   d.className = 'toast';
-  d.style.background = t === 'error' ? '#B02A37' : t === 'success' ? '#198754' : '#1F3864';
+  d.style.background = t === 'error' ? '#B02A37' : t === 'success' ? '#198754' : t === 'warning' ? '#B35C00' : '#1F3864';
   d.textContent = msg;
   el('tc').appendChild(d);
-  setTimeout(() => d.remove(), t === 'error' ? 6000 : 3200);
+  /* gli avvisi da leggere restano di piu' */
+  setTimeout(() => d.remove(), t === 'error' || t === 'warning' ? 6000 : 3200);
 }
 function openM(id) { el(id).classList.add('show'); }
 function closeM(id) { el(id).classList.remove('show'); }
@@ -5678,6 +5679,7 @@ function disegnaPrev() {
       + '<div class="fg3">' + campo('CAP', 'cliente_cap') + campo('Comune', 'cliente_comune') + campo('Provincia', 'cliente_prov') + '</div>'
       + '<div class="fg2">' + campo('Codice fiscale', 'cliente_cf') + campo('Partita IVA', 'cliente_piva') + '</div>'
       + '<div class="fg2">' + campo('PEC o mail', 'cliente_pec') + campo('Telefono', 'cliente_tel') + '</div>'
+      + '<div id="pv-cli-info"></div>'
       + sez('Immobile e oggetto')
       + campo('Immobile (va al posto di {{immobile}})', 'immobile', 'text', 'VIA ROMA 12 A RECANATI');
   }
@@ -5712,8 +5714,23 @@ function disegnaPrev() {
   aggiornaPrev();
 }
 
+/* Che fine fa il committente in anagrafica, e che cosa manca: si aggiorna
+   mentre si scrive */
+function infoClientePrev() {
+  const box = el('pv-cli-info'); if (!box || PV.modo === 'modello') return;
+  if (!String(PV.cliente_nome || '').trim()) { box.innerHTML = ''; return; }
+  const esiste = clienteDelPreventivo(PV);
+  const manca = datiMancantiPreventivo(PV);
+  box.innerHTML = '<div class="' + (manca.length ? 'wbox' : 'ibox') + ' mb16" style="font-size:12px">'
+    + (esiste ? 'In anagrafica: <b>' + esc(esiste.denominazione) + '</b>. Salvando, i dati che lì mancano si completano con questi.'
+              : 'Salvando, <b>' + esc(PV.cliente_nome) + '</b> entra in anagrafica come nuovo cliente.')
+    + (manca.length ? '<br>Mancano: <b>' + manca.join(', ') + '</b>.' : '')
+    + '</div>';
+}
+
 /* Il riepilogo: le stesse cifre che usciranno nel PDF, riga per riga */
 function aggiornaPrev() {
+  infoClientePrev();
   const c = contiDocumento(PV.voci);
   c.righe.forEach((r, i) => { const s = el('pv-vt-' + i);
     if (s) s.textContent = '= ' + feuro(r.imponibile) + ' + cassa ' + feuro(r.cassa) + ' + IVA ' + feuro(r.iva)
@@ -5764,6 +5781,7 @@ function pvInput(e) {
   if (k === 'modello') { if (e.type === 'change') applicaModello(t.value); return; }
   if (k === 'cliente_id') { if (e.type === 'change') applicaCliente(t.value); return; }
   PV[k] = k === 'progressivo' ? (parseInt(t.value, 10) || '') : t.value;
+  if (/^cliente_/.test(k)) infoClientePrev();
   /* Il numero proposto segue l'anno della data finche' non lo si scrive a mano */
   if (k === 'progressivo') PV._numAuto = false;
   if (k === 'data' && t.value) {
@@ -5793,6 +5811,71 @@ const vociPulite = vv => (vv || []).filter(v => String(v.descrizione || '').trim
 const articoliPuliti = aa => (aa || []).filter(a => String(a.titolo || '').trim() || String(a.testo || '').trim())
   .map(a => ({ titolo: String(a.titolo || '').trim(), testo: String(a.testo || '') }));
 
+/* ---------------------------------------------------------------------------
+   DATI MANCANTI DI UN CLIENTE
+   Quello che serve per fatturare e per scrivere: un documento che si scopre
+   incompleto il giorno della fattura costa una telefonata e un ritardo.
+   --------------------------------------------------------------------------- */
+function datiMancantiCliente(c) {
+  if (!c) return [];
+  const v = k => String(c[k] || '').trim();
+  const m = [];
+  if (!v('cf') && !v('piva')) m.push('codice fiscale o partita IVA');
+  if (!v('indirizzo')) m.push('indirizzo');
+  if (!v('cap')) m.push('CAP');
+  if (!v('comune')) m.push('comune');
+  if (!v('sdi') && !v('pec')) m.push('codice SDI o PEC');
+  if (!v('pec') && !v('referente_email')) m.push('email');
+  if (!v('referente_tel')) m.push('telefono');
+  return m;
+}
+/* Lo stesso controllo sui dati scritti nel preventivo */
+const datiMancantiPreventivo = pv => datiMancantiCliente({
+  cf: pv.cliente_cf, piva: pv.cliente_piva, indirizzo: pv.cliente_indirizzo, cap: pv.cliente_cap,
+  comune: pv.cliente_comune, pec: pv.cliente_pec, referente_tel: pv.cliente_tel })
+  .filter(x => x !== 'codice SDI o PEC' && x !== 'email').concat(pv.cliente_pec ? [] : ['PEC o email']);
+
+/* IL COMMITTENTE DEL PREVENTIVO IN ANAGRAFICA
+   Scritto a mano nel preventivo, diventa una scheda in Clienti: la prossima
+   volta - un altro preventivo, la commessa - lo si sceglie invece di
+   riscriverlo. Se esiste gia' (stesso nome, codice fiscale o partita IVA) si
+   aggancia a quello, e i dati che in anagrafica mancavano si completano con
+   quelli del preventivo; quelli gia' scritti non si toccano. */
+const normNome = t => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function clienteDelPreventivo(pv) {
+  if (pv.cliente_id) return byId(S.clienti, pv.cliente_id);
+  const cf = String(pv.cliente_cf || '').trim().toUpperCase(), pi = String(pv.cliente_piva || '').replace(/\s/g, '');
+  return S.clienti.find(c => (cf && String(c.cf || '').toUpperCase() === cf)
+      || (pi && String(c.piva || '').replace(/\s/g, '') === pi)
+      || normNome(c.denominazione) === normNome(pv.cliente_nome)) || null;
+}
+async function clienteDaPreventivo(pv) {
+  const pec = String(pv.cliente_pec || '').trim();
+  /* "PEC o mail": se e' una PEC va fra i dati fiscali, altrimenti e' la mail del referente */
+  const ePec = /(^|[.@])pec\.|legalmail|postacert|cert\./i.test(pec);
+  const dati = { denominazione: String(pv.cliente_nome || '').trim(),
+    cf: (pv.cliente_cf || '').trim().toUpperCase() || null, piva: (pv.cliente_piva || '').trim() || null,
+    indirizzo: pv.cliente_indirizzo || null, cap: pv.cliente_cap || null, comune: pv.cliente_comune || null,
+    provincia: pv.cliente_prov || null,
+    pec: pec && ePec ? pec : null, referente_email: pec && !ePec ? pec : null,
+    referente_tel: pv.cliente_tel || null };
+  const esiste = clienteDelPreventivo(pv);
+  if (esiste) {
+    const agg = {};
+    Object.keys(dati).forEach(k => { if (k !== 'denominazione' && dati[k] && !String(esiste[k] || '').trim()) agg[k] = dati[k]; });
+    if (Object.keys(agg).length) {
+      const { error } = await SB.from('clienti').update(agg).eq('id', esiste.id);
+      if (error) console.warn('anagrafica cliente', error); else Object.assign(esiste, agg);
+    }
+    return { id: esiste.id, nuovo: false, completato: Object.keys(agg).length };
+  }
+  dati.tipo = !dati.piva && /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(dati.cf || '') ? 'persona' : 'societa';
+  const { data, error } = await SB.from('clienti').insert(Object.assign({ created_by: S.me.id }, dati)).select().maybeSingle();
+  if (error || !data) { if (error) console.warn('anagrafica cliente', error); return null; }
+  S.clienti.push(data);
+  return { id: data.id, nuovo: true, completato: 0 };
+}
+
 async function salvaPreventivo(silenzioso) {
   const d = PV;
   if (!String(d.cliente_nome || '').trim()) { toast('Scrivi a chi va il preventivo.', 'error'); return null; }
@@ -5802,6 +5885,9 @@ async function salvaPreventivo(silenzioso) {
   const anno = Number(String(d.data || todayISO()).slice(0, 4)) || d.anno;
   const dop = (S.preventivi || []).find(x => x.id !== d.id && Number(x.anno) === anno && Number(x.progressivo) === prog);
   if (dop) { toast('Il numero ' + prog + '/' + String(anno).slice(-2) + ' è già usato da un altro preventivo.', 'error'); return null; }
+  /* il committente entra (o si aggancia) in anagrafica */
+  const cli = await clienteDaPreventivo(d);
+  if (cli) d.cliente_id = cli.id;
   const pay = { anno, progressivo: prog, data: d.data || todayISO(), modello: d.modello || null,
     titolo: d.titolo || null, stato: d.stato || 'bozza', cliente_id: d.cliente_id || null,
     cliente_nome: d.cliente_nome.trim(), cliente_indirizzo: d.cliente_indirizzo || null,
@@ -5818,7 +5904,15 @@ async function salvaPreventivo(silenzioso) {
   if (r.error) { sbErr(r.error, 'preventivo'); return null; }
   PV.id = d.id || (r.data && r.data.id); PV.anno = anno;
   await loadAll(true); render();
+  /* Che cosa manca nella scheda del cliente, detto subito */
+  const scheda = cli ? byId(S.clienti, cli.id) : null;
+  const manca = datiMancantiCliente(scheda);
+  const nota = (cli && cli.nuovo ? 'Creata la scheda cliente «' + pay.cliente_nome + '»' : '')
+    + (cli && cli.completato ? 'Completata la scheda cliente con ' + cli.completato + (cli.completato === 1 ? ' dato' : ' dati') : '')
+    + (manca.length ? ((cli && (cli.nuovo || cli.completato)) ? '. ' : 'Nella scheda cliente ')
+        + 'mancano: ' + manca.join(', ') + '.' : '');
   if (!silenzioso) { closeM('m-prev'); toast('Preventivo ' + numeroPreventivo(pay) + ' salvato', 'success'); }
+  if (nota) toast(nota, manca.length ? 'warning' : 'success');
   return byId(S.preventivi, PV.id) || r.data || Object.assign({ id: PV.id }, pay);
 }
 
@@ -8018,14 +8112,17 @@ function rClienti() {
   el('crumb').textContent = 'I clienti dello studio: si riusano da una commessa all’altra.';
   el('top-act').innerHTML =
       '<input class="srch" id="cl-q" placeholder="Cerca per nome, P.IVA, comune..." value="' + esc(S.clQ || '') + '">'
+    + ' <label class="row" style="gap:4px;font-size:12px;white-space:nowrap"><input type="checkbox" id="cl-dacompl"'
+      + (S.clDaCompletare ? ' checked' : '') + '> Solo da completare</label> '
     + (canW() ? '<button class="btn btn-p btn-sm" data-newcli="1">＋ Nuovo cliente</button>' : '');
   el('cl-q').oninput = e => { S.clQ = e.target.value; drawClienti(); };
+  el('cl-dacompl').onchange = e => { S.clDaCompletare = e.target.checked; drawClienti(); };
   drawClienti();
 }
 
 function drawClienti() {
   const q = (S.clQ || '').toLowerCase();
-  const list = S.clienti.filter(c => !q ||
+  const list = S.clienti.filter(c => !S.clDaCompletare || datiMancantiCliente(c).length).filter(c => !q ||
     ((c.denominazione || '') + ' ' + (c.piva || '') + ' ' + (c.cf || '') + ' ' + (c.comune || '') + ' '
      + (c.referente || '') + ' ' + (c.referente_tec || '')).toLowerCase().includes(q));
 
@@ -8044,10 +8141,13 @@ function drawClienti() {
     const attive = comm.filter(p => p.status === 'attivo' && !p.archiviato).length;
     const tot = comm.reduce((a, p) => a + Number(p.amount || 0), 0);
     const manca = !c.piva && !c.cf;
+    const mancano = datiMancantiCliente(c);
     return '<tr data-cli="' + c.id + '" style="cursor:pointer' + (c.attivo === false ? ';opacity:.55' : '') + '">'
       + '<td><b>' + esc(c.denominazione) + '</b>'
         + (c.tipo === 'persona' ? ' <span class="chip">persona fisica</span>' : '')
         + (c.attivo === false ? ' <span class="chip">non attivo</span>' : '')
+        + (mancano.length ? ' <span class="chip chip-a" title="Mancano: ' + esc(mancano.join(', ')) + '">da completare: '
+            + mancano.length + (mancano.length === 1 ? ' dato' : ' dati') + '</span>' : '')
         + (c.comune ? '<div style="font-size:11px;color:var(--mut)">' + esc([c.indirizzo, c.comune, c.provincia].filter(Boolean).join(' — ')) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px">' + esc(c.piva || c.cf || '')
         + (manca ? '<span class="chip chip-a">dati fiscali mancanti</span>' : '') + '</td>'
@@ -8062,7 +8162,11 @@ function drawClienti() {
       + '</tr>';
   }).join('');
 
-  el('page').innerHTML = '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">'
+  const nDaCompl = S.clienti.filter(c => c.attivo !== false && datiMancantiCliente(c).length).length;
+  el('page').innerHTML = (nDaCompl && !S.clDaCompletare ? '<div class="wbox mb16" style="font-size:12.5px"><b>' + nDaCompl
+        + (nDaCompl === 1 ? ' scheda cliente è incompleta' : ' schede cliente sono incomplete')
+        + '</b>: mancano dati che servono per fatturare o per scrivere al cliente. Spunta «Solo da completare» per vederle.</div>' : '')
+    + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">'
       + list.length + (list.length === 1 ? ' cliente' : ' clienti')
       + (list.length !== S.clienti.length ? ' su ' + S.clienti.length : '') + '</div>'
     + '<div class="card"><div class="tw"><table class="tsm"><thead><tr>'
@@ -8100,12 +8204,20 @@ function openCliente(id, presetNome) {
   el('cl-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
 
   const comm = id ? commesseDi(id) : [];
-  el('cl-comm').innerHTML = comm.length
+  const mancano = datiMancantiCliente(c);
+  const prev = id ? (S.preventivi || []).filter(x => x.cliente_id === id) : [];
+  el('cl-comm').innerHTML = (c && mancano.length ? '<div class="wbox" style="margin-top:12px;font-size:12px">Mancano: <b>'
+        + esc(mancano.join(', ')) + '</b>.</div>' : '')
+    + (prev.length ? sez('Preventivi di questo cliente')
+        + prev.map(x => '<div class="spread" style="padding:5px 0;border-bottom:1px solid var(--bord);font-size:12.5px">'
+          + '<span>' + esc(numeroPreventivo(x)) + ' — ' + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + '</span>'
+          + '<span>' + bdg(x.stato, ST_PREV) + '</span></div>').join('') : '')
+    + (comm.length
     ? sez('Commesse di questo cliente')
       + comm.map(p => '<div class="spread" style="padding:5px 0;border-bottom:1px solid var(--bord);font-size:12.5px">'
           + '<span data-proj="' + p.id + '" style="cursor:pointer">' + esc(p.name) + '</span>'
           + '<span>' + bdg(p.status, ST_PROJ) + '</span></div>').join('')
-    : '';
+    : '');
   openM('m-cli');
 }
 

@@ -736,6 +736,25 @@ cui sono stati scritti. *Ripristina l'originale* torna al testo di partenza,
 `{{tel_studio}}`, `{{contatti_committente}}`: quando cambia la polizza si
 cambia una volta sola (`POLIZZA_STUDIO` in `index.html`).
 
+### Il committente entra in anagrafica
+
+Salvando un preventivo, il committente scritto a mano diventa una **scheda in
+Clienti** (persona fisica se c'è solo un codice fiscale personale), e il
+preventivo resta collegato a lei. Se il cliente c'è già — stesso nome, codice
+fiscale o partita IVA — non si duplica: ci si aggancia, e i dati che in
+anagrafica mancavano si completano con quelli del preventivo, senza toccare
+quelli già scritti. Nel campo «PEC o mail» una PEC va fra i dati fiscali, una
+mail normale fra i recapiti del referente.
+
+**I dati mancanti si segnalano**: mentre si scrive il preventivo un riquadro
+dice se il cliente entrerà in anagrafica o c'è già e che cosa manca; dopo il
+salvataggio un avviso arancione ripete cosa manca nella scheda. In *Clienti*
+le schede incomplete hanno il segno «da completare» (passandoci sopra si
+legge cosa manca), in cima c'è il conteggio e la casella *Solo da completare*
+le filtra; la scheda del cliente elenca i dati mancanti e i suoi preventivi.
+Si considera completa una scheda con codice fiscale o partita IVA, indirizzo,
+CAP, comune, codice SDI o PEC, email e telefono.
+
 ### Inviare il preventivo per email
 
 Dopo **Salva e scarica PDF** si apre la finestra di invio (oppure ✉️

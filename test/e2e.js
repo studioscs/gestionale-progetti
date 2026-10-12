@@ -3761,6 +3761,59 @@ function launchOpts(){
     must(await p.inputValue('[data-pv="progressivo"]')==='40','il numero scritto a mano è stato cambiato');
     await p.evaluate(()=>closeM('m-prev'));
   });
+  /* ---------------- PREVENTIVO → ANAGRAFICA CLIENTI ---------------- */
+  await t('un committente nuovo nel preventivo entra in anagrafica',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('preventivi'); });
+    await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    await p.fill('[data-pv="cliente_nome"]','Luigi Verdini');
+    await p.waitForTimeout(150);
+    const info=await p.textContent('#pv-cli-info');
+    must(/entra in anagrafica come nuovo cliente/.test(info),'non dice che verrà creato: '+info);
+    must(/Mancano:.*codice fiscale o partita IVA/.test(info)&&/telefono/.test(info),'non segnala i dati mancanti: '+info);
+    await p.fill('[data-pv="cliente_cf"]','vrdlgu70a01h211x'); await p.fill('[data-pv="cliente_comune"]','Recanati');
+    await p.fill('[data-pv="cliente_pec"]','luigi.verdini@gmail.com');
+    await p.waitForTimeout(150);
+    must(!/codice fiscale/.test(await p.textContent('#pv-cli-info')),'il codice fiscale scritto risulta ancora mancante');
+    await p.click('#pv-save'); await p.waitForTimeout(800);
+    const g=await p.evaluate(()=>{ const c=__DB.clienti.filter(x=>x.denominazione==='Luigi Verdini');
+      const pv=__DB.preventivi.find(x=>x.cliente_nome==='Luigi Verdini');
+      return {n:c.length,c:c[0],link:pv&&pv.cliente_id}; });
+    must(g.n===1,'schede cliente create: '+g.n);
+    must(g.link===g.c.id,'il preventivo non è collegato alla scheda');
+    must(g.c.cf==='VRDLGU70A01H211X'&&g.c.comune==='Recanati'&&g.c.tipo==='persona','dati della scheda: '+JSON.stringify(g.c));
+    must(g.c.referente_email==='luigi.verdini@gmail.com'&&!g.c.pec,'una mail normale è finita nella PEC');
+    must(/mancano:/i.test(await p.textContent('#tc')),'dopo il salvataggio non avvisa dei dati mancanti');
+  });
+  await t('lo stesso committente non si duplica, e la scheda si completa',async()=>{
+    await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    await p.fill('[data-pv="cliente_nome"]','LUIGI  verdini'); await p.waitForTimeout(150);
+    must(/In anagrafica: .*Luigi Verdini/.test(await p.textContent('#pv-cli-info')),'non riconosce il cliente esistente');
+    await p.fill('[data-pv="cliente_tel"]','333 1234567'); await p.fill('[data-pv="cliente_comune"]','Macerata');
+    await p.click('#pv-save'); await p.waitForTimeout(800);
+    const g=await p.evaluate(()=>({n:__DB.clienti.filter(x=>/luigi\s+verdini/i.test(x.denominazione)).length,
+      c:__DB.clienti.find(x=>x.denominazione==='Luigi Verdini')}));
+    must(g.n===1,'cliente duplicato: '+g.n);
+    must(g.c.referente_tel==='333 1234567','il telefono mancante non è stato aggiunto');
+    must(g.c.comune==='Recanati','un dato già presente in anagrafica è stato sovrascritto');
+  });
+  await t('in Clienti le schede incomplete si vedono e si filtrano',async()=>{
+    await p.evaluate(()=>{ S.clDaCompletare=false; go('clienti'); }); await p.waitForTimeout(300);
+    const txt=await p.textContent('#page');
+    must(/schede? cliente (è|sono) incomplet/.test(txt),'nessun avviso sulle schede incomplete');
+    const riga=await p.evaluate(()=>{ const c=__DB.clienti.find(x=>x.denominazione==='Luigi Verdini');
+      const r=document.querySelector('[data-cli="'+c.id+'"]'); return r?r.textContent:''; });
+    must(/da completare/.test(riga),'la riga del cliente non lo segnala: '+riga);
+    await p.check('#cl-dacompl'); await p.waitForTimeout(200);
+    must(await p.evaluate(()=>Array.from(document.querySelectorAll('[data-cli]')).every(r=>
+      datiMancantiCliente(byId(S.clienti,r.dataset.cli)).length>0)),'il filtro mostra schede complete');
+    await p.uncheck('#cl-dacompl');
+    const id=await p.evaluate(()=>__DB.clienti.find(x=>x.denominazione==='Luigi Verdini').id);
+    await p.evaluate(id=>openCliente(id),id); await p.waitForSelector('#m-cli.show',{timeout:4000});
+    const m=await p.textContent('#cl-comm');
+    must(/Mancano:.*codice SDI o PEC/.test(m),'la scheda non dice cosa manca: '+m);
+    must(/Preventivi di questo cliente/.test(m),'la scheda non mostra i suoi preventivi');
+    await p.evaluate(()=>closeM('m-cli'));
+  });
   await t('un collaboratore non vede i preventivi',async()=>{
     const txt=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('preventivi');
       return document.getElementById('page').textContent; });
