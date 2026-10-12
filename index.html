@@ -227,6 +227,14 @@ tbody tr:hover td { background:#f0f4f9; }
 .modal { background:#fff; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.25); width:600px; max-width:100%; max-height:92vh; display:flex; flex-direction:column; }
 .modal-sm { width:440px; }
 .modal-lg { width:840px; }
+/* Azioni dei preventivi: affiancate, e a capo quando lo spazio non basta */
+.pv-az { display:flex; gap:4px; justify-content:flex-end; flex-wrap:wrap; }
+.pv-mob { display:none; }
+@media (max-width:760px) {
+  .pv-tab th.pv-nasc, .pv-tab td.pv-nasc, .pv-tab .pv-desk { display:none; }
+  .pv-mob { display:block; margin-top:6px; }
+  .pv-az { justify-content:flex-start; }
+}
 .mh { padding:16px 20px 13px; border-bottom:1px solid var(--bord); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; }
 .mh h3 { font-size:15px; font-weight:600; }
 .mx { border:none; background:none; color:var(--mut); font-size:20px; cursor:pointer; line-height:1; padding:0 4px; }
@@ -1436,7 +1444,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.6';
+const VERSIONE = '2026.10.12.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5527,6 +5535,11 @@ const ST_PREV = {
 /* ---------------------------------------------------------------------------
    PAGINA: PREVENTIVI
    --------------------------------------------------------------------------- */
+const azioniPrev = x => '<div class="pv-az">'
+  + '<button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196; PDF</button>'
+  + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039; Email</button>'
+  + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Nuovo preventivo con le stesse voci">&#10697; Duplica</button>'
+  + '</div>';
 function rPreventivi() {
   if (!vedeTutto()) {
     el('page').innerHTML = '<div class="card"><div class="empty"><i>🔒</i>'
@@ -5573,19 +5586,22 @@ function rPreventivi() {
       + '<td style="white-space:nowrap"><b>' + esc(numeroPreventivo(x)) + '</b>'
         + '<div style="font-size:11px;color:var(--mut)">' + fdate(x.data) + '</div></td>'
       + '<td><b>' + esc(x.cliente_nome || '—') + '</b><div style="font-size:11px;color:var(--mut)">'
-        + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + (x.immobile ? ' · ' + esc(x.immobile) : '') + '</div></td>'
-      + '<td>' + bdg(x.stato, ST_PREV) + '</td>'
+        + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + (x.immobile ? ' · ' + esc(x.immobile) : '') + '</div>'
+        + '<div class="pv-mob">' + azioniPrev(x) + '</div></td>'
+      + '<td class="pv-nasc">' + bdg(x.stato, ST_PREV) + '</td>'
       + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(totalePreventivo(x)) + '</b></td>'
-      + '<td class="ac" style="white-space:nowrap"><button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196;</button> '
-        + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039;</button> '
-        + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Duplica: nuovo preventivo con le stesse voci">&#10697;</button></td>'
+      /* Pulsanti con la scritta: un'icona sola non dice che cosa fa, e la
+         duplicazione cosi' non la trovava nessuno. Sul telefono stanno sotto
+         il nome del committente, perche' in fondo alla riga uscirebbero dallo
+         schermo. */
+      + '<td class="ac pv-desk">' + azioniPrev(x) + '</td>'
       + '</tr>').join('');
 
   el('page').innerHTML = kpis + modelli
     + '<div class="card"><div class="card-h"><span class="card-t">Preventivi</span></div>'
     + (lista.length
-        ? '<div class="tw"><table class="tsm"><thead><tr><th>N.</th><th>Committente</th><th>Stato</th>'
-          + '<th style="text-align:right">Totale</th><th></th></tr></thead><tbody>' + righe + '</tbody></table></div>'
+        ? '<div class="tw"><table class="tsm pv-tab"><thead><tr><th>N.</th><th>Committente</th><th class="pv-nasc">Stato</th>'
+          + '<th style="text-align:right">Totale</th><th class="pv-desk"></th></tr></thead><tbody>' + righe + '</tbody></table></div>'
         : '<div class="empty"><i>📝</i><p>' + (filtro ? 'Nessun preventivo in questo stato.'
             : 'Nessun preventivo ancora. Scegli un modello qui sopra.') + '</p></div>')
     + '</div>';

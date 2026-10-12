@@ -117,6 +117,22 @@ const SCHERMI=[
       });
     }
 
+    await t(nome+': nei preventivi i pulsanti PDF, Email e Duplica si vedono, con la scritta',async()=>{
+      const g=await p.evaluate(async()=>{
+        await SB.from('preventivi').insert({anno:2026,progressivo:99,data:'2026-10-12',stato:'bozza',
+          cliente_nome:'Mario Rossi Costruzioni Generali',modello:'strutture',titolo:'PREVENTIVO TIPO STRUTTURE',
+          voci:[{descrizione:'Relazione',importo:1500,quantita:1}],articoli:[]});
+        await loadAll(true); go('preventivi');
+        /* il pulsante visibile: sul telefono quello sotto il nome, altrimenti quello in fondo alla riga */
+        const vis=k=>[...document.querySelectorAll('[data-'+k+']')].find(b=>b.getBoundingClientRect().width>0);
+        return ['prevpdf','prevmail','prevdup'].map(k=>{ const b=vis(k); if(!b) return k+': assente';
+          const r=b.getBoundingClientRect();
+          return (r.width>0&&r.left>=0&&r.right<=window.innerWidth+1)?'':k+': fuori schermo'; }).filter(Boolean)
+          .concat(/Duplica/.test((vis('prevdup')||{}).textContent||'')?[]:['senza la scritta Duplica']);
+      });
+      must(!g.length,g.join(', '));
+      await p.evaluate(()=>go('projects')); await p.waitForTimeout(300);
+    });
     await t(nome+': si apre una commessa toccandola',async()=>{
       await p.evaluate(()=>{ go('projects'); });
       await p.waitForTimeout(500);

@@ -3636,7 +3636,7 @@ function launchOpts(){
   });
   await t('il PDF del preventivo: numeri giusti e testi corretti',async()=>{
     const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').id);
-    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('[data-prevpdf="'+id+'"]')]);
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('.pv-desk [data-prevpdf="'+id+'"]')]);
     must(dl,'nessun PDF scaricato');
     must(/^Preventivo-1_\d\d\.pdf$/.test(dl.suggestedFilename()),dl.suggestedFilename());
     const txt=await testoPdf(await dl.path());
@@ -3656,8 +3656,8 @@ function launchOpts(){
   await t('dopo il PDF si apre l invio per email, già compilato',async()=>{
     const x=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi'));
     await p.evaluate(id=>{ go('preventivi'); },x.id); await p.waitForTimeout(300);
-    must(await p.locator('[data-prevmail="'+x.id+'"]').count()===1,'manca il pulsante email nella lista');
-    await p.click('[data-prevmail="'+x.id+'"]'); await p.waitForSelector('#m-mail.show',{timeout:4000});
+    must(await p.locator('.pv-desk [data-prevmail="'+x.id+'"]').count()===1,'manca il pulsante email nella lista');
+    await p.click('.pv-desk [data-prevmail="'+x.id+'"]'); await p.waitForSelector('#m-mail.show',{timeout:4000});
     must(await p.inputValue('#mm-a')==='mario.rossi@pec.it','destinatario non compilato');
     must(/^Preventivo n\. 1\/\d\d/.test(await p.inputValue('#mm-ogg')),'oggetto: '+(await p.inputValue('#mm-ogg')));
     const testo=await p.inputValue('#mm-testo');
@@ -3836,7 +3836,7 @@ function launchOpts(){
     const orig=await p.evaluate(()=>{ const x=__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl');
       return {id:x.id,prog:x.progressivo,voci:JSON.stringify(x.voci),stato:x.stato,n:__DB.preventivi.length}; });
     await p.evaluate(()=>go('preventivi')); await p.waitForTimeout(300);
-    await p.click('[data-prevdup="'+orig.id+'"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    await p.click('.pv-desk [data-prevdup="'+orig.id+'"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
     must(/copia del/.test(await p.textContent('#mpv-t')),'il titolo non dice che è una copia');
     const prop=await p.inputValue('[data-pv="progressivo"]');
     must(prop===String(await p.evaluate(()=>prossimoPreventivo(new Date().getFullYear()))),'numero proposto: '+prop);
