@@ -722,6 +722,66 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
+<!-- Scelta delle pratiche della commessa -->
+<div class="ov" id="m-pratsug">
+  <div class="modal">
+    <div class="mh"><h3 id="mps-t">Pratiche della commessa</h3><button class="mx" data-close="m-pratsug">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16" style="font-size:12px">Le pratiche non si creano più da sole: qui sotto ci sono
+        quelle che <b>questo tipo di lavoro fa prevedere</b>, già spuntate. Togli quelle che non servono,
+        aggiungi dal catalogo quelle che mancano. Potrai aggiungerne altre in qualsiasi momento.</div>
+      <input class="fc mb16" id="ps-q" placeholder="Cerca nel catalogo: ente, pratica, norma…">
+      <div id="ps-body"></div>
+      <label class="row" style="gap:6px;font-size:12.5px;margin-top:14px">
+        <input type="checkbox" id="ps-proc" checked> Crea anche la procura speciale da far firmare
+        per le pratiche telematiche</label>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-pratsug">Non ora</button>
+      <button class="btn btn-p" id="ps-go">Apri le pratiche</button>
+    </div>
+  </div>
+</div>
+
+<!-- Riordino delle pratiche mai toccate -->
+<div class="ov" id="m-riordina">
+  <div class="modal">
+    <div class="mh"><h3>Riordina le pratiche</h3><button class="mx" data-close="m-riordina">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox" style="font-size:12px">Pratiche nate in automatico che nessuno ha mai toccato: niente invio,
+        protocollo, responsabile, conversazione o attività collegata. Togli la spunta a quelle da tenere.</div>
+      <div id="rio-body"></div>
+      <label class="row" style="gap:6px;font-size:12.5px;margin-top:12px"><input type="checkbox" id="rio-proc" checked>
+        Togli anche le procure ancora da firmare che servivano solo a queste</label>
+    </div>
+    <div class="mf"><button class="btn" data-close="m-riordina">Annulla</button>
+      <button class="btn btn-d" id="rio-go">Togli le selezionate</button></div>
+  </div>
+</div>
+
+<!-- Voce del catalogo delle pratiche -->
+<div class="ov" id="m-pcat">
+  <div class="modal">
+    <div class="mh"><h3 id="mpc-t">Voce del catalogo</h3><button class="mx" data-close="m-pcat">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg2"><div class="fg"><label class="fl">Pratica *</label><input class="fc" id="pc-tipo" placeholder="Es. SCIA edilizia"></div>
+        <div class="fg"><label class="fl">Ente</label><input class="fc" id="pc-ente" list="dl-enti" placeholder="Es. Comune / SUE"></div></div>
+      <div class="fg3"><div class="fg"><label class="fl">Riferimento normativo</label><input class="fc" id="pc-rif"></div>
+        <div class="fg"><label class="fl">Termine (giorni)</label><input class="fc" type="number" min="0" id="pc-gg"></div>
+        <div class="fg"><label class="fl">Ordine nella sequenza</label><input class="fc" type="number" min="0" id="pc-ord">
+          <div class="hint">10 = all’inizio, 90 = alla fine</div></div></div>
+      <div class="fg"><label class="fl">Proposta per</label><select class="fc" id="pc-cond"></select></div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="pc-note" rows="2"></textarea></div>
+      <label class="row" style="gap:6px;font-size:12.5px;margin-bottom:8px"><input type="checkbox" id="pc-proc">
+        Pratica telematica: serve la procura speciale del committente</label>
+      <label class="row" style="gap:6px;font-size:12.5px"><input type="checkbox" id="pc-attivo">
+        Proponila nelle nuove commesse</label>
+    </div>
+    <div class="mf"><span class="left"><button class="btn" id="pc-ripr" style="display:none">Ripristina l’originale</button></span>
+      <button class="btn" data-close="m-pcat">Annulla</button><button class="btn btn-p" id="pc-save">Salva</button></div>
+  </div>
+</div>
+
 <!-- Atto di incarico o integrazione -->
 <div class="ov" id="m-contr">
   <div class="modal modal-sm">
@@ -1050,6 +1110,15 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Scadenza</label><input type="date" class="fc" id="tt-d"><div id="tt-quick" class="row" style="margin-top:6px;flex-wrap:wrap"></div></div>
         <div class="fg"><label class="fl">Ente / riferimento</label><input class="fc" id="tt-ente" placeholder="Es. Soprintendenza"><div class="hint" id="tt-rif"></div></div>
       </div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Pratica collegata</label><select class="fc" id="tt-prat"></select>
+          <div class="hint" id="tt-prat-hint"></div></div>
+        <div class="fg"><label class="fl">Ruolo nel processo della pratica</label>
+          <select class="fc" id="tt-pruolo">
+            <option value="inizio">&#9654;&#65039; Iniziale: completandola la pratica è inviata</option>
+            <option value="fine">&#127937; Conclusiva: completandola la pratica è conclusa</option>
+          </select></div>
+      </div>
       <div id="tt-cont"></div>
       <div class="fg"><label class="fl">Note</label><textarea class="fc" id="tt-no" rows="3"></textarea>
         <div class="hint">Le note sono tue e restano ferme. Per parlarne con gli altri usa la
@@ -1121,6 +1190,7 @@ tbody tr:hover td { background:#f0f4f9; }
       </div>
       <div class="fg"><label class="fl">Riferimento normativo</label><input class="fc" id="pr-rif"></div>
       <div class="fg"><label class="fl">Note</label><textarea class="fc" id="pr-note" rows="2"></textarea></div>
+      <div id="pr-att"></div>
       </div>
       <div id="pr-tab-chat" style="display:none">
         <div class="ibox mb16">Scambio rapido di informazioni fra chi segue la pratica.
@@ -1365,7 +1435,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.1';
+const VERSIONE = '2026.10.12.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1388,11 +1458,11 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '',
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche',
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
-  prQ:'', prBucket:'', prProj:'', prEnte:'', prResp:'', prGroup:'ente', prTab:'dati',
+  prQ:'', prBucket:'aperte', prProj:'', prEnte:'', prResp:'', prGroup:'proj', prTab:'dati',
 
   /* Filtri e ricerche delle pagine. Dichiararli qui non e' pignoleria: se una
      chiave nasce al primo assegnamento, un refuso non da' errore ma crea una
@@ -1567,7 +1637,8 @@ const MIGRAZIONI = {
   '029_ore_zero_esterni':    ['ck_ore_o_parcella'],
   '030_isa':                 ['isa_tipo','anno_competenza'],
   '031_costi_generali':      ['costi_generali'],
-  '032_proforma_preventivi': ['proforma_numero','proforma_data','proforma_at','preventivi','preventivo_modelli']
+  '032_proforma_preventivi': ['proforma_numero','proforma_data','proforma_at','preventivi','preventivo_modelli'],
+  '033_catalogo_pratiche':   ['pratiche_catalogo','pratica_ruolo']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -2893,7 +2964,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm] = await Promise.all([
+    const [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm, rpc] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS).order('sort_order'),
@@ -2914,7 +2985,8 @@ async function loadAll(silent) {
       SB.from('commessa_spese').select('*').order('data_spesa'),
       SB.from('costi_generali').select('*').order('data_spesa', {ascending:false}),
       SB.from('preventivi').select('*').order('anno', {ascending:false}).order('progressivo', {ascending:false}),
-      SB.from('preventivo_modelli').select('*').order('ordine')
+      SB.from('preventivo_modelli').select('*').order('ordine'),
+      SB.from('pratiche_catalogo').select('*').order('ordine')
     ]);
     const err = rp.error || rj.error || rt.error || rf.error || rr.error;
     if (err) { sbErr(err, 'loadAll'); return false; }
@@ -2944,6 +3016,7 @@ async function loadAll(silent) {
     /* Anche i preventivi e i modelli li legge solo l'amministrazione */
     S.preventivi  = rpv.error ? [] : (rpv.data || []);
     S.modelliPrev = rpm.error ? [] : (rpm.data || []);
+    S.pratCat     = rpc.error ? [] : (rpc.data || []);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -2956,7 +3029,8 @@ async function loadAll(silent) {
                      [rfr, 'commessa_fattura_righe'],
                      [rsp, 'commessa_spese'],
                      [rcg, 'costi_generali'],
-                     [rpv, 'preventivi'],      [rpm, 'preventivo_modelli']]);
+                     [rpv, 'preventivi'],      [rpm, 'preventivo_modelli'],
+                     [rpc, 'pratiche_catalogo']]);
     S.loaded = true;
     updBadges(); paintBell();
     return true;
@@ -2970,6 +3044,25 @@ const tasksOf   = pid => S.tasks.filter(t => t.project_id === pid);
 const fasiOf    = pid => S.fasi.filter(f => f.project_id === pid).sort((a,b) => a.ordine - b.ordine);
 /* Sempre in sequenza di esecuzione: e' l'ordine in cui vanno effettivamente
    presentate, e vederle cosi' e' meta' del lavoro. */
+/* IL CATALOGO DELLE PRATICHE
+   La base e' PRATICHE_CAT, scritta qui; la tabella pratiche_catalogo
+   (migrazione 033) tiene le voci che lo studio ha corretto, aggiunto o tolto
+   dalle proposte. Per chiave: la riga dello studio vince su quella di base. */
+const daRigaCatalogo = r => ({ k: r.chiave, ente: r.ente || '', tipo: r.tipo, rif: r.rif || '',
+  gg: r.giorni == null ? null : Number(r.giorni), ord: r.ordine == null ? 50 : Number(r.ordine),
+  proc: r.procura ? 1 : 0, cond: r.condizione || undefined, note: r.note || '', attivo: r.attivo !== false,
+  _id: r.id });
+function catalogoPratiche(tutte) {
+  const db = (S.pratCat || []).map(daRigaCatalogo);
+  const base = PRATICHE_CAT.map(c => { const m = db.find(x => x.k === c.k);
+    return m ? Object.assign({}, c, m, { base: true, modificata: true })
+             : Object.assign({ base: true, modificata: false, attivo: true }, c); });
+  const proprie = db.filter(x => !PRATICHE_CAT.some(c => c.k === x.k))
+    .map(x => Object.assign({ base: false, modificata: true }, x));
+  return base.concat(proprie).filter(c => tutte || c.attivo !== false);
+}
+const voceCatalogo = k => catalogoPratiche(true).find(c => c.k === k) || null;
+
 const praticheOf= pid => S.pratiche.filter(p => p.project_id === pid)
   .sort((a, b) => ((a.ordine == null ? 50 : a.ordine) - (b.ordine == null ? 50 : b.ordine))
                   || String(a.tipo || '').localeCompare(String(b.tipo || '')));
@@ -3191,8 +3284,11 @@ function pianifica(tplKey, conds, dataInizio) {
   const attiva = p => !p.cond || conds.indexOf(p.cond) >= 0;
   /* Ordinate per sequenza di esecuzione, non per come capitano nel catalogo:
      l'ordine in cui si presentano le pratiche e' esso stesso un'informazione. */
-  const prat = PRATICHE_CAT.filter(p => tpl.prat
-    ? (tpl.prat.indexOf(p.k) >= 0 && attiva(p))
+  /* Le voci aggiunte dallo studio al catalogo valgono anche per i percorsi
+     con l'elenco chiuso: chi le ha scritte con una condizione vuole vederle
+     proposte quando quella condizione c'e'. */
+  const prat = catalogoPratiche().filter(p => tpl.prat
+    ? ((tpl.prat.indexOf(p.k) >= 0 && attiva(p)) || (!p.base && p.cond && conds.indexOf(p.cond) >= 0))
     : ((p.cond && conds.indexOf(p.cond) >= 0) || (tpl.pratBase || []).indexOf(p.k) >= 0))
     .sort((a, b) => (a.ord || 50) - (b.ord || 50));
   return { fasi: out, pratiche: prat, tpl };
@@ -3213,17 +3309,19 @@ function righeDaPiano(plan) {
      firme: e' il motivo per cui quella fase sta all'inizio e non alla fine.
      La procura vale per una sola pratica (art. 1392 c.c.), quindi vanno
      generate e fatte firmare tutte nella stessa seduta. */
-  const pianoFirme = plan.fasi.find(f => f.fase_key === 'firme');
-  if (pianoFirme) {
-    const scad = pianoFirme.data_fine_prevista;
-    plan.pratiche.filter(x => x.proc).forEach((x, i) => out.push({
-      fase_key: 'firme',
-      r: { title: 'Procura speciale — ' + x.ente + ': ' + x.tipo,
-           rif_normativo: 'art. 1392 c.c.', ente: x.ente,
-           categoria: 'firma_cliente', priority: 'alta',
-           estimated_hours: 0.5, sort_order: 100 + i, due_date: scad } }));
-  }
+  /* Le procure non nascono piu' qui: nascono insieme alle pratiche che si
+     decide di aprire (vedi aggiungiPratiche), una per pratica telematica. */
   return out;
+}
+
+/* La procura speciale di una pratica telematica, come riga di attivita' */
+function rigaProcura(pid, fase, x, i) {
+  return rigaAttivita(pid, null, fase ? fase.id : null, {
+    title: 'Procura speciale — ' + (x.ente || 'Ente') + ': ' + x.tipo,
+    rif_normativo: 'art. 1392 c.c.', ente: x.ente || null,
+    categoria: 'firma_cliente', priority: 'alta',
+    estimated_hours: 0.5, sort_order: 100 + (i || 0),
+    due_date: fase ? (fase.data_fine_prevista || null) : null });
 }
 
 /* ---------------------------------------------------------------------------
@@ -3294,22 +3392,19 @@ function differenzaStruttura(pid, tplKey, conds, dataInizio) {
     tasksFase(f.id).forEach(t => {
       if (attesi && attesi[t.title]) return;   // ancora prevista
       if (!t.template_key) return;             // aggiunta a mano: non e' roba nostra
+      if (/^Procura speciale/.test(t.title)) return;  // segue la sua pratica, non il percorso
       const bloccata = t.status !== 'da_fare' ? 'già avviata o chiusa'
                      : (S.chatTask[t.id] ? 'ha una conversazione' : null);
       (bloccata ? attProtette : attObsolete).push({ t, fase: f, perche: bloccata });
     });
   });
 
-  const chiaviPiano = plan.pratiche.map(x => x.k);
+  /* LE PRATICHE NON LE DECIDE PIU' IL PERCORSO
+     Il piano le PROPONE (pratProposte) e si scelgono dopo, dal catalogo:
+     aggiornare il percorso non ne aggiunge e non ne toglie nessuna. */
   const esistenti   = praticheOf(pid);
-  const pratNuove   = plan.pratiche.filter(x => !esistenti.some(e => e.pratica_key === x.k));
-  const pratObsolete = [], pratProtette = [];
-  esistenti.forEach(e => {
-    if (!e.pratica_key || chiaviPiano.indexOf(e.pratica_key) >= 0) return;
-    const bloccata = e.stato !== 'da_preparare' ? 'non è più da preparare'
-                   : (e.protocollo || e.data_invio) ? 'già inviata' : null;
-    (bloccata ? pratProtette : pratObsolete).push({ p: e, perche: bloccata });
-  });
+  const pratProposte = plan.pratiche.filter(x => !esistenti.some(e => e.pratica_key === x.k));
+  const pratNuove = [], pratObsolete = [], pratProtette = [];
 
   /* Una fase si toglie solo se resta davvero vuota */
   const fasiObsolete = fasiOf(pid).filter(f => {
@@ -3319,9 +3414,100 @@ function differenzaStruttura(pid, tplKey, conds, dataInizio) {
   });
 
   return { plan, fasiNuove, attNuove, attObsolete, attProtette,
-           pratNuove, pratObsolete, pratProtette, fasiObsolete,
+           pratNuove, pratObsolete, pratProtette, pratProposte, fasiObsolete,
            nulla: !fasiNuove.length && !attNuove.length && !pratNuove.length
                   && !attObsolete.length && !pratObsolete.length };
+}
+
+/* ===========================================================================
+   SCELTA DELLE PRATICHE DELLA COMMESSA
+   Il percorso propone, chi lavora decide. Le proposte arrivano spuntate (sono
+   quelle che il tipo di lavoro e le condizioni della commessa fanno
+   prevedere), tutto il resto del catalogo e' li' sotto se serve altro.
+   =========================================================================== */
+function proposteDi(pid) {
+  const p = byId(S.projects, pid); if (!p) return [];
+  const conds = Array.isArray(p.condizioni) ? p.condizioni : [];
+  const esistenti = praticheOf(pid).map(x => x.pratica_key);
+  return pianifica(p.template_key || 'vuoto', conds, p.start_date).pratiche
+    .filter(x => esistenti.indexOf(x.k) < 0);
+}
+let PS = null;
+function apriSceltaPratiche(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  const proposte = proposteDi(pid);
+  PS = { pid, proposte: proposte.map(x => x.k), scelte: new Set(proposte.map(x => x.k)), q: '' };
+  el('mps-t').textContent = 'Pratiche di «' + p.name + '»';
+  el('ps-q').value = '';
+  el('ps-proc').checked = true;
+  disegnaSceltaPratiche();
+  openM('m-pratsug');
+}
+function disegnaSceltaPratiche() {
+  const esistenti = praticheOf(PS.pid).map(x => x.pratica_key);
+  const q = PS.q.toLowerCase();
+  const cat = catalogoPratiche().filter(c => esistenti.indexOf(c.k) < 0)
+    .filter(c => !q || ((c.ente || '') + ' ' + c.tipo + ' ' + (c.rif || '')).toLowerCase().includes(q))
+    .sort((a, b) => (a.ord || 50) - (b.ord || 50));
+  const riga = c => '<label class="row" style="gap:8px;align-items:flex-start;padding:6px 2px;border-bottom:1px solid var(--bord);cursor:pointer">'
+    + '<input type="checkbox" data-psk="' + esc(c.k) + '"' + (PS.scelte.has(c.k) ? ' checked' : '') + ' style="margin-top:3px">'
+    + '<span style="flex:1"><b>' + esc(c.tipo) + '</b>' + (c.ente ? ' <span style="color:var(--mut)">— ' + esc(c.ente) + '</span>' : '')
+      + '<div style="font-size:11px;color:var(--mut)">' + esc(c.rif || '')
+      + (c.gg ? (c.rif ? ' · ' : '') + c.gg + ' gg' : '') + (c.proc ? ' · <span style="color:var(--blue)">procura</span>' : '')
+      + '</div></span></label>';
+  const prop = cat.filter(c => PS.proposte.indexOf(c.k) >= 0);
+  const altre = cat.filter(c => PS.proposte.indexOf(c.k) < 0);
+  const gruppi = {};
+  altre.forEach(c => (gruppi[c.ente || 'Altro'] = gruppi[c.ente || 'Altro'] || []).push(c));
+  el('ps-body').innerHTML =
+      (prop.length ? sez('Proposte per questo lavoro', 'già spuntate') + prop.map(riga).join('')
+        : (q ? '' : '<div class="hint">Il percorso di questa commessa non prevede pratiche particolari: '
+                  + 'scegli dal catalogo quelle che servono.</div>'))
+    + sez('Tutto il catalogo')
+    + (Object.keys(gruppi).sort().map(g => '<div style="font-size:11.5px;font-weight:700;margin:10px 0 2px;color:var(--navy)">'
+        + esc(g) + '</div>' + gruppi[g].map(riga).join('')).join('')
+       || '<div class="hint">Nessuna voce del catalogo corrisponde alla ricerca.</div>');
+  const n = PS.scelte.size;
+  el('ps-go').textContent = n ? 'Apri ' + n + (n === 1 ? ' pratica' : ' pratiche') : 'Nessuna pratica scelta';
+  el('ps-go').disabled = !n;
+}
+
+/* Apre le pratiche scelte e, per quelle telematiche, la procura speciale da
+   far firmare: una per pratica (art. 1392 c.c.), nella fase delle firme. */
+async function aggiungiPratiche(pid, chiavi, conProcura) {
+  const voci = chiavi.map(voceCatalogo).filter(Boolean).sort((a, b) => (a.ord || 50) - (b.ord || 50));
+  if (!voci.length) return 0;
+  const righe = voci.map(c => ({
+    project_id: pid, pratica_key: c.k, ente: c.ente || 'Da definire', tipo: c.tipo,
+    rif_normativo: c.rif || null, termine_giorni: c.gg == null ? null : c.gg, ordine: c.ord || 50,
+    note: c.note || null, stato: 'da_preparare', created_by: S.me.id }));
+  const { error } = await SB.from('commessa_pratiche').insert(righe);
+  if (error) { sbErr(error, 'apri pratiche'); return 0; }
+  let nProc = 0;
+  if (conProcura) {
+    const firme = fasiOf(pid).find(f => f.fase_key === 'firme') || null;
+    const gia = S.tasks.filter(t => t.project_id === pid).map(t => t.title);
+    /* Come prima: la procura sta nella fase delle firme, e dove il percorso
+       quella fase non la prevede non la si inventa. */
+    const proc = (firme ? voci.filter(c => c.proc) : []).map((c, i) => rigaProcura(pid, firme, c, i))
+      .filter(r => gia.indexOf(r.title) < 0);
+    if (proc.length) {
+      const r = await SB.from('tasks').insert(proc);
+      if (r.error) sbErr(r.error, 'procure speciali'); else nProc = proc.length;
+    }
+    if (nProc && firme) { await loadAll(true); await syncFase(firme.id); }
+  }
+  return { prat: righe.length, proc: nProc };
+}
+async function confermaSceltaPratiche() {
+  if (!PS || !PS.scelte.size) return;
+  setLoading('ps-go', true);
+  const r = await aggiungiPratiche(PS.pid, Array.from(PS.scelte), el('ps-proc').checked);
+  setLoading('ps-go', false);
+  if (!r) return;
+  closeM('m-pratsug'); await loadAll(true); render();
+  toast('Aperte ' + r.prat + (r.prat === 1 ? ' pratica' : ' pratiche')
+    + (r.proc ? ' e ' + r.proc + (r.proc === 1 ? ' procura' : ' procure') + ' da far firmare' : ''), 'success');
 }
 
 /* ===========================================================================
@@ -3960,6 +4146,7 @@ function itemRow(t, showProj) {
     + '<div class="it-m">'
       + '<div class="it-t">' + (t.categoria === 'firma_cliente' ? '<span title="Serve la firma del cliente">✍️ </span>' : '')
       + (t.is_milestone ? '<b>' : '') + esc(t.title) + (t.is_milestone ? '</b> <span class="chip chip-a">milestone</span>' : '')
+      + chipPratica(t)
       + (t.opzionale ? ' <span class="chip">opzionale</span>' : '') + '</div>'
       + (sub.length ? '<div class="it-s">' + sub.join('<span style="color:var(--mut2)">·</span>') + '</div>' : '')
     + '</div>'
@@ -8353,8 +8540,14 @@ function statBox(l, v, alert) {
 
 function pratichePanel(pid) {
   const list = praticheOf(pid);
-  if (!list.length) return '<div class="card"><div class="empty"><i>🏛️</i><p>Nessuna pratica registrata.</p>'
-    + (canW() ? '<button class="btn btn-p" data-newp="" style="margin-top:10px">＋ Aggiungi pratica</button>' : '') + '</div></div>';
+  const nProp = proposteDi(pid).length;
+  const scegli = canW() ? '<button class="btn btn-sm' + (list.length ? '' : ' btn-p') + '" data-act="sceltapratiche">'
+    + '&#128203; Dal catalogo' + (nProp ? ' <span class="chip chip-c">' + nProp + (nProp === 1 ? ' proposta' : ' proposte') + '</span>' : '') + '</button>' : '';
+  if (!list.length) return '<div class="card"><div class="empty"><i>🏛️</i><p>Nessuna pratica aperta.</p>'
+    + '<p style="font-size:12px;margin-top:4px">Scegli dal catalogo quelle che servono a questo lavoro'
+    + (nProp ? ': il percorso ne propone ' + nProp : '') + '.</p>'
+    + (canW() ? '<div class="row" style="justify-content:center;gap:8px;margin-top:10px">' + scegli
+        + '<button class="btn btn-sm" data-newp="">＋ Pratica a mano</button></div>' : '') + '</div></div>';
 
   const rows = list.map(p => {
     const late = praticaLate(p);
@@ -8371,7 +8564,7 @@ function pratichePanel(pid) {
   }).join('');
 
   return '<div class="card"><div class="card-h"><span class="card-t">Pratiche e autorizzazioni</span>'
-    + (canW() ? '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button>' : '') + '</div>'
+    + (canW() ? '<span class="row" style="gap:6px">' + scegli + '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button></span>' : '') + '</div>'
     + '<div class="tw"><table><thead><tr><th>Ente / Pratica</th><th>Stato</th><th>Protocollo</th><th>Invio</th>'
     + '<th>Scadenza termine</th><th>Responsabile</th><th>Riferimento</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="wbox" style="margin-top:12px">I termini precaricati sono <b>indicativi</b>: verifica sempre '
@@ -8770,6 +8963,9 @@ function orePanel(pid) {
    PAGINA: PRATICHE (trasversale)
    =========================================================================== */
 const BUCKET = {
+  /* La vista di partenza: quello che e' ancora in piedi. Le concluse e quelle
+     non necessarie stanno sotto "Concluse", non in mezzo al lavoro. */
+  aperte: { l:'Aperte',          f: p => praticaOpen(p) },
   todo: { l:'Da preparare',      f: p => ['da_preparare','in_preparazione'].includes(p.stato) },
   ente: { l:'Presso l\'ente',    f: p => ['inviata','integrazioni','sospesa'].includes(p.stato) },
   late: { l:'In ritardo',        f: p => praticaLate(p), warn:1 },
@@ -8785,7 +8981,10 @@ function praticheNonLette() {
 
 function filtraPratiche() {
   const q = (S.prQ || '').toLowerCase();
+  /* Le pratiche delle commesse archiviate non sono piu' lavoro: fuori */
+  const archiviate = new Set(S.projects.filter(x => x.archiviato).map(x => x.id));
   return S.pratiche.filter(p => {
+    if (archiviate.has(p.project_id) && S.prProj !== p.project_id) return false;
     if (S.prBucket && !BUCKET[S.prBucket].f(p)) return false;
     if (S.prProj && p.project_id !== S.prProj) return false;
     if (S.prEnte && p.ente !== S.prEnte) return false;
@@ -8800,12 +8999,25 @@ function filtraPratiche() {
 }
 
 function rPratiche() {
+  const cat = S.prVista === 'catalogo';
   el('top-act').innerHTML =
-      '<input class="srch" id="pf-q" placeholder="Cerca ente, pratica, protocollo..." value="' + esc(S.prQ) + '">'
-    + (canW() ? '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button>' : '');
-  el('pf-q').oninput = e => { S.prQ = e.target.value; drawPratiche(); };
-  drawPratiche();
+      '<button class="btn btn-sm" data-act="prvista">' + (cat ? '&#127963; Torna alle pratiche' : '&#128203; Catalogo pratiche') + '</button> '
+    + '<input class="srch" id="pf-q" placeholder="' + (cat ? 'Cerca nel catalogo...' : 'Cerca ente, pratica, protocollo...')
+      + '" value="' + esc(S.prQ) + '">'
+    + (cat ? (vedeTutto() ? ' <button class="btn btn-p btn-sm" data-act="pcnuova">＋ Voce di catalogo</button>' : '')
+           : (canW() ? '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button>' : ''));
+  el('pf-q').oninput = e => { S.prQ = e.target.value; cat ? drawCatalogo() : drawPratiche(); };
+  cat ? drawCatalogo() : drawPratiche();
 }
+
+/* Pratiche nate in automatico e mai toccate: nessun invio, protocollo,
+   responsabile, conversazione o attivita' collegata. Sono il disordine. */
+const praticaIntatta = p => p.stato === 'da_preparare' && !p.protocollo && !p.data_invio
+  && !p.responsabile_id && !S.chat[p.id] && !S.tasks.some(t => t.pratica_id === p.id);
+const praticheIntatte = () => {
+  const arch = new Set(S.projects.filter(x => x.archiviato).map(x => x.id));
+  return S.pratiche.filter(p => !arch.has(p.project_id) && praticaIntatta(p));
+};
 
 function drawPratiche() {
   const enti = Array.from(new Set(S.pratiche.map(p => p.ente).filter(Boolean))).sort();
@@ -8836,7 +9048,7 @@ function drawPratiche() {
       + [['ente','Per ente'],['proj','Per commessa'],['stato','Per stato'],['','Elenco per scadenza']]
         .map(o => '<option value="' + o[0] + '"' + (S.prGroup === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('')
     + '</select>'
-    + (S.prQ || S.prBucket || S.prProj || S.prEnte || S.prResp
+    + (S.prQ || S.prBucket !== 'aperte' || S.prProj || S.prEnte || S.prResp
         ? '<button class="btn btn-sm" data-act="prreset">Azzera filtri</button>' : '')
     + '</div>';
 
@@ -8873,7 +9085,12 @@ function drawPratiche() {
     }).join('');
   }
 
+  const intatte = puoEliminarePratica() ? praticheIntatte().length : 0;
   el('page').innerHTML = bar
+    + (intatte ? '<div class="wbox mb16 spread" style="gap:10px;align-items:center"><span><b>' + intatte
+        + (intatte === 1 ? ' pratica creata e mai toccata' : ' pratiche create e mai toccate')
+        + '</b>: nessun invio, protocollo, responsabile, conversazione o attività collegata. '
+        + 'Probabilmente non servono.</span><button class="btn btn-sm" data-act="riordina">&#129529; Riordina</button></div>' : '')
     + '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">' + list.length
     + (list.length === 1 ? ' pratica' : ' pratiche')
     + (list.length !== S.pratiche.length ? ' su ' + S.pratiche.length : '') + '</div>'
@@ -8915,6 +9132,117 @@ function tabellaPratiche(list, nLette, mostraCommessa) {
     + '</tbody></table></div>';
 }
 
+/* ---------------------------------------------------------------------------
+   RIORDINO: togliere le pratiche mai toccate
+   Elenco per commessa, tutto spuntato; si tolgono quelle selezionate e, se lo
+   si chiede, le procure ancora da firmare che servivano solo a quelle.
+   --------------------------------------------------------------------------- */
+const titoloProcura = p => 'Procura speciale — ' + (p.ente || 'Ente') + ': ' + p.tipo;
+function procuraDi(p) {
+  return S.tasks.find(t => t.project_id === p.project_id && t.title === titoloProcura(p) && t.status === 'da_fare') || null;
+}
+function apriRiordino() {
+  const list = praticheIntatte();
+  const g = {};
+  list.forEach(p => (g[p.project_id] = g[p.project_id] || []).push(p));
+  el('rio-body').innerHTML = Object.keys(g).sort((a, b) => pn(a).localeCompare(pn(b))).map(pid =>
+      '<div style="font-size:12px;font-weight:700;margin:12px 0 4px;color:var(--navy)">' + esc(pn(pid)) + '</div>'
+    + g[pid].map(p => '<label class="row" style="gap:8px;padding:4px 2px;cursor:pointer;font-size:12.5px">'
+        + '<input type="checkbox" data-rio="' + p.id + '" checked> ' + esc((p.ente ? p.ente + ' — ' : '') + p.tipo)
+        + (procuraDi(p) ? ' <span style="color:var(--mut);font-size:11px">(+ procura da firmare)</span>' : '')
+        + '</label>').join('')).join('');
+  el('rio-proc').checked = true;
+  openM('m-riordina');
+}
+async function eseguiRiordino() {
+  const ids = qsa('[data-rio]', el('rio-body')).filter(c => c.checked).map(c => c.dataset.rio);
+  if (!ids.length) return toast('Nessuna pratica selezionata.', 'error');
+  if (!confirm('Togliere ' + ids.length + (ids.length === 1 ? ' pratica' : ' pratiche') + ' mai toccate?')) return;
+  const proc = el('rio-proc').checked
+    ? ids.map(id => procuraDi(byId(S.pratiche, id) || {})).filter(Boolean).map(t => t.id) : [];
+  setLoading('rio-go', true);
+  const { error } = await SB.from('commessa_pratiche').delete().in('id', ids);
+  if (!error && proc.length) {
+    const r = await SB.from('tasks').delete().in('id', proc);
+    if (r.error) sbErr(r.error, 'procure');
+  }
+  setLoading('rio-go', false);
+  if (error) return sbErr(error, 'riordino pratiche');
+  closeM('m-riordina'); await loadAll(true); render();
+  toast('Tolte ' + ids.length + ' pratiche' + (proc.length ? ' e ' + proc.length + ' procure' : ''), 'success');
+}
+
+/* ---------------------------------------------------------------------------
+   IL CATALOGO DELLE PRATICHE
+   --------------------------------------------------------------------------- */
+const nomeCondizione = k => (CONDIZIONI.find(c => c.k === k) || {}).l || '';
+function drawCatalogo() {
+  const q = (S.prQ || '').toLowerCase();
+  const list = catalogoPratiche(true)
+    .filter(c => !q || ((c.ente || '') + ' ' + c.tipo + ' ' + (c.rif || '')).toLowerCase().includes(q))
+    .sort((a, b) => (a.ord || 50) - (b.ord || 50) || String(a.tipo).localeCompare(String(b.tipo)));
+  const modifica = vedeTutto();
+  el('page').innerHTML = '<div class="ibox mb16" style="font-size:12.5px">Le pratiche che lo studio può aprire. '
+    + 'Dopo aver creato una commessa il gestionale <b>propone</b> quelle adatte al tipo di lavoro e alle sue '
+    + 'condizioni (colonna «Proposta per»), e si scelgono quelle che servono.'
+    + (modifica ? ' Clicca una voce per correggerla, toglierla dalle proposte o aggiungerne di nuove.' : '') + '</div>'
+    + '<div class="card"><div class="tw"><table class="tsm"><thead><tr><th>Pratica</th><th>Norma</th>'
+    + '<th style="text-align:right">Termine</th><th>Procura</th><th>Proposta per</th><th></th></tr></thead><tbody>'
+    + list.map(c => '<tr' + (modifica ? ' data-pcat="' + esc(c.k) + '" style="cursor:pointer' + (c.attivo === false ? ';opacity:.5' : '') + '"'
+          : (c.attivo === false ? ' style="opacity:.5"' : '')) + '>'
+        + '<td><b>' + esc(c.tipo) + '</b><div style="font-size:11px;color:var(--mut)">' + esc(c.ente || '') + '</div></td>'
+        + '<td style="font-size:11.5px;color:var(--mut)">' + esc(c.rif || '') + '</td>'
+        + '<td style="text-align:right;font-size:12px">' + (c.gg ? c.gg + ' gg' : '—') + '</td>'
+        + '<td style="font-size:12px">' + (c.proc ? 'sì' : '') + '</td>'
+        + '<td style="font-size:11.5px">' + esc(nomeCondizione(c.cond) || (c.cond ? c.cond : 'tutti i lavori del percorso')) + '</td>'
+        + '<td style="font-size:11px;white-space:nowrap">' + (c.attivo === false ? '<span class="bdg bgr">non proposta</span>'
+            : (!c.base ? '<span class="bdg bb">dello studio</span>' : c.modificata ? '<span class="bdg by">modificata</span>' : '')) + '</td>'
+        + '</tr>').join('')
+    + '</tbody></table></div></div>';
+}
+let PCAT = null;
+function apriVoceCatalogo(k) {
+  const c = k ? voceCatalogo(k) : null;
+  PCAT = c ? c.k : null;
+  el('mpc-t').textContent = c ? 'Voce del catalogo' : 'Nuova voce del catalogo';
+  el('pc-tipo').value = c ? c.tipo : '';
+  el('pc-ente').value = c ? (c.ente || '') : '';
+  el('pc-rif').value  = c ? (c.rif || '') : '';
+  el('pc-gg').value   = c && c.gg != null ? c.gg : '';
+  el('pc-ord').value  = c ? (c.ord || 50) : 50;
+  el('pc-proc').checked = !!(c && c.proc);
+  el('pc-cond').innerHTML = '<option value="">Tutti i lavori il cui percorso la prevede</option>'
+    + CONDIZIONI.map(x => '<option value="' + x.k + '"' + (c && c.cond === x.k ? ' selected' : '') + '>Quando c’è: '
+      + esc(x.l) + '</option>').join('');
+  el('pc-note').value = c ? (c.note || '') : '';
+  el('pc-attivo').checked = !c || c.attivo !== false;
+  el('pc-ripr').style.display = c && c.base && c.modificata ? 'inline-flex' : 'none';
+  openM('m-pcat');
+}
+async function salvaVoceCatalogo() {
+  const tipo = el('pc-tipo').value.trim();
+  if (!tipo) return toast('Scrivi il nome della pratica.', 'error');
+  const gg = el('pc-gg').value;
+  const pay = { chiave: PCAT || 'cat_' + Date.now().toString(36), tipo, ente: el('pc-ente').value.trim() || null,
+    rif: el('pc-rif').value.trim() || null, giorni: gg === '' ? null : Math.max(0, parseInt(gg, 10) || 0),
+    ordine: parseInt(el('pc-ord').value, 10) || 50, procura: el('pc-proc').checked,
+    condizione: el('pc-cond').value || null, note: el('pc-note').value.trim() || null,
+    attivo: el('pc-attivo').checked, updated_by: S.me.id };
+  const riga = (S.pratCat || []).find(x => x.chiave === pay.chiave);
+  setLoading('pc-save', true);
+  const { error } = riga ? await SB.from('pratiche_catalogo').update(pay).eq('id', riga.id)
+                         : await SB.from('pratiche_catalogo').insert(pay);
+  setLoading('pc-save', false);
+  if (error) return sbErr(error, 'catalogo pratiche');
+  closeM('m-pcat'); await loadAll(true); render(); toast('Catalogo aggiornato', 'success');
+}
+async function ripristinaVoceCatalogo() {
+  const riga = (S.pratCat || []).find(x => x.chiave === PCAT); if (!riga) return;
+  if (!confirm('Tornare alla voce originale del catalogo?')) return;
+  const { error } = await SB.from('pratiche_catalogo').delete().eq('id', riga.id);
+  if (error) return sbErr(error, 'catalogo pratiche');
+  closeM('m-pcat'); await loadAll(true); render(); toast('Voce ripristinata');
+}
 function wirePratiche() {
   qsa('[data-bucket]').forEach(b => b.onclick = () => { S.prBucket = b.dataset.bucket; drawPratiche(); });
   const set = (id, k) => { const e = el(id); if (e) e.onchange = ev => { S[k] = ev.target.value; drawPratiche(); }; };
@@ -10355,6 +10683,12 @@ function anteprimaModifica(pid, tpl, conds, dataI) {
       + 'aggiungere è sempre sicuro, togliere lo decidi tu.</div>');
   }
 
+  if (d.pratProposte && d.pratProposte.length)
+    h += box(['var(--bluelt)', '#B5D4F4'], 'Pratiche proposte — si scelgono dopo il salvataggio',
+      '<div style="font-size:12.5px;margin-top:6px;color:var(--mut)">Non vengono create da sole: '
+      + 'salvata la commessa, si spuntano quelle che servono.</div>'
+      + elenco(d.pratProposte.map(x => esc((x.ente ? x.ente + ' — ' : '') + x.tipo))));
+
   if (d.attProtette.length || d.pratProtette.length) {
     const r = d.attProtette.map(x => esc(x.t.title) + ' <span style="color:var(--mut2)">('
         + x.perche + ')</span>')
@@ -10570,10 +10904,12 @@ async function wzSave() {
       }
       closeM('m-proj');
       await loadAll(true); render();
-      toast(res && (res.att || res.fasi || res.prat || res.tolte)
-        ? 'Commessa aggiornata: +' + res.fasi + ' fasi, +' + res.att + ' attività, +'
-          + res.prat + ' pratiche' + (res.tolte ? ', ' + res.tolte + ' voci rimosse' : '')
-        : 'Commessa aggiornata', 'success');
+      toast((res && (res.att || res.fasi || res.tolte)
+        ? 'Commessa aggiornata: +' + res.fasi + ' fasi, +' + res.att + ' attività'
+          + (res.tolte ? ', ' + res.tolte + ' voci rimosse' : '')
+        : 'Commessa aggiornata')
+        + (diff.pratProposte.length ? '. Il percorso propone ' + diff.pratProposte.length
+            + ' pratiche: le trovi nella scheda Pratiche & Enti.' : ''), 'success');
       return;
     }
     pay.created_by = S.me.id;
@@ -10592,8 +10928,10 @@ async function wzSave() {
     const res = await generaStruttura(data.id, WZ.tpl, WZ.conds, pay.start_date);
     closeM('m-proj');
     await loadAll(true);
-    if (res) toast('Commessa creata: ' + res.fasi + ' fasi, ' + res.att + ' attività, ' + res.prat + ' pratiche', 'success');
+    if (res) toast('Commessa creata: ' + res.fasi + ' fasi, ' + res.att + ' attività. Ora scegli le pratiche.', 'success');
     goProject(data.id);
+    /* Subito dopo: quali pratiche aprire. Il gestionale propone, si decide qui. */
+    apriSceltaPratiche(data.id);
   } finally {
     setLoading('mp-save', false);
   }
@@ -10753,6 +11091,12 @@ function openTask(id, presetPid, presetFase) {
   fillSel('tt-resp', userItems(), t ? t.responsabile_id : '', '- Nessuna verifica -');
   el('tt-a').onchange = el('tt-resp').onchange = quoteAttivita;
   quoteAttivita();
+  /* La pratica: quella gia' collegata, altrimenti una proposta dal titolo */
+  TT_PRAT_SCELTA = !!(t && t.pratica_id);
+  riempiPraticheTask(pid, t ? t.pratica_id : '');
+  el('tt-pruolo').value = t && t.pratica_ruolo ? t.pratica_ruolo : 'inizio';
+  el('tt-prat-hint').textContent = '';
+  if (!TT_PRAT_SCELTA) proponiPraticaTask();
 
   const T = today();
   el('tt-quick').innerHTML = [['Oggi',0],['Domani',1],['+1 sett',7],['+2 sett',14],['Fine mese', null]]
@@ -10897,6 +11241,73 @@ function fillFasiSel(pid, val) {
   fillSel('tt-f', fasiOf(pid).map(f => ({v:f.id, l:f.nome})), val, '- Nessuna fase -');
 }
 
+/* Il segno accanto all'attivita' collegata a una pratica */
+function chipPratica(t) {
+  const p = t.pratica_id ? byId(S.pratiche, t.pratica_id) : null; if (!p) return '';
+  return ' <span class="chip chip-c" title="' + (t.pratica_ruolo === 'fine' ? 'Completandola la pratica è conclusa'
+    : 'Completandola la pratica è inviata') + '">' + (t.pratica_ruolo === 'fine' ? '🏁 conclude ' : '▶️ avvia ')
+    + esc(p.tipo) + '</span>';
+}
+/* ---------------------------------------------------------------------------
+   LA PRATICA DI UN'ATTIVITA'
+   Scrivendo il titolo, il gestionale propone la pratica della commessa a cui
+   l'attivita' si riferisce e se ne e' il passo iniziale (presentazione,
+   deposito, invio) o conclusivo (rilascio, esito, fine lavori). E' una
+   proposta: si cambia o si toglie.
+   --------------------------------------------------------------------------- */
+const PAROLE_VUOTE = ['della','delle','dello','degli','alla','alle','allo','agli','nella','nelle','con','per','dei',
+  'del','dal','dalla','sul','sulla','una','uno','gli','les','ecc','art','dpr','lgs','pratica','richiesta'];
+const normTesto = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+const paroleChiave = t => normTesto(t).split(' ').filter(w => w.length >= 3 && PAROLE_VUOTE.indexOf(w) < 0);
+const RUOLO_FINE = /rilasc|ritir|esito|fine lavori|chiusur|conclu|collaud|agibilit|parere|nulla osta|ottenut|archiviaz|certificat/;
+function propostaPratica(titolo, pid) {
+  const parole = paroleChiave(titolo);
+  if (!parole.length || !pid) return null;
+  let best = null;
+  praticheOf(pid).forEach(p => {
+    const tipo = paroleChiave(p.tipo), ente = paroleChiave(p.ente);
+    let punti = 0;
+    parole.forEach(w => {
+      if (tipo.some(x => x === w || (w.length >= 5 && (x.startsWith(w) || w.startsWith(x))))) punti += 2;
+      else if (ente.indexOf(w) >= 0) punti += 1;
+    });
+    if (praticaOpen(p)) punti += 0.5;
+    if (punti >= 2 && (!best || punti > best.punti)) best = { pratica: p, punti };
+  });
+  if (!best) return null;
+  return { pratica: best.pratica, ruolo: RUOLO_FINE.test(normTesto(titolo)) ? 'fine' : 'inizio' };
+}
+let TT_PRAT_SCELTA = false;      /* la pratica l'ha scelta una persona: non la si propone piu' */
+function riempiPraticheTask(pid, sel) {
+  fillSel('tt-prat', praticheOf(pid || '').filter(p => praticaOpen(p) || p.id === sel)
+    .map(p => ({ v: p.id, l: (p.ente ? p.ente + ' — ' : '') + p.tipo })), sel || '', '- Nessuna -');
+  el('tt-pruolo').disabled = !el('tt-prat').value;
+}
+function proponiPraticaTask() {
+  if (TT_PRAT_SCELTA) return;
+  const prop = propostaPratica(el('tt-n').value, el('tt-p').value);
+  /* Su un'attivita' gia' esistente la proposta resta un suggerimento: aprirla
+     per cambiare una data non deve collegarla di nascosto. */
+  if (prop && el('tt-id').value) {
+    el('tt-prat-hint').innerHTML = 'Potrebbe ' + (prop.ruolo === 'fine' ? 'concludere' : 'avviare') + ' «'
+      + esc(prop.pratica.tipo) + '». <a href="#" id="tt-prat-usa">Collega</a>';
+    el('tt-prat-usa').onclick = ev => { ev.preventDefault(); TT_PRAT_SCELTA = true;
+      riempiPraticheTask(el('tt-p').value, prop.pratica.id); el('tt-pruolo').value = prop.ruolo;
+      el('tt-prat-hint').textContent = 'Collegata: si salva con l’attività.'; };
+    return;
+  }
+  if (prop) {
+    riempiPraticheTask(el('tt-p').value, prop.pratica.id);
+    el('tt-pruolo').value = prop.ruolo;
+    el('tt-prat-hint').innerHTML = 'Proposta dal titolo: ' + (prop.ruolo === 'fine' ? 'la <b>conclude</b>' : 'la <b>avvia</b>')
+      + '. Cambiala o scegli «Nessuna» se non c’entra.';
+  } else {
+    if (el('tt-prat').value) riempiPraticheTask(el('tt-p').value, '');
+    el('tt-prat-hint').textContent = praticheOf(el('tt-p').value).length
+      ? 'Se questa attività avvia o conclude una pratica, collegala qui.' : 'La commessa non ha pratiche aperte.';
+  }
+}
 async function saveTask() {
   const title = el('tt-n').value.trim();
   if (!title) return toast('Il titolo è obbligatorio.', 'error');
@@ -10914,7 +11325,9 @@ async function saveTask() {
     due_date: el('tt-d').value || null,
     estimated_hours: el('tt-h').value || null,
     ente: el('tt-ente').value.trim() || null,
-    notes: el('tt-no').value.trim() || null
+    notes: el('tt-no').value.trim() || null,
+    pratica_id: el('tt-prat').value || null,
+    pratica_ruolo: el('tt-prat').value ? (el('tt-pruolo').value || 'inizio') : null
   };
   setLoading('st-btn', true);
   const prevFase = id ? (byId(S.tasks, id) || {}).commessa_fase_id : null;
@@ -10957,10 +11370,10 @@ function openPratica(id, presetPid, presetFase) {
   el('pr-id').value   = id || '';
   el('pr-fase').value = p ? (p.fase_id || '') : (presetFase || '');
   fillSel('pr-proj', projItems(), p ? p.project_id : defaultProj(presetPid), '- Seleziona commessa -');
-  fillSel('pr-cat', PRATICHE_CAT.map(c => ({v:c.k, l:(c.ente ? c.ente + ' — ' : '') + c.tipo})), p ? p.pratica_key : '', '- Compila a mano -');
+  fillSel('pr-cat', catalogoPratiche().map(c => ({v:c.k, l:(c.ente ? c.ente + ' — ' : '') + c.tipo})), p ? p.pratica_key : '', '- Compila a mano -');
   fillSel('pr-resp', userItems(), p ? p.responsabile_id : S.me.id, '- Nessuno -');
 
-  el('dl-enti').innerHTML = Array.from(new Set(PRATICHE_CAT.map(c => c.ente).filter(Boolean)))
+  el('dl-enti').innerHTML = Array.from(new Set(catalogoPratiche().map(c => c.ente).filter(Boolean)))
     .map(e => '<option value="' + esc(e) + '">').join('');
 
   el('pr-ente').value  = p ? p.ente : '';
@@ -10976,6 +11389,16 @@ function openPratica(id, presetPid, presetFase) {
   el('pr-note').value  = p ? (p.note || '') : '';
   el('pr-del').style.display = (id && puoEliminarePratica()) ? 'inline-flex' : 'none';
   el('pr-nonnec').style.display = (id && canW() && p && praticaOpen(p)) ? 'inline-flex' : 'none';
+  /* Le attivita' che la avviano e la concludono: chiuse quelle, la pratica
+     cambia stato da sola */
+  const coll = id ? S.tasks.filter(t => t.pratica_id === id) : [];
+  el('pr-att').innerHTML = coll.length
+    ? '<div class="ibox" style="font-size:12px;line-height:1.7"><b>Attività collegate</b>'
+      + coll.map(t => '<div>' + (t.pratica_ruolo === 'fine' ? '🏁 conclude' : '▶️ avvia') + ': '
+          + esc(t.title) + ' — ' + bdg(t.status, ST_TASK) + '</div>').join('')
+      + '<div style="color:var(--mut);margin-top:4px">Completata l’attività che la avvia, la pratica risulta '
+      + '<b>inviata</b>; completata quella che la conclude, risulta <b>rilasciata</b>.</div></div>'
+    : '';
 
   /* Conversazione: disponibile solo su pratiche gia' salvate */
   el('ev-tipo').innerHTML = EVENTI_PRATICA.filter(t => t !== 'messaggio')
@@ -11565,7 +11988,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   el('st-btn').onclick = saveTask;
   el('tt-del').onclick = () => delTask(el('tt-id').value);
-  el('tt-p').onchange  = () => fillFasiSel(el('tt-p').value, '');
+  el('tt-p').onchange  = () => { fillFasiSel(el('tt-p').value, ''); TT_PRAT_SCELTA = false;
+    riempiPraticheTask(el('tt-p').value, ''); proponiPraticaTask(); };
+  el('tt-n').addEventListener('input', proponiPraticaTask);
+  el('tt-prat').onchange = () => { TT_PRAT_SCELTA = true; el('tt-pruolo').disabled = !el('tt-prat').value;
+    el('tt-prat-hint').textContent = ''; };
+  el('tt-pruolo').onchange = () => { TT_PRAT_SCELTA = true; };
   el('pr-save').onclick = savePratica;
   el('pr-del').onclick  = () => delPratica(el('pr-id').value);
   el('pr-nonnec').onclick = () => nonNecessaria(el('pr-id').value);
@@ -11588,7 +12016,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px';
   };
   el('pr-cat').onchange = () => {
-    const c = PRATICHE_CAT.find(x => x.k === el('pr-cat').value);
+    const c = voceCatalogo(el('pr-cat').value);
     if (!c) return;
     if (c.ente) el('pr-ente').value = c.ente;
     el('pr-tipo').value = c.tipo;
@@ -11632,6 +12060,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pv-ripr').onclick = ripristinaModello;
   el('pv-del').onclick  = eliminaPreventivo;
   el('pv-pdf').onclick  = pdfDaEditor;
+  /* Scelta delle pratiche */
+  el('ps-q').oninput = e => { PS.q = e.target.value; disegnaSceltaPratiche(); };
+  el('ps-body').addEventListener('change', e => { const k = e.target.dataset.psk; if (!k) return;
+    if (e.target.checked) PS.scelte.add(k); else PS.scelte.delete(k);
+    const n = PS.scelte.size;
+    el('ps-go').textContent = n ? 'Apri ' + n + (n === 1 ? ' pratica' : ' pratiche') : 'Nessuna pratica scelta';
+    el('ps-go').disabled = !n; });
+  el('ps-go').onclick = confermaSceltaPratiche;
+  el('rio-go').onclick = eseguiRiordino;
+  el('pc-save').onclick = salvaVoceCatalogo;
+  el('pc-ripr').onclick = ripristinaVoceCatalogo;
   el('pv-mail').onclick = mailDaEditor;
   el('mm-share').onclick  = () => invioPreventivo('share');
   el('mm-eml').onclick    = () => invioPreventivo('eml');
@@ -11727,6 +12166,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-fproforma'))) { e.stopPropagation(); return openRevisione(n.dataset.fproforma); }
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
+    if ((n = f('data-pcat')))      { return apriVoceCatalogo(n.dataset.pcat); }
     if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
     if ((n = f('data-pvmodmod')))  { return apriModello(n.dataset.pvmodmod); }
     if ((n = f('data-prev')))      { return openPreventivo(n.dataset.prev); }
@@ -11764,12 +12204,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'ore')      return openOre(S.projId);
       if (a === 'genera')   return rigenera(S.projId);
       if (a === 'ripristina') return archiviaProj(S.projId, false);
-      if (a === 'prreset')  { S.prQ=''; S.prBucket=''; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
+      if (a === 'prreset')  { S.prQ=''; S.prBucket='aperte'; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
+      if (a === 'prvista')  { S.prVista = S.prVista === 'catalogo' ? 'pratiche' : 'catalogo'; return render(); }
+      if (a === 'riordina') return apriRiordino();
+      if (a === 'pcnuova')  return apriVoceCatalogo(null);
       if (a === 'fattstd')  return scaglioniStandard(S.projId);
       if (a === 'nuovaspesa') return openSpesa(null, S.projId);
       if (a === 'nuovoesterno') return openOre(S.projId, null, 'ext');
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
+      if (a === 'sceltapratiche') return apriSceltaPratiche(S.projId);
       if (a === 'back')     return go('projects');
     }
   }

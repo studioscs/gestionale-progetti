@@ -50,6 +50,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 29. [`sql/030_isa.sql`](sql/030_isa.sql) — tipologia ISA e anno di competenza su ogni riga di fattura
 30. [`sql/031_costi_generali.sql`](sql/031_costi_generali.sql) — costi generali dello studio, fuori dalle commesse
 31. [`sql/032_proforma_preventivi.sql`](sql/032_proforma_preventivi.sql) — proforma PDF prima della fattura, e i preventivi
+32. [`sql/033_catalogo_pratiche.sql`](sql/033_catalogo_pratiche.sql) — catalogo delle pratiche, attività che avviano o concludono una pratica
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -606,6 +607,58 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
+
+## Pratiche: il catalogo, le proposte, le attività che le avviano
+
+Prima, creando una commessa, il gestionale apriva da solo **tutte** le pratiche
+che quel tipo di lavoro poteva richiedere — anche sedici — con una procura per
+ognuna. *Pratiche & Enti* si riempiva di voci che nessuno aveva deciso.
+
+**Ora le pratiche si scelgono.**
+
+- **Il catalogo** (*Pratiche & Enti → Catalogo pratiche*) è l'elenco delle
+  pratiche che lo studio può aprire: ente, norma, termine in giorni, se serve
+  la procura, quando proporla. Chi tiene l'amministrazione può correggere una
+  voce, toglierla dalle proposte, aggiungerne di proprie, e tornare
+  all'originale. Gli altri lo consultano.
+- **Dopo aver creato la commessa** si apre la finestra *Pratiche di «…»*:
+  le pratiche che il percorso e le condizioni fanno prevedere sono già
+  spuntate, sotto c'è tutto il catalogo con la ricerca. Si toglie quello che non
+  serve, si aggiunge quello che manca, e solo allora le pratiche nascono —
+  ognuna telematica con la sua procura nella fase delle firme. *Non ora* non
+  crea niente: le proposte restano nella scheda *Pratiche & Enti* della
+  commessa, sul pulsante **Dal catalogo** (che dice quante sono).
+- **Aggiornare il percorso** di una commessa non aggiunge e non toglie più
+  pratiche: le eventuali nuove proposte vengono segnalate.
+
+### L'attività che avvia o conclude la pratica
+
+Nel modulo di un'attività c'è **Pratica collegata** con il suo **ruolo**:
+
+- ▶️ **Iniziale** — completata l'attività, la pratica risulta **inviata**, con
+  la data di invio di oggi e la scadenza calcolata dai giorni di legge;
+- 🏁 **Conclusiva** — completata l'attività, la pratica risulta
+  **rilasciata**, con la data di esito.
+
+Il cambiamento è scritto nel diario della pratica («Avviata con l'attività
+…»). Scrivendo il titolo di una **nuova** attività il gestionale propone la
+pratica della commessa a cui si riferisce («Presentazione SCIA antincendio» →
+SCIA antincendio, iniziale; «Ritiro esito…» → conclusiva); su un'attività già
+esistente la proposta resta un suggerimento con il link *Collega*, così
+aprirla per cambiare una data non la collega di nascosto. Nella checklist
+l'attività collegata porta il segno ▶️/🏁 con il nome della pratica, e la
+pratica elenca le sue attività.
+
+### Ordine in *Pratiche & Enti*
+
+- Si apre sulle pratiche **aperte**, raggruppate **per commessa**; concluse e
+  non necessarie stanno sotto *Concluse*, quelle delle commesse archiviate non
+  compaiono più.
+- **Riordina**: se ci sono pratiche nate in automatico e mai toccate (nessun
+  invio, protocollo, responsabile, conversazione o attività collegata) un
+  avviso lo dice; il pulsante le elenca per commessa, tutte spuntate, e le
+  toglie insieme alle procure ancora da firmare che servivano solo a loro.
+  Quelle avviate non compaiono mai nell'elenco.
 
 ## Numeri dei documenti: proposti, sempre modificabili
 

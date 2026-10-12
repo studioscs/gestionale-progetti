@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,CATEGORIE_COSTO,nomeCategoria,annoCosto,costiAnno,totCosti,riepilogoCosti,anniCosti,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,CATEGORIE_COSTO,nomeCategoria,annoCosto,costiAnno,totCosti,riepilogoCosti,anniCosti,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT,catalogoPratiche,voceCatalogo});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -1042,6 +1042,24 @@ t('anno vuoto: tutto a zero',(r=>r.totale===0&&r.voci.length===0&&r.categorie.le
 t('le categorie sono quelle che accetta il database',ctx.CATEGORIE_COSTO.map(c=>c[0]).join()===
   'qualita,consulenze,utenze,affitto,software,hardware,assicurazioni,formazione,ordini_professionali,veicoli,cancelleria,banca,altro');
 ctx.S.costiGen=[];
+
+/* ------------------------- CATALOGO DELLE PRATICHE ------------------------- */
+console.log('\n# Catalogo delle pratiche');
+ctx.S.pratCat=[];
+t('senza modifiche il catalogo e quello di base',ctx.catalogoPratiche().length===ctx.PRATICHE_CAT.length,null);
+ctx.S.pratCat=[
+  {id:'r1',chiave:'docfa',tipo:'Accatastamento DOCFA',ente:'Catasto',giorni:15,ordine:90,procura:false,attivo:true},
+  {id:'r2',chiave:'cila',tipo:'CILA',ente:'Comune / SUE',ordine:65,procura:true,attivo:false},
+  {id:'r3',chiave:'cat_x',tipo:'Nulla osta Consorzio',ente:'Consorzio di bonifica',giorni:45,ordine:59,procura:false,condizione:'catasto',attivo:true}];
+const cat=ctx.catalogoPratiche();
+t('la voce modificata vince su quella di base',ctx.voceCatalogo('docfa').gg===15&&ctx.voceCatalogo('docfa').modificata,ctx.voceCatalogo('docfa'));
+t('la voce tolta non si propone',!cat.some(c=>c.k==='cila'),null);
+t('ma resta nel catalogo completo',ctx.catalogoPratiche(true).some(c=>c.k==='cila'),null);
+t('la voce dello studio si aggiunge',cat.some(c=>c.k==='cat_x'&&!c.base),null);
+const pc=ctx.pianifica('interno',['catasto'],'2026-03-02');
+t('e il percorso la propone con la sua condizione',pc.pratiche.some(x=>x.k==='cat_x'),pc.pratiche.map(x=>x.k));
+t('in ordine di sequenza',pc.pratiche.every((x,i,a)=>!i||(a[i-1].ord||50)<=(x.ord||50)),pc.pratiche.map(x=>x.ord));
+ctx.S.pratCat=[];
 
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);

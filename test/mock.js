@@ -9,7 +9,7 @@
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
     commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[], costi_generali:[],
-    preventivi:[], preventivo_modelli:[]
+    preventivi:[], preventivo_modelli:[], pratiche_catalogo:[]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -39,12 +39,16 @@
     costi_generali:['categoria','descrizione','importo','data_spesa'],
     preventivi:['anno','progressivo','data','stato','voci','articoli'],
     preventivo_modelli:['chiave','nome','voci','articoli'],
+    pratiche_catalogo:['chiave','tipo','ordine','procura','attivo'],
     profili_costi:['profile_id','valido_dal']
   };
   /* VINCOLI DI COERENZA, come li dichiara il database vero. Senza, in
      laboratorio passa roba che in produzione viene rifiutata: e' cosi' che la
      parcella di un esterno - zero ore - e' arrivata rotta agli utenti. */
   const VINCOLI={
+    tasks:[
+      [r=>r.pratica_ruolo===undefined||r.pratica_ruolo===null||['inizio','fine'].includes(r.pratica_ruolo),'ck_tasks_pratica_ruolo']
+    ],
     time_entries:[
       [r=>{ const est=(r.esterno||'').trim();
             const h=Number(r.hours||0);
@@ -67,6 +71,25 @@
       [r=>!(r.data_pagamento&&!r.pagato), 'ck_costi_pagamento_coerente']
     ]
   };
+  /* Trigger trg_pratica_da_attivita della migrazione 033: chiusa l'attivita'
+     che avvia o conclude una pratica, la pratica cambia stato e lo scrive nel
+     suo diario. */
+  function praticaDaAttivita(t,prima){
+    if(!t.pratica_id||t.status!=='completato'||prima==='completato') return;
+    const p=DB.commessa_pratiche.find(x=>x.id===t.pratica_id); if(!p) return;
+    const oggi=new Date().toISOString().slice(0,10);
+    if(t.pratica_ruolo==='inizio'&&['da_preparare','in_preparazione'].includes(p.stato)){
+      p.stato='inviata'; p.data_invio=p.data_invio||oggi;
+      if(!p.data_scadenza&&Number(p.termine_giorni)>0){ const d=new Date(p.data_invio); d.setDate(d.getDate()+Number(p.termine_giorni));
+        p.data_scadenza=d.toISOString().slice(0,10); }
+      DB.pratica_eventi.push({id:uid(),pratica_id:p.id,tipo:'invio',data:oggi,created_at:new Date().toISOString(),
+        descrizione:"Avviata con l'attività «"+t.title+"»",created_by:UID});
+    } else if(t.pratica_ruolo==='fine'&&!['rilasciata','respinta','non_necessaria'].includes(p.stato)){
+      p.stato='rilasciata'; p.data_esito=p.data_esito||oggi;
+      DB.pratica_eventi.push({id:uid(),pratica_id:p.id,tipo:'rilascio',data:oggi,created_at:new Date().toISOString(),
+        descrizione:"Conclusa con l'attività «"+t.title+"»",created_by:UID});
+    }
+  }
   function verificaVincoli(table,rec){
     for(const [ok,nome] of (VINCOLI[table]||[]))
       if(!ok(rec)) return {message:'new row for relation "'+table
@@ -184,6 +207,7 @@
           DB.profili_costi.forEach(r=>{ if(r.profile_id===n.profile_id&&!r.valido_al&&r.valido_dal<n.valido_dal)
             r.valido_al=giornoPrima(n.valido_dal); }); });
         DB[table].push(...made);
+        if(table==='tasks') made.forEach(t=>praticaDaAttivita(t,null));
         /* Trigger della migrazione 012: percentuale calcolata e quota di DL
            che matura sul SAL. Replicati qui perche' l'app ci conta. */
         if(table==='commessa_sal') made.forEach(percSal), made.forEach(maturaDL);
@@ -230,7 +254,9 @@
         try{
           if(api._err) return res({data:null,error:api._err});
           if(api._upd){ api._stampaChiusura();
-            DB[table].forEach(r=>{ if(flt.every(f=>f(r))) Object.assign(r,api._upd); });
+            { const v=verificaVincoli(table,api._upd); if(v) return res({data:null,error:v}); }
+            DB[table].forEach(r=>{ if(flt.every(f=>f(r))){ const prima=r.status; Object.assign(r,api._upd);
+              if(table==='tasks') praticaDaAttivita(r,prima); } });
             api._dopoUpdate(); return res({data:null,error:null}); }
           if(api._del){ const tolti=DB[table].filter(r=>flt.every(f=>f(r)));
             DB[table]=DB[table].filter(r=>!flt.every(f=>f(r)));
