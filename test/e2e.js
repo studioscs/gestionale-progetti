@@ -3620,6 +3620,61 @@ function launchOpts(){
     must(/mario\.rossi@pec\.it/.test(txt),'i recapiti del committente non sono riempiti');
     must(!/\{\{/.test(txt),'è rimasto un segnaposto');
   });
+  await t('dopo il PDF si apre l invio per email, già compilato',async()=>{
+    const x=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi'));
+    await p.evaluate(id=>{ go('preventivi'); },x.id); await p.waitForTimeout(300);
+    must(await p.locator('[data-prevmail="'+x.id+'"]').count()===1,'manca il pulsante email nella lista');
+    await p.click('[data-prevmail="'+x.id+'"]'); await p.waitForSelector('#m-mail.show',{timeout:4000});
+    must(await p.inputValue('#mm-a')==='mario.rossi@pec.it','destinatario non compilato');
+    must(/^Preventivo n\. 1\/\d\d/.test(await p.inputValue('#mm-ogg')),'oggetto: '+(await p.inputValue('#mm-ogg')));
+    const testo=await p.inputValue('#mm-testo');
+    must(/^Gentile Cliente,/.test(testo)&&/migliore offerta/.test(testo)&&/forms\/d\/e\/1FAIpQLSdRhgTsZOPtF4tX_-Wk8aO3vxvI77hJYb0ZrSFlYHl6JUqEXg/.test(testo),'testo non è quello dello studio');
+    must(!(await p.isVisible('#mm-share')),'il pulsante Condividi compare dove il browser non sa condividere file');
+  });
+  await t('la bozza .eml ha destinatario, testo e PDF allegato',async()=>{
+    const id=await p.evaluate(()=>MAILPV);
+    await p.evaluate(id=>{ const x=byId(S.preventivi,id); x.stato='bozza'; __DB.preventivi.find(y=>y.id===id).stato='bozza'; apriInvioPreventivo(id); },id);
+    must(await p.isChecked('#mm-inviato'),'non propone di segnarlo come inviato');
+    await p.fill('#mm-testo',(await p.inputValue('#mm-testo'))+'\nCordiali saluti');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mm-eml')]);
+    must(dl,'nessuna bozza scaricata');
+    must(/^Preventivo-1_\d\d\.eml$/.test(dl.suggestedFilename()),dl.suggestedFilename());
+    const eml=fs.readFileSync(await dl.path(),'utf8');
+    must(/^X-Unsent: 1/.test(eml)&&/\r\nTo: mario\.rossi@pec\.it\r\n/.test(eml),'intestazione della bozza sbagliata');
+    const parti=eml.split(/--scs-[a-z0-9]+/);
+    const corpo=Buffer.from(parti[1].split('\r\n\r\n')[1].replace(/\r\n/g,''),'base64').toString('utf8');
+    must(/migliore offerta/.test(corpo)&&/Cordiali saluti/.test(corpo),'il testo (con la correzione) non è nella bozza');
+    const pdf=Buffer.from(parti[2].split('\r\n\r\n')[1].replace(/\r\n/g,''),'base64');
+    must(pdf.slice(0,4).toString()==='%PDF','l allegato non è un PDF');
+    const tmp=path.join(__dirname,'allegato-prova.pdf'); fs.writeFileSync(tmp,pdf);
+    const txt=await testoPdf(tmp); fs.unlinkSync(tmp);
+    must(/Preventivo 1\/\d\d/.test(txt)&&/11\.926,72 €/.test(txt),'l allegato non è il preventivo giusto');
+    await p.waitForTimeout(500);
+    must(await p.evaluate(id=>__DB.preventivi.find(y=>y.id===id).stato,id)==='inviato','non è stato segnato come inviato');
+    must(!(await p.isVisible('#m-mail')),'la finestra è rimasta aperta');
+  });
+  await t('dove il browser sa condividere file, il PDF va nel pannello di condivisione',async()=>{
+    const id=await p.evaluate(()=>MAILPV);
+    await p.evaluate(id=>{ window.__condiviso=null;
+      navigator.canShare=()=>true; navigator.share=async d=>{ window.__condiviso={nome:d.files[0].name,tipo:d.files[0].type,
+        dim:d.files[0].size,titolo:d.title,testo:d.text}; };
+      apriInvioPreventivo(id); },id);
+    must(await p.isVisible('#mm-share'),'il pulsante Condividi non compare');
+    await p.click('#mm-share'); await p.waitForTimeout(1500);
+    const c=await p.evaluate(()=>window.__condiviso);
+    must(c&&/^Preventivo-1_\d\d\.pdf$/.test(c.nome)&&c.tipo==='application/pdf'&&c.dim>5000,'file condiviso sbagliato: '+JSON.stringify(c));
+    must(/migliore offerta/.test(c.testo)&&/^Preventivo n\. 1\//.test(c.titolo),'testo o oggetto mancanti nella condivisione');
+    await p.evaluate(()=>{ delete navigator.share; delete navigator.canShare; closeM('m-mail'); });
+  });
+  await t('dall editor: Salva e scarica PDF porta all invio',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').id);
+    await p.evaluate(id=>openPreventivo(id),id); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.isVisible('#pv-mail'),'manca Invia per email nell editor');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#pv-pdf')]);
+    must(dl,'nessun PDF');
+    await p.waitForSelector('#m-mail.show',{timeout:4000});
+    await p.evaluate(()=>closeM('m-mail'));
+  });
   await t('un numero già usato non si salva due volte',async()=>{
     await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
     must(await p.inputValue('[data-pv="progressivo"]')==='2','il numero proposto non è il successivo');

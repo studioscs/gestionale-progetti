@@ -8,12 +8,12 @@ if(!haXsd) console.log('(schema XSD non presente: validazione saltata — impost
 const h=fs.readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
 const blocks=[...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 const noop=()=>{}; const elStub=()=>({value:'',textContent:'',innerHTML:'',style:{},classList:{add:noop,remove:noop,toggle:noop,contains:()=>false},dataset:{},appendChild:noop,addEventListener:noop,querySelectorAll:()=>[],getBoundingClientRect:()=>({}),remove:noop});
-const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,String,Object,Array,Set,JSON,isNaN,parseInt,parseFloat,
+const ctx={btoa,atob,unescape,encodeURIComponent,console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,String,Object,Array,Set,JSON,isNaN,parseInt,parseFloat,
  supabase:{createClient:()=>new Proxy({},{get:()=>()=>new Proxy({},{get:()=>()=>Promise.resolve({data:[],error:null})})})},
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,numeroDoppio});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -761,6 +761,27 @@ t('il doppione si riconosce',!!ctx.numeroDoppio('numero_fattura','data_fattura',
 t('ma non su se stessa ne in un altro anno',!ctx.numeroDoppio('numero_fattura','data_fattura','52',2026,'b')
   &&!ctx.numeroDoppio('numero_fattura','data_fattura','118',2026,'x'),null);
 ctx.S.fatture=[];
+
+/* ============================ EMAIL DEL PREVENTIVO ============================ */
+console.log('— EMAIL DEL PREVENTIVO —');
+const pdfFinto=Buffer.from('%PDF-1.3 prova '+'x'.repeat(300)).toString('base64');
+const eml=ctx.emlBozza({a:'mario.rossi@pec.it',oggetto:'Preventivo n. 1/26 - Strutture',testo:ctx.TESTO_MAIL_PREVENTIVO,
+  nomeFile:'Preventivo-1_26.pdf',pdfBase64:pdfFinto});
+t('la bozza e segnata come non inviata',/^X-Unsent: 1\r\n/.test(eml),eml.slice(0,40));
+t('con il destinatario',/\r\nTo: mario\.rossi@pec\.it\r\n/.test(eml),null);
+const ogg=(eml.match(/Subject: =\?UTF-8\?B\?([^?]+)\?=/)||[])[1];
+t('l oggetto si legge con gli accenti',Buffer.from(ogg||'','base64').toString('utf8')==='Preventivo n. 1/26 - Strutture',null);
+const parti=eml.split(/--scs-[a-z0-9]+/);
+const corpo=Buffer.from((parti[1]||'').split('\r\n\r\n')[1].replace(/\r\n/g,''),'base64').toString('utf8');
+t('il testo e quello dello studio',/migliore offerta/.test(corpo)&&/viewform\?usp=dialog/.test(corpo)&&/troverà/.test(corpo),corpo.slice(0,80));
+t('con gli a capo da posta',/\r\n/.test(corpo)&&!/[^\r]\n/.test(corpo),null);
+t('il PDF e allegato con il suo nome',/Content-Disposition: attachment; filename="Preventivo-1_26\.pdf"/.test(eml),null);
+const all=Buffer.from((parti[2]||'').split('\r\n\r\n')[1].replace(/\r\n/g,''),'base64').toString('latin1');
+t('e l allegato e il PDF intero',all.startsWith('%PDF')&&all.length===Buffer.from(pdfFinto,'base64').length,all.slice(0,10));
+t('righe da 76 caratteri al massimo',eml.split('\r\n').every(r=>r.length<=200)&&(parti[2]||'').split('\r\n').filter(r=>/^[A-Za-z0-9+/=]+$/.test(r)).every(r=>r.length<=76),null);
+t('chiusura del messaggio',/--scs-[a-z0-9]+--\r\n$/.test(eml),eml.slice(-30));
+t('oggetto proposto',ctx.oggettoMailPreventivo({anno:2026,progressivo:36,titolo:'PREVENTIVO TIPO ANTINCENDIO'})
+  ==='Preventivo n. 36/26 - Tipo antincendio - '+ctx.STUDIO.denominazione,ctx.oggettoMailPreventivo({anno:2026,progressivo:36,titolo:'PREVENTIVO TIPO ANTINCENDIO'}));
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

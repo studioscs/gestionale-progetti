@@ -102,7 +102,7 @@ const PAROLE = new Set(['if','for','while','switch','catch','return','typeof','n
   'case','break','continue','var','let','const','class','extends','import','export','default','with']);
 const AMBIENTE = new Set(['console','Math','Object','Array','String','Number','Boolean','JSON','Date','Set',
   'Map','Promise','parseInt','parseFloat','isNaN','isFinite','encodeURIComponent','decodeURIComponent',
-  'alert','confirm','prompt','setTimeout','setInterval','clearTimeout','clearInterval','fetch','Blob','URL',
+  'alert','confirm','prompt','setTimeout','setInterval','clearTimeout','clearInterval','fetch','Blob','File','FileReader','URL',
   'FormData','RegExp','Error','Symbol','WeakMap','Proxy','Reflect','document','window','navigator','history',
   'location','localStorage','sessionStorage','supabase','requestAnimationFrame','getComputedStyle','btoa','atob',
   'URLSearchParams','IntersectionObserver','MutationObserver','CustomEvent','Event','Intl','crypto']);

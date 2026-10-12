@@ -652,6 +652,31 @@ cui sono stati scritti. *Ripristina l'originale* torna al testo di partenza,
 `{{tel_studio}}`, `{{contatti_committente}}`: quando cambia la polizza si
 cambia una volta sola (`POLIZZA_STUDIO` in `index.html`).
 
+### Inviare il preventivo per email
+
+Dopo **Salva e scarica PDF** si apre la finestra di invio (oppure ✉️
+nell'elenco, o *Invia per email* nell'editor): destinatario preso dalla PEC/mail
+del committente, oggetto proposto (`Preventivo n. 36/26 - Tipo antincendio -
+…`), il testo dello studio con il link al sondaggio, tutto modificabile prima
+di inviare. Spuntando *Segna come «Inviato»* il preventivo cambia stato.
+
+I browser non permettono a un link `mailto:` di allegare file, quindi ci sono
+tre pulsanti:
+
+- **Bozza con allegato** — scarica un file `.eml`: una mail completa, con
+  destinatario, oggetto, testo e **PDF allegato**, segnata come da inviare.
+  Doppio clic e **Outlook** la apre pronta: si preme Invia.
+- **Condividi** — su iPhone, iPad, Mac (Safari) e Chrome/Edge su Windows:
+  si apre il pannello di condivisione, si sceglie Mail o Outlook e la mail
+  nasce con testo e **PDF già allegato** (il destinatario si sceglie lì). Su
+  dispositivi Apple è il pulsante principale, perché Mail di Apple apre i file
+  `.eml` come posta ricevuta e non come bozza.
+- **Solo testo** — apre la posta predefinita con destinatario, oggetto e testo;
+  il PDF si scarica e va trascinato dentro. Serve per chi usa la posta dal
+  browser (Gmail web).
+
+Il testo sta in `TESTO_MAIL_PREVENTIVO` in `index.html`.
+
 ### I conti tornano riga per riga
 
 Il vecchio programma scriveva accanto a ogni voce un totale fatto di importo

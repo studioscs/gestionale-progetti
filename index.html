@@ -689,8 +689,35 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
       </span>
       <button class="btn" data-close="m-prev">Chiudi</button>
+      <button class="btn" id="pv-mail">&#9993;&#65039; Invia per email</button>
       <button class="btn" id="pv-pdf">&#128196; Salva e scarica PDF</button>
       <button class="btn btn-p" id="pv-save">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invio del preventivo per email -->
+<div class="ov" id="m-mail">
+  <div class="modal">
+    <div class="mh"><h3 id="mm-t">Invia il preventivo</h3><button class="mx" data-close="m-mail">&#10005;</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">A</label><input class="fc" id="mm-a" type="email" placeholder="email o PEC del committente"></div>
+      <div class="fg"><label class="fl">Oggetto</label><input class="fc" id="mm-ogg"></div>
+      <div class="fg"><label class="fl">Testo</label><textarea class="fc" id="mm-testo" rows="12"></textarea>
+        <div class="hint">Allegato: <b id="mm-allegato"></b>. Il testo si può correggere qui prima di inviare.</div></div>
+      <label class="row" id="mm-inviato-box" style="gap:6px;font-size:13px;margin-bottom:12px">
+        <input type="checkbox" id="mm-inviato"> Segna il preventivo come «Inviato»</label>
+      <div class="ibox" style="font-size:12px;line-height:1.5">
+        <b>Bozza con allegato</b>: scarica una email già pronta (destinatario, oggetto, testo e PDF allegato).
+        Aprila con un doppio clic: Outlook la mostra pronta da inviare.<br>
+        <b>Condividi</b> (iPhone, iPad, Mac, Chrome/Edge): scegli Mail o Outlook dal pannello, il PDF è già allegato.<br>
+        <b>Solo testo</b>: apre la posta predefinita con il testo; il PDF si scarica e va trascinato dentro
+        (i browser non permettono a un link di allegare file).</div>
+    </div>
+    <div class="mf">
+      <span class="left"><button class="btn" id="mm-mailto">Solo testo</button></span>
+      <button class="btn" id="mm-share" style="display:none">&#128228; Condividi</button>
+      <button class="btn btn-p" id="mm-eml">&#9993;&#65039; Bozza con allegato</button>
     </div>
   </div>
 </div>
@@ -1338,7 +1365,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.09.2';
+const VERSIONE = '2026.10.12.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5644,7 +5671,8 @@ function rPreventivi() {
         + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + (x.immobile ? ' · ' + esc(x.immobile) : '') + '</div></td>'
       + '<td>' + bdg(x.stato, ST_PREV) + '</td>'
       + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(totalePreventivo(x)) + '</b></td>'
-      + '<td class="ac"><button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196;</button></td>'
+      + '<td class="ac" style="white-space:nowrap"><button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196;</button> '
+        + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039;</button></td>'
       + '</tr>').join('');
 
   el('page').innerHTML = kpis + modelli
@@ -5697,6 +5725,7 @@ function apriEditorPrev() {
   el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
   el('pv-dup').style.display = mod ? 'inline-flex' : 'none';
   el('pv-pdf').style.display = mod ? 'none' : 'inline-flex';
+  el('pv-mail').style.display = mod ? 'none' : 'inline-flex';
   disegnaPrev();
   openM('m-prev');
 }
@@ -5894,12 +5923,160 @@ async function pdfDaEditor() {
   const x = await salvaPreventivo(true); if (!x) return;
   if (await scaricaPdf(docPreventivo(x), nomeFilePdf('Preventivo', numeroPreventivo(x)))) {
     closeM('m-prev'); toast('Preventivo ' + numeroPreventivo(x) + ' scaricato', 'success');
+    /* Appena fatto il PDF, il passo dopo e' mandarlo */
+    apriInvioPreventivo(x.id);
   }
+}
+async function mailDaEditor() {
+  const x = await salvaPreventivo(true); if (!x) return;
+  closeM('m-prev'); apriInvioPreventivo(x.id);
 }
 async function pdfPreventivo(id) {
   const x = byId(S.preventivi, id); if (!x) return;
   if (await scaricaPdf(docPreventivo(x), nomeFilePdf('Preventivo', numeroPreventivo(x))))
     toast('Preventivo ' + numeroPreventivo(x) + ' scaricato', 'success');
+}
+/* ---------------------------------------------------------------------------
+   INVIO DEL PREVENTIVO PER EMAIL
+   Il testo e' quello dello studio. Il PDF in allegato e' il punto delicato:
+   un link "mailto:" apre il programma di posta col testo, ma per come sono
+   fatti i browser NON puo' attaccare file. Le strade che portano davvero a
+   una mail pronta con l'allegato sono due:
+   - CONDIVIDI: su iPhone, iPad, Mac (Safari) e su Windows (Chrome, Edge) il
+     browser apre il pannello di condivisione; scegliendo Mail o Outlook si
+     ottiene la bozza con testo e PDF gia' allegato;
+   - BOZZA .eml: un file email completo - destinatario, oggetto, testo e PDF
+     allegato - segnato come "non ancora inviato". Aperto con un doppio clic,
+     Outlook lo mostra come messaggio pronto da spedire.
+   Resta il "mailto" per chi usa la posta dal browser: apre la mail col testo
+   e il PDF, gia' scaricato, si trascina dentro.
+   --------------------------------------------------------------------------- */
+const TESTO_MAIL_PREVENTIVO = `Gentile Cliente,
+in allegato troverà la nostra migliore offerta, per le spese professionali, da Lei richiesta.
+La invitiamo a controllare la presenza di tutte le prestazioni richieste sia nella nostra offerta che in quelle di altri professionisti, in modo da poterle confrontare. Ricordiamo che, per nostra politica legata alla certificazione di qualità dei processi aziendali, inviamo la prima offerta già completa di tutte le prestazioni professionali ipotizzabili. Questo per evitare sorprese al cliente, che sin da subito ha certezza delle spese e delle tempistiche progettuali. Qualora dovessero risultare necessarie altre prestazioni, per cause non imputabili né a Lei né alla nostra società, redigeremo un nuovo contratto aggiuntivo rispetto a questo.
+
+Nel nostro impegno a migliorare costantemente la qualità del servizio, il tuo parere è per noi prezioso.
+Ci aiuterà a migliorare la qualità del nostro servizio e a proporre soluzioni sempre più vicine alle esigenze dei nostri clienti.
+Basta un minuto per rispondere a questo breve sondaggio:
+
+https://docs.google.com/forms/d/e/1FAIpQLSdRhgTsZOPtF4tX_-Wk8aO3vxvI77hJYb0ZrSFlYHl6JUqEXg/viewform?usp=dialog
+
+Ti ringraziamo in anticipo per il tempo che vorrai dedicarci.`;
+
+const oggettoMailPreventivo = x => 'Preventivo n. ' + numeroPreventivo(x)
+  + (x.titolo ? ' - ' + String(x.titolo).replace(/^PREVENTIVO\s+/i, '').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '')
+  + ' - ' + STUDIO.denominazione;
+
+/* Base64 di un testo UTF-8, e il testo spezzato in righe da 76 come vuole la
+   posta (RFC 2045). */
+const b64Utf8 = t => btoa(unescape(encodeURIComponent(t)));
+const righe76 = b => String(b).replace(/(.{76})/g, '$1\r\n');
+
+/* Il file .eml: una mail completa, segnata come non inviata. Pura, per poterla
+   controllare senza browser. */
+function emlBozza(m) {
+  const conf = 'scs-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const h = [
+    'X-Unsent: 1',
+    m.a ? 'To: ' + m.a : null,
+    'Subject: =?UTF-8?B?' + b64Utf8(m.oggetto || '') + '?=',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + conf + '"'
+  ].filter(Boolean).join('\r\n');
+  const nome = String(m.nomeFile || 'documento.pdf').replace(/"/g, '');
+  return h + '\r\n\r\n'
+    + '--' + conf + '\r\n'
+    + 'Content-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n'
+    + righe76(b64Utf8(String(m.testo || '').replace(/\r?\n/g, '\r\n'))) + '\r\n'
+    + '--' + conf + '\r\n'
+    + 'Content-Type: application/pdf; name="' + nome + '"\r\n'
+    + 'Content-Transfer-Encoding: base64\r\n'
+    + 'Content-Disposition: attachment; filename="' + nome + '"\r\n\r\n'
+    + righe76(m.pdfBase64 || '') + '\r\n'
+    + '--' + conf + '--\r\n';
+}
+
+/* Il PDF come file, invece che come download */
+async function pdfBlob(doc) {
+  const pm = await caricaPdfMake();
+  return new Promise(ok => pm.createPdf(pdfDefinizione(doc)).getBlob(ok));
+}
+const blobBase64 = blob => new Promise((ok, ko) => {
+  const r = new FileReader();
+  r.onload = () => ok(String(r.result).split(',')[1] || '');
+  r.onerror = () => ko(r.error);
+  r.readAsDataURL(blob);
+});
+function scaricaBlob(nome, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+/* Il pannello di condivisione accetta file? (Safari, Chrome e Edge recenti si') */
+function condivisioneFile() {
+  try {
+    return !!(navigator.share && navigator.canShare
+      && navigator.canShare({ files: [new File(['x'], 'x.pdf', { type: 'application/pdf' })] }));
+  } catch (e) { return false; }
+}
+
+let MAILPV = null;
+function apriInvioPreventivo(id) {
+  const x = byId(S.preventivi, id); if (!x) return;
+  MAILPV = x.id;
+  el('mm-t').textContent = 'Invia il preventivo ' + numeroPreventivo(x);
+  el('mm-a').value = x.cliente_pec || '';
+  el('mm-ogg').value = oggettoMailPreventivo(x);
+  el('mm-testo').value = TESTO_MAIL_PREVENTIVO;
+  el('mm-inviato').checked = x.stato === 'bozza';
+  el('mm-inviato-box').style.display = x.stato === 'bozza' ? '' : 'none';
+  el('mm-allegato').textContent = nomeFilePdf('Preventivo', numeroPreventivo(x));
+  /* Su iPhone, iPad e Mac la strada giusta e' il pannello di condivisione:
+     Mail di Apple apre i file .eml come posta ricevuta, non come bozza. Su
+     Windows con Outlook vale il contrario. Il pulsante principale e' quello. */
+  const share = condivisioneFile();
+  const apple = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '');
+  el('mm-share').style.display = share ? '' : 'none';
+  el('mm-share').className = 'btn' + (share && apple ? ' btn-p' : '');
+  el('mm-eml').className   = 'btn' + (share && apple ? '' : ' btn-p');
+  openM('m-mail');
+}
+async function dopoInvio(x) {
+  if (el('mm-inviato').checked && x.stato === 'bozza') {
+    const { error } = await SB.from('preventivi').update({ stato: 'inviato' }).eq('id', x.id);
+    if (error) sbErr(error, 'stato del preventivo');
+  }
+  closeM('m-mail'); await loadAll(true); render();
+}
+async function invioPreventivo(modo) {
+  const x = byId(S.preventivi, MAILPV); if (!x) return;
+  const a = el('mm-a').value.trim(), oggetto = el('mm-ogg').value.trim(), testo = el('mm-testo').value;
+  const nome = nomeFilePdf('Preventivo', numeroPreventivo(x));
+  let blob;
+  try { blob = await pdfBlob(docPreventivo(x)); }
+  catch (e) { return toast('Non riesco a preparare il PDF: controlla la connessione e riprova.', 'error'); }
+
+  if (modo === 'share') {
+    try {
+      await navigator.share({ files: [new File([blob], nome, { type: 'application/pdf' })],
+                              title: oggetto, text: testo });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;     /* chiuso il pannello: niente di fatto */
+      return toast('La condivisione non è riuscita: usa «Bozza con allegato».', 'error');
+    }
+    toast('Scegli Mail o Outlook: il PDF è già allegato. Il destinatario va scelto lì.', 'success');
+  } else if (modo === 'eml') {
+    const eml = emlBozza({ a, oggetto, testo, nomeFile: nome, pdfBase64: await blobBase64(blob) });
+    scaricaBlob(nome.replace(/\.pdf$/, '.eml'), new Blob([eml], { type: 'message/rfc822' }));
+    toast('Bozza scaricata: aprila con un doppio clic, è pronta da inviare con il PDF allegato.', 'success');
+  } else {
+    scaricaBlob(nome, blob);
+    window.location.href = 'mailto:' + encodeURIComponent(a).replace(/%40/g, '@')
+      + '?subject=' + encodeURIComponent(oggetto) + '&body=' + encodeURIComponent(testo);
+    toast('Si apre la posta con il testo: trascina dentro il PDF appena scaricato.', 'success');
+  }
+  await dopoInvio(x);
 }
 async function eliminaPreventivo() {
   if (!PV || !PV.id) return;
@@ -11455,6 +11632,10 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pv-ripr').onclick = ripristinaModello;
   el('pv-del').onclick  = eliminaPreventivo;
   el('pv-pdf').onclick  = pdfDaEditor;
+  el('pv-mail').onclick = mailDaEditor;
+  el('mm-share').onclick  = () => invioPreventivo('share');
+  el('mm-eml').onclick    = () => invioPreventivo('eml');
+  el('mm-mailto').onclick = () => invioPreventivo('mailto');
   el('rev-ant').onclick   = anteprimaXml;
   el('rev-reset').onclick = () => {
     const f = byId(S.fatture, REV && REV.fattId); if (!f) return;
@@ -11545,6 +11726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
     if ((n = f('data-fproforma'))) { e.stopPropagation(); return openRevisione(n.dataset.fproforma); }
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
+    if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
     if ((n = f('data-pvmodmod')))  { return apriModello(n.dataset.pvmodmod); }
     if ((n = f('data-prev')))      { return openPreventivo(n.dataset.prev); }
