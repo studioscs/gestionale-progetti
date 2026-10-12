@@ -608,6 +608,37 @@ Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento
 — in quel caso lo SdI scarterebbe la fattura, ed è meglio accorgersene prima.
 
+## Percorsi privati asciutti, opera pubblica articolata
+
+Per il committente privato la checklist era diventata burocrazia: l'*Edilizia
+privata* generava 105 attività in 15 fasi per un lavoro tipico. I percorsi
+privati sono stati riscritti accorpando i micro-passaggi in poche attività che
+**dicono nel loro testo che cosa comprendono** — la conoscenza resta, la lista
+si legge in un colpo d'occhio. Le voci legate alle condizioni (strutture,
+impianti, vincoli, pareri…) compaiono solo se la commessa le prevede.
+
+| Percorso | senza condizioni | lavoro tipico* | tutte le condizioni |
+|---|---|---|---|
+| Ristrutturazione interna — CILA | 39 → **13** | 45 → **18** | 46 → **18** |
+| Edilizia privata | 55 → **19** | 105 → **35** | 133 → **55** |
+| Incarico strutturale / sismico | 37 → **10** | 44 → **12** | 48 → **14** |
+| Pratica su bene vincolato | 24 → **10** | 24 → **10** | 39 → **19** |
+| Violazioni alle norme sismiche | 56 → **18** | 59 → **20** | 71 → **32** |
+| Opera pubblica | 62 (invariato) | 85 | 96 |
+| DL e CSE in appalto pubblico | 34 (invariato) | 49 | 49 |
+
+\* strutture, catasto, energetica, impianti, DL, sicurezza, agibilità.
+
+Restano le regole che contano: stato legittimo prima del progetto, firme del
+committente in un'unica seduta all'inizio, pareri vincolanti prima del titolo,
+titolo prima del cantiere, catasto e collaudi prima dell'agibilità, e per le
+violazioni sismiche il bivio fra tolleranze, parziale e totale difformità.
+
+**Le commesse già create non cambiano.** Per portarne una al percorso nuovo:
+*Modifica commessa* → passo 3 → spunta *Rimuovi anche queste voci*: le attività
+mai toccate del vecchio percorso se ne vanno e arrivano quelle nuove; quelle già
+avviate, chiuse, aggiunte a mano o con una conversazione restano.
+
 ## Pratiche: il catalogo, le proposte, le attività che le avviano
 
 Prima, creando una commessa, il gestionale apriva da solo **tutte** le pratiche

@@ -114,7 +114,8 @@ function launchOpts(){
   });
   const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,prat:__DB.commessa_pratiche.length}));
   console.log('   generati →',JSON.stringify(stats));
-  await t('generazione consistente',async()=>{ must(stats.fasi>=10&&stats.att>=100&&stats.prat>=5,JSON.stringify(stats)); });
+  await t('generazione consistente',async()=>{ /* percorso privato asciutto: completo ma senza decine di micro-voci */
+    must(stats.fasi>=10&&stats.att>=30&&stats.att<=80&&stats.prat>=5,JSON.stringify(stats)); });
   // --- LA COMMESSA SI MODIFICA IN TUTTI E TRE I PASSAGGI ---
   await t('il codice commessa è obbligatorio e viene proposto',async()=>{
     await p.evaluate(()=>openNewProj());
@@ -322,7 +323,7 @@ function launchOpts(){
     });
     for(const caso of Object.keys(g)){
       must(g[caso].res,'generazione fallita per '+caso);
-      must(g[caso].att.length>30,caso+' ha generato solo '+g[caso].att.length+' attività');
+      must(g[caso].att.length>=15&&g[caso].att.length<=35,caso+' ha generato '+g[caso].att.length+' attività: attese fra 15 e 35');
       must(g[caso].fasi.includes('qualifica'),'manca la fase di qualificazione in '+caso);
       must(g[caso].fasi.indexOf('pratica_sismica')<g[caso].fasi.indexOf('pratica_edilizia'),
            'la pratica sismica non precede quella edilizia in '+caso);
@@ -363,7 +364,9 @@ function launchOpts(){
       must(esiti[k].res,'il template '+k+' ha fallito la generazione');
       if(k!=='vuoto') must(esiti[k].att>0,'il template '+k+' non ha generato attività');
     }
-    must(esiti.privato.att>=130,'il privato ha generato solo '+esiti.privato.att+' attività');
+    /* con tutte le condizioni: le voci del percorso (55) piu' le procure */
+    must(esiti.privato.att>=55&&esiti.privato.att<=100,'il privato ha generato '+esiti.privato.att+' attività');
+    must(esiti.pubblico.att>=90,'l opera pubblica non è più articolata: '+esiti.pubblico.att);
     must(esiti.privato.proc>0,'nessuna procura generata: era la riga che rompeva tutto');
   });
 
@@ -3036,8 +3039,8 @@ function launchOpts(){
               t:__DB.tasks.filter(t=>t.project_id===pr.id).length,
               p:__DB.commessa_pratiche.filter(x=>x.project_id===pr.id).length};
     });
-    must(st.f>=15,'fasi: '+st.f);
-    must(st.t>=120,'attività: '+st.t);
+    must(st.f===13,'fasi: '+st.f);
+    must(st.t>=55&&st.t<=100,'attività: '+st.t);
     must(st.p>=30,'pratiche: '+st.p);
   });
   await t('le pratiche escono in ordine di esecuzione',async()=>{

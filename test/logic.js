@@ -44,7 +44,7 @@ t('pratiche: cond valide',ctx.PRATICHE_CAT.every(p=>!p.cond||ctx.CONDIZIONI.map(
 console.log('\n— PIANIFICAZIONE —');
 const full=ctx.CONDIZIONI.map(c=>c.k);
 const p1=ctx.pianifica('privato',full,'2026-01-07');
-t('privato completo: 16 fasi',p1.fasi.length===16,p1.fasi.length);
+t('privato completo: 13 fasi',p1.fasi.length===13,p1.fasi.length);
 console.log('   attività generate:',p1.fasi.reduce((a,f)=>a+f.att.length,0),'| pratiche:',p1.pratiche.length);
 t('tutte le attività hanno scadenza',p1.fasi.every(f=>f.att.every(a=>a.due_date)),null);
 t('scadenze crescenti nella fase',p1.fasi.every(f=>{const d=f.att.filter(a=>!a.is_milestone).map(a=>a.due_date);return d.every((x,i)=>i===0||x>=d[i-1]);}),null);
@@ -77,7 +77,7 @@ t('template vuoto: 1 fase 0 attività',p3.fasi.length===1&&p3.fasi[0].att.length
 const p4=ctx.pianifica('pubblico',full,'2026-02-02');
 t('pubblico: 9 fasi',p4.fasi.length===9,p4.fasi.length);
 const p5=ctx.pianifica('strutture',full,null);
-t('strutture: 8 fasi',p5.fasi.length===8,p5.fasi.length);
+t('strutture: 7 fasi',p5.fasi.length===7,p5.fasi.length);
 const p6=ctx.pianifica('vincolo',full,null);
 t('vincolo: 6 fasi',p6.fasi.length===6,p6.fasi.length);
 
@@ -369,27 +369,45 @@ const nome=(msg.match(/'([a-z_]+)' column/i)||[])[1];
 t('estrae il nome dal messaggio di PostgREST',nome==='sisma',nome);
 t('e ne ricava la migrazione',ctx.migrazioneDi(nome)==='sql/010_lavori_sisma.sql',null);
 
-console.log('\n— EDILIZIA PRIVATA: PERCORSO COMPLETO —');
+console.log('\n— EDILIZIA PRIVATA: PERCORSO ASCIUTTO —');
 const pv=ctx.TEMPLATES.privato;
-t('percorso articolato',pv.fasi.length>=14,pv.fasi.length);
 const nAtt=pv.fasi.reduce((a,f)=>a+f.att.length,0);
-t('almeno 110 attivita',nAtt>=110,nAtt);
-console.log('   privato →',pv.fasi.length,'fasi ·',nAtt,'attivita');
+console.log('   privato →',pv.fasi.length,'fasi ·',nAtt,'attivita nel modello');
+/* Per il privato meno burocrazia: poche voci che dicono cosa comprendono.
+   Le parti specialistiche compaiono solo con la loro condizione. */
+const nGen=(k,c)=>ctx.pianifica(k,c,'2026-01-07').fasi.reduce((a,f)=>a+f.att.length,0);
+const tipico=['strutture','catasto','energetico','impianti','dl','sicurezza','agibilita'];
+t('privato senza condizioni: al massimo 20 attivita',nGen('privato',[])<=20,nGen('privato',[]));
+t('privato tipico (strutture, impianti, energetica, DL...): al massimo 40',nGen('privato',tipico)<=40,nGen('privato',tipico));
+t('privato senza condizioni: al massimo 7 fasi',ctx.pianifica('privato',[],null).fasi.length<=7,ctx.pianifica('privato',[],null).fasi.length);
+t('CILA: al massimo 20 attivita anche con tutte le condizioni',nGen('interno',full)<=20,nGen('interno',full));
+t('strutturale: al massimo 15 attivita',nGen('strutture',full)<=15,nGen('strutture',full));
+t('vincolo: al massimo 20 attivita',nGen('vincolo',full)<=20,nGen('vincolo',full));
+t('violazioni sismiche: al massimo 35 attivita',nGen('sismica',full)<=35,nGen('sismica',full));
+t('l opera pubblica resta articolata',nGen('pubblico',[])>=60,nGen('pubblico',[]));
+t('anche la DL in appalto pubblico',nGen('dl_cse',[])>=30,nGen('dl_cse',[]));
+['interno','privato','strutture','vincolo','sismica'].forEach(k=>{
+  const aa=ctx.pianifica(k,full,null).fasi.reduce((x,f)=>x.concat(f.att),[]);
+  t(k+': ogni voce dice cosa comprende',aa.every(a=>a.contenuto&&a.contenuto.length>40),
+    aa.filter(a=>!a.contenuto||a.contenuto.length<=40).map(a=>a.title));
+});
 
 /* La sequenza delle fasi e' essa stessa un'informazione: lo stato legittimo
    prima del progetto, i pareri prima del titolo, il titolo prima del cantiere. */
 const kf=pv.fasi.map(f=>f.k);
 const pos=k=>kf.indexOf(k);
-t('stato legittimo prima del progetto',pos('legittimo')<pos('preliminare'),kf);
-t('indagini prima del progetto architettonico',pos('indagini')<pos('architettonico'),kf);
+const faseDi=re=>pv.fasi.findIndex(f=>f.att.some(a=>re.test(a.t)));
+t('stato legittimo prima del progetto',faseDi(/stato legittimo/i)>=0&&faseDi(/stato legittimo/i)<pos('preliminare'),kf);
+t('indagini prima del progetto architettonico',faseDi(/relazione geologica/i)>=0&&faseDi(/relazione geologica/i)<pos('architettonico'),kf);
 t('pareri prima della presentazione del titolo',pos('pareri')<pos('presentazione'),kf);
 t('architettonico prima di strutture e impianti',
   pos('architettonico')<pos('strutture')&&pos('architettonico')<pos('impianti'),kf);
 t('titolo prima dell avvio del cantiere',pos('presentazione')<pos('avvio'),kf);
-t('cantiere prima della chiusura',pos('avvio')<pos('dl')&&pos('dl')<pos('chiusura'),kf);
+t('cantiere prima della chiusura',pos('avvio')>=0&&pos('avvio')<pos('chiusura'),kf);
+t('la direzione lavori sta nel cantiere',pv.fasi[pos('avvio')].att.some(a=>/Direzione lavori/.test(a.t)&&a.cond==='dl'),null);
 
 /* Le discipline che il committente si aspetta di trovare tutte */
-[['legittimo','stato legittimo'],['architettonico','architettonico'],['strutture','strutturale'],
+[['incarico','incarico e stato legittimo'],['architettonico','architettonico'],['strutture','strutturale'],
  ['impianti','impianti'],['energetica','energetica'],['acustica','acustica'],
  ['sicurezza','sicurezza'],['chiusura','agibilità']].forEach(([k,l])=>
   t('c e la fase '+l, kf.includes(k), kf));
