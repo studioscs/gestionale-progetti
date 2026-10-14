@@ -3708,6 +3708,28 @@ function launchOpts(){
     await p.waitForSelector('#m-mail.show',{timeout:4000});
     await p.evaluate(()=>closeM('m-mail'));
   });
+  await t('un preventivo diventa un modello nuovo',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(y=>y.cliente_nome==='Mario Rossi').id);
+    await p.evaluate(id=>{ go('preventivi'); openPreventivo(id); },id); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.isVisible('#pv-damod'),'manca Salva come modello');
+    await p.click('#pv-damod'); await p.waitForTimeout(300);
+    must(/Nuovo modello dal preventivo 1\//.test(await p.textContent('#mpv-t')),'il titolo non dice da dove nasce: '+(await p.textContent('#mpv-t')));
+    await p.click('#pv-save'); await p.waitForTimeout(300);
+    must(await p.isVisible('#m-prev'),'ha salvato un modello senza nome');
+    await p.fill('[data-pv="nome"]','Strutture'); await p.click('#pv-save'); await p.waitForTimeout(300);
+    must(await p.isVisible('#m-prev'),'ha accettato un nome già usato da un modello');
+    await p.fill('[data-pv="nome"]','Accesso atti e studio preliminare'); await p.click('#pv-save'); await p.waitForTimeout(700);
+    const m=await p.evaluate(()=>__DB.preventivo_modelli.find(x=>x.nome==='Accesso atti e studio preliminare'));
+    must(m,'modello non salvato');
+    must(m.voci.length===4&&m.voci[0].importo===1500,'voci o importi non passati: '+JSON.stringify(m.voci));
+    must(/\{\{immobile\}\}/.test(m.oggetto)&&!/VIA ROMA 12/.test(JSON.stringify(m)),'l indirizzo dell immobile è rimasto nel modello');
+    must(m.articoli.length===12&&!m.cliente_nome,'articoli o committente sbagliati');
+    must(await p.locator('[data-pvmodello="'+m.chiave+'"]').count()===1,'il modello non compare fra i modelli');
+    await p.click('[data-pvmodello="'+m.chiave+'"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(await p.inputValue('[data-pvv="1"][data-k="importo"]')==='4500','il preventivo nuovo non parte dalle voci del modello');
+    must(await p.inputValue('[data-pv="cliente_nome"]')==='','il committente del vecchio preventivo è passato al nuovo');
+    await p.evaluate(()=>closeM('m-prev'));
+  });
   await t('un numero già usato non si salva due volte',async()=>{
     await p.click('[data-pvmodello="perizie"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
     must(await p.inputValue('[data-pv="progressivo"]')==='2','il numero proposto non è il successivo');

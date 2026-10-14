@@ -696,6 +696,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn" id="pv-ripr" style="display:none">Ripristina l’originale</button>
         <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
         <button class="btn" id="pv-copia" style="display:none">&#10697; Duplica preventivo</button>
+        <button class="btn" id="pv-damod" style="display:none" title="Voci, articoli e note diventano un modello nuovo">&#128203; Salva come modello</button>
       </span>
       <button class="btn" data-close="m-prev">Chiudi</button>
       <button class="btn" id="pv-mail">&#9993;&#65039; Invia per email</button>
@@ -1444,7 +1445,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.12.7';
+const VERSIONE = '2026.10.14.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5654,13 +5655,14 @@ function apriModello(chiave) {
 
 function apriEditorPrev() {
   const mod = PV.modo === 'modello';
-  el('mpv-t').textContent = mod ? 'Modello: ' + PV.nome
+  el('mpv-t').textContent = mod ? (PV.chiave ? 'Modello: ' + PV.nome : 'Nuovo modello dal preventivo ' + PV._daPrev)
     : (PV.id ? 'Preventivo ' + numeroPreventivo(PV)
              : 'Nuovo preventivo' + (PV._copiaDi ? ' — copia del ' + PV._copiaDi : ''));
   el('pv-copia').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-del').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
-  el('pv-dup').style.display = mod ? 'inline-flex' : 'none';
+  el('pv-dup').style.display = (mod && PV.chiave) ? 'inline-flex' : 'none';
+  el('pv-damod').style.display = mod ? 'none' : 'inline-flex';
   el('pv-pdf').style.display = mod ? 'none' : 'inline-flex';
   el('pv-mail').style.display = mod ? 'none' : 'inline-flex';
   disegnaPrev();
@@ -5681,7 +5683,8 @@ function disegnaPrev() {
     h += '<div class="ibox mb16" style="font-size:12px">Le modifiche valgono per i <b>preventivi che verranno</b>: '
       + 'quelli già fatti tengono il loro testo. Nei testi puoi usare {{immobile}}, {{polizza}}, {{pec_studio}}, '
       + '{{email_studio}}, {{tel_studio}}, {{contatti_committente}}.</div>'
-      + '<div class="fg2">' + campo('Nome del modello', 'nome') + campo('Titolo sul documento', 'titolo') + '</div>';
+      + '<div class="fg2">' + campo('Nome del modello *', 'nome', 'text', 'Es. Accesso atti e studio preliminare')
+        + campo('Titolo sul documento', 'titolo') + '</div>';
   } else {
     h += '<div class="fg3">'
         + (d.id ? campo('Tipo di preventivo', '_modello', 'text', '', ' disabled')
@@ -6123,7 +6126,12 @@ async function eliminaPreventivo() {
 async function salvaModello(nuovo) {
   const d = PV;
   if (!String(d.nome || '').trim()) return toast('Dai un nome al modello.', 'error');
-  const chiave = nuovo ? 'mod_' + Date.now().toString(36) : d.chiave;
+  /* modello nato da un preventivo: non ha ancora una chiave sua */
+  const daPrev = !d.chiave;
+  const chiave = (nuovo || daPrev) ? 'mod_' + Date.now().toString(36) : d.chiave;
+  const nomeDoppio = (S.modelliPrev || []).concat(MODELLI_BASE)
+    .some(m => m.chiave !== chiave && normNome(m.nome) === normNome(d.nome) && (nuovo || daPrev));
+  if (nomeDoppio && !nuovo) return toast('Esiste già un modello «' + d.nome.trim() + '»: scegli un altro nome.', 'error');
   const pay = { chiave, nome: nuovo ? d.nome.trim() + ' (copia)' : d.nome.trim(), titolo: d.titolo || null,
     oggetto: d.oggetto || null, voci: vociPulite(d.voci), articoli: articoliPuliti(d.articoli),
     note: d.note || null, ordine: d.ordine || 0, updated_by: S.me.id };
@@ -6135,7 +6143,25 @@ async function salvaModello(nuovo) {
   setLoading('pv-save', false);
   if (error) return sbErr(error, 'modello di preventivo');
   closeM('m-prev'); await loadAll(true); render();
-  toast(nuovo ? 'Creato il modello «' + pay.nome + '»' : 'Modello «' + pay.nome + '» aggiornato', 'success');
+  toast((nuovo || daPrev) ? 'Creato il modello «' + pay.nome + '»: lo trovi fra i modelli dei preventivi'
+                          : 'Modello «' + pay.nome + '» aggiornato', 'success');
+}
+
+/* UN PREVENTIVO RIUSCITO DIVENTA UN MODELLO
+   Voci, importi, articoli e note passano al modello; il committente no. Dove
+   nel testo compare l'indirizzo dell'immobile, torna il segnaposto
+   {{immobile}}, cosi' il modello vale per il prossimo lavoro e non per questo. */
+function modelloDaPreventivo() {
+  const d = PV; if (!d || d.modo === 'modello') return;
+  const imm = String(d.immobile || '').trim();
+  const generico = t => imm && t ? String(t).split(imm).join('{{immobile}}') : (t || '');
+  PV = { modo: 'modello', chiave: null, base: false, modificato: false,
+    nome: '', titolo: d.titolo || '', oggetto: generico(d.oggetto),
+    voci: copia(vociPulite(d.voci)), note: generico(d.note), ordine: 50,
+    articoli: copia(articoliPuliti(d.articoli)).map(a => ({ titolo: a.titolo, testo: generico(a.testo) })),
+    _daPrev: d.id ? numeroPreventivo(d) : 'nuovo preventivo' };
+  apriEditorPrev();
+  const n = el('pv-body').querySelector('[data-pv="nome"]'); if (n) n.focus();
 }
 async function ripristinaModello() {
   const esiste = (S.modelliPrev || []).find(x => x.chiave === PV.chiave); if (!esiste) return;
@@ -11938,6 +11964,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pc-save').onclick = salvaVoceCatalogo;
   el('pc-ripr').onclick = ripristinaVoceCatalogo;
   el('pv-mail').onclick = mailDaEditor;
+  el('pv-damod').onclick = modelloDaPreventivo;
   el('pv-copia').onclick = () => { const id = PV && PV.id; closeM('m-prev'); if (id) duplicaPreventivo(id); };
   el('mm-share').onclick  = () => invioPreventivo('share');
   el('mm-eml').onclick    = () => invioPreventivo('eml');

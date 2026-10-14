@@ -743,6 +743,16 @@ preventivo nuovo che parte da quello scelto: stesse voci, importi, articoli,
 note e committente, ma **numero nuovo, data di oggi e stato bozza**. Si cambia
 quello che serve — spesso il committente — e si salva; l'originale non cambia.
 
+### Un preventivo riuscito diventa un modello
+
+Nell'editor di un preventivo, **📋 Salva come modello** apre un modello nuovo
+con le sue voci (importi compresi), gli articoli e le note; il committente
+resta fuori, e dove nel testo compare l'indirizzo dell'immobile torna il
+segnaposto `{{immobile}}`. Si dà un nome — per esempio *Accesso atti e
+studio preliminare* — e il modello compare accanto agli altri, modificabile
+con la matita come quelli di base. Due modelli con lo stesso nome non si
+possono creare.
+
 ### Il committente entra in anagrafica
 
 Salvando un preventivo, il committente scritto a mano diventa una **scheda in
