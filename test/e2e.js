@@ -4044,6 +4044,102 @@ function launchOpts(){
     await p.evaluate(()=>{ S.prof.role='admin'; S.prVista='pratiche'; go('oggi'); });
   });
 
+  /* ---------------- CLIENTE UNICO: ANAGRAFICA <-> COMMESSE ---------------- */
+  let CLI=null;
+  await t('modificando il cliente in Clienti si aggiornano le sue commesse e i preventivi in bozza',async()=>{
+    CLI=await p.evaluate(async()=>{ S.prof.role='admin';
+      const {data:c}=await SB.from('clienti').insert({denominazione:'Sync Costruzioni Srl',piva:'09876543210',
+        pec:'vecchia@pec.it',indirizzo:'Via Vecchia 1',cap:'60100',comune:'Ancona',provincia:'AN'}).select().single();
+      const mk=async n=>(await SB.from('projects').insert({codice:'SYN_'+n,name:'Sync '+n,status:'attivo',cliente_id:c.id,
+        client:c.denominazione,cliente_piva:c.piva,cliente_pec:c.pec,cliente_indirizzo:c.indirizzo,cliente_cap:c.cap,
+        cliente_comune:c.comune,cliente_prov:c.provincia}).select().single()).data.id;
+      const p1=await mk(1), p2=await mk(2);
+      await SB.from('preventivi').insert({anno:2026,progressivo:801,data:'2026-10-16',stato:'bozza',cliente_id:c.id,
+        cliente_nome:c.denominazione,cliente_pec:c.pec,voci:[{descrizione:'x',importo:1,quantita:1}],articoli:[]});
+      await SB.from('preventivi').insert({anno:2026,progressivo:802,data:'2026-10-16',stato:'inviato',cliente_id:c.id,
+        cliente_nome:c.denominazione,cliente_pec:c.pec,voci:[{descrizione:'x',importo:1,quantita:1}],articoli:[]});
+      await loadAll(true); return {c:c.id,p1,p2}; });
+    await p.evaluate(id=>{ go('clienti'); openCliente(id); },CLI.c); await p.waitForSelector('#m-cli.show',{timeout:4000});
+    await p.fill('#cl-pec','nuova@pec.it'); await p.fill('#cl-ind','Via Nuova 9');
+    await p.click('#cl-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(x=>({p1:__DB.projects.find(y=>y.id===x.p1),p2:__DB.projects.find(y=>y.id===x.p2),
+      bozza:__DB.preventivi.find(y=>y.progressivo===801),inviato:__DB.preventivi.find(y=>y.progressivo===802)}),CLI);
+    must(g.p1.cliente_pec==='nuova@pec.it'&&g.p2.cliente_pec==='nuova@pec.it','la PEC non è arrivata alle commesse');
+    must(g.p1.cliente_indirizzo==='Via Nuova 9','l indirizzo non è arrivato alle commesse');
+    must(g.p1.comune!=='Via Nuova 9'&&g.p1.cliente_comune==='Ancona','toccati campi che non c entrano');
+    must(g.bozza.cliente_pec==='nuova@pec.it','il preventivo in bozza non si è aggiornato');
+    must(g.inviato.cliente_pec==='vecchia@pec.it','un preventivo già inviato è stato cambiato');
+    must(/aggiornati i dati in 2 commesse/.test(await p.textContent('#tc')),'non dice quante commesse ha aggiornato');
+  });
+  await t('modificando il cliente nella commessa si aggiornano l anagrafica e le altre commesse',async()=>{
+    await p.evaluate(async id=>{ openEditProj(id); },CLI.p1); await p.waitForSelector('#m-proj.show',{timeout:4000});
+    await p.fill('#w-cpec','dallacommessa@pec.it'); await p.fill('#w-ccap','60121');
+    await p.evaluate(async()=>{ await wzSave(); }); await p.waitForTimeout(900);
+    const g=await p.evaluate(x=>({c:__DB.clienti.find(y=>y.id===x.c),p2:__DB.projects.find(y=>y.id===x.p2)}),CLI);
+    must(g.c.pec==='dallacommessa@pec.it'&&g.c.cap==='60121','l anagrafica non si è aggiornata: '+JSON.stringify({pec:g.c.pec,cap:g.c.cap}));
+    must(g.p2.cliente_pec==='dallacommessa@pec.it'&&g.p2.cliente_cap==='60121','l altra commessa dello stesso cliente non si è aggiornata');
+    must(g.c.indirizzo==='Via Nuova 9','un campo non toccato nella commessa è stato riscritto');
+    await p.evaluate(()=>document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show')));
+  });
+  await t('una commessa nuova con campi vuoti non cancella i dati del cliente',async()=>{
+    const g=await p.evaluate(async x=>{ openNewProj(); await new Promise(r=>setTimeout(r,300));
+      el('w-name').value='Sync 3'; el('w-cod').value='SYN_3';
+      if(el('w-clid')){ el('w-clid').value=x.c; el('w-clid').dispatchEvent(new Event('change',{bubbles:true})); }
+      await new Promise(r=>setTimeout(r,200));
+      if(el('w-cpec')) el('w-cpec').value=''; if(el('w-ctel')) el('w-ctel').value='';
+      await wzSave(); await new Promise(r=>setTimeout(r,800));
+      document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show'));
+      return __DB.clienti.find(y=>y.id===x.c); },CLI);
+    must(g.pec==='dallacommessa@pec.it','una commessa nuova con la PEC vuota l ha cancellata in anagrafica');
+  });
+
+  /* ---------------- SPLIT PAYMENT PER GLI ENTI PUBBLICI ---------------- */
+  await t('spuntando «ente pubblico» su una commessa esistente la scissione è proposta',async()=>{
+    /* le commesse esistenti hanno split_payment = false di partenza (migrazione 011):
+       e' cosi' che la commessa di Jesi e' finita senza scissione */
+    const v=await p.evaluate(async()=>{
+      const {data:pr}=await SB.from('projects').insert({codice:'PA_EDIT',name:'Prova PA',status:'attivo',client:'Comune di Prova',
+        ente_pubblico:false,split_payment:false}).select().single();
+      await loadAll(true); openEditProj(pr.id); await new Promise(r=>setTimeout(r,300));
+      const c=el('w-pa'); c.checked=true; c.dispatchEvent(new Event('change',{bubbles:true}));
+      await new Promise(r=>setTimeout(r,150));
+      const r={split:el('w-split')&&el('w-split').value, avviso:/sembra un ente pubblico/.test(el('mp-body').textContent)};
+      document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show')); return r; });
+    must(v.split==='1','il menu riparte da «nessuna scissione»: '+JSON.stringify(v));
+  });
+  await t('nel modulo della commessa un Comune non spuntato come ente viene segnalato',async()=>{
+    const v=await p.evaluate(async()=>{ const pr=__DB.projects.find(y=>y.codice==='PA_EDIT');
+      openEditProj(pr.id); await new Promise(r=>setTimeout(r,300));
+      const r=/sembra un ente pubblico/.test(el('mp-body').textContent);
+      document.querySelectorAll('.ov.show').forEach(o=>o.classList.remove('show')); return r; });
+    must(v,'nessun suggerimento nel modulo della commessa');
+  });
+  await t('un Comune segnato come privato: la revisione avvisa e corregge con un clic',async()=>{
+    const fid=await p.evaluate(async()=>{
+      const {data:pr}=await SB.from('projects').insert({codice:'JESI_01',name:'COMUNE JESI DL Federico II',status:'attivo',
+        client:'COMUNE DI JESI',cliente_piva:'00135880425',cliente_indirizzo:'Piazza Indipendenza 1',cliente_cap:'60035',
+        cliente_comune:'Jesi',cliente_prov:'AN',ente_pubblico:false,split_payment:false}).select().single();
+      const {data:f}=await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Acconto DL',imponibile:10000,
+        stato:'pronta',ordine:1}).select().single();
+      await loadAll(true); openRevisione(f.id); return f.id; });
+    await p.waitForSelector('#m-rev.show',{timeout:4000});
+    must(/sembra un ente pubblico/.test(await p.textContent('#rev-body')),'nessun avviso sul Comune trattato da privato');
+    await p.click('#rev-pa-fix'); await p.waitForTimeout(300);
+    const g=await p.evaluate(()=>{ const c=calcolaDa(REV); return {pa:REV.pa,split:REV.split,iva:c.iva,tot:c.totale,netto:c.netto}; });
+    must(g.pa&&g.split,'la correzione non ha impostato ente pubblico e scissione');
+    must(g.iva===2288&&g.tot===12688,'l IVA deve restare indicata in fattura: '+JSON.stringify(g));
+    must(g.netto===10400,'da incassare deve essere senza IVA: '+g.netto);
+    must(/IVA versata dall/.test(await p.textContent('#rev-tot')),'il riepilogo non spiega la scissione');
+    await p.evaluate(()=>closeM('m-rev'));
+  });
+  await t('con la commessa in split payment gli elenchi mostrano quanto si incassa davvero',async()=>{
+    const g=await p.evaluate(async()=>{ const pr=__DB.projects.find(y=>y.codice==='JESI_01');
+      await SB.from('projects').update({ente_pubblico:true,split_payment:true}).eq('id',pr.id); await loadAll(true);
+      S.projId=pr.id; S.tab='fatture'; go('project'); await new Promise(r=>setTimeout(r,200));
+      const row=document.querySelector('#page tr[data-fatt]'); return row?row.textContent:''; });
+    must(/10\.400,00/.test(g)&&/split payment/.test(g),'la riga non mostra il netto con la scissione: '+g);
+  });
+
   /* Gli scatti finali non sono un test: se falliscono lo si annota e si va
      avanti, altrimenti un'eccezione qui butta via il resoconto di tutti i
      test precedenti e non si capisce piu' niente. */

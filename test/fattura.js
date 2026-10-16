@@ -785,5 +785,10 @@ t('chiusura del messaggio',/--scs-[a-z0-9]+--\r\n$/.test(eml),eml.slice(-30));
 t('oggetto proposto',ctx.oggettoMailPreventivo({anno:2026,progressivo:36,titolo:'PREVENTIVO TIPO ANTINCENDIO'})
   ==='Preventivo n. 36/26 - Tipo antincendio - '+ctx.STUDIO.denominazione,ctx.oggettoMailPreventivo({anno:2026,progressivo:36,titolo:'PREVENTIVO TIPO ANTINCENDIO'}));
 
+console.log('— SCISSIONE DEI PAGAMENTI —');
+const cSp=ctx.calcolaFattura(10000,0,true), cNo=ctx.calcolaFattura(10000,0,false);
+t('l IVA resta indicata',cSp.iva===2288&&cSp.totale===12688,[cSp.iva,cSp.totale]);
+t('ma non si incassa',cSp.netto===10400&&cNo.netto===12688,[cSp.netto,cNo.netto]);
+
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');
 process.exit(fail?1:0);

@@ -691,6 +691,55 @@ pratica elenca le sue attività.
   toglie insieme alle procure ancora da firmare che servivano solo a loro.
   Quelle avviate non compaiono mai nell'elenco.
 
+## Il cliente è uno solo, dappertutto
+
+I dati del committente non sono più una fotografia presa alla creazione della
+commessa: **si modificano in un posto e arrivano ovunque**.
+
+- **Da Clienti**: salvando la scheda, gli stessi dati (denominazione, P.IVA,
+  C.F., SDI, PEC, indirizzo, referenti) si aggiornano in **tutte le commesse
+  di quel cliente** e nei suoi **preventivi in bozza**; quelli già inviati,
+  accettati o rifiutati restano come sono stati mandati. Il messaggio dice
+  quante commesse ha riallineato.
+- **Dalla commessa** (*Modifica commessa*): i dati del committente cambiati lì
+  arrivano in anagrafica e nelle altre commesse dello stesso cliente. Arrivano
+  solo i campi cambiati in quel salvataggio, così una commessa con una copia
+  vecchia non riporta indietro dati corretti nel frattempo altrove; e una
+  commessa nuova con un campo lasciato vuoto non cancella un dato che in
+  anagrafica c'è. Una commessa senza scheda cliente la crea (o la trova per
+  nome) e ci si collega.
+- I dati del cantiere (comune e indirizzo dell'immobile) sono un'altra cosa e
+  non vengono toccati.
+
+## Enti pubblici: la scissione dei pagamenti
+
+Per gli enti pubblici vale la **scissione dei pagamenti** (art. 17-ter DPR
+633/72): **l'IVA si scrive in fattura, ma non la paga allo studio**: la versa
+l'ente direttamente all'erario. Nel file XML l'IVA ha esigibilità `S` e
+l'importo del pagamento è senza IVA; nella proforma il riepilogo lo dice.
+Togliere l'IVA dalla fattura sarebbe sbagliato: è il pagamento che si fa
+senza.
+
+Perché una commessa per un Comune poteva uscire con l'IVA da incassare:
+
+- se non era spuntata come **ente pubblico** la fattura era da privato.
+  Ora la revisione della fattura avvisa quando il committente *sembra* un ente
+  pubblico (Comune, Provincia, Regione, ASL/AST, Università, scuole, Camera di
+  commercio…, o codice destinatario di sei caratteri) e lo corregge con un
+  clic; anche il modulo della commessa lo suggerisce;
+- spuntando la casella su una **commessa esistente** il menu dell'IVA partiva
+  da «nessuna scissione», il valore registrato quando la casella era vuota.
+  Ora parte da «Scissione dei pagamenti».
+
+Negli elenchi delle fatture, per le commesse in split payment la cifra è
+quella che arriva davvero (senza IVA), con la scritta *split payment*; lo
+stesso nel modulo dello scaglione, nella richiesta di fatturazione e nelle
+email al referente.
+
+**Per la commessa di Jesi**: *Modifica commessa* → spunta «Il committente è un
+ente pubblico» → IVA «Scissione dei pagamenti», codice univoco ufficio e CIG →
+salva, e rigenera l'XML.
+
 ## Numeri dei documenti: proposti, sempre modificabili
 
 Fatture, proforma e preventivi ricevono **da soli il numero successivo**, e il

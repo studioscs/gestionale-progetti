@@ -1445,7 +1445,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.14.1';
+const VERSIONE = '2026.10.16.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4532,16 +4532,26 @@ const fattAperta = f => ['da_emettere','pronta'].indexOf(f.stato) >= 0;
    sommano solo al totale del documento e a quello da incassare. Chi le
    trattasse come compenso pagherebbe IVA e cassa su soldi che ha solo
    anticipato. */
-function calcolaFattura(imponibile, spese) {
+/* Il terzo argomento e' la scissione dei pagamenti (art. 17-ter DPR 633/72):
+   l'IVA resta scritta in fattura, ma la versa l'ente all'erario, quindi non
+   entra in quello che lo studio incassa. */
+function calcolaFattura(imponibile, spese, split) {
   const antic = r2(Number(spese) || 0);
   const cassa = STUDIO.aliquotaCassa ? r2(imponibile * STUDIO.aliquotaCassa / 100) : 0;
   const base  = r2(imponibile + (STUDIO.cassaSoggettaIva ? cassa : 0));
   const iva   = r2(base * STUDIO.aliquotaIva / 100);
   const rit   = STUDIO.ritenuta ? r2(imponibile * STUDIO.ritenuta.aliquota / 100) : 0;
   return { imponibile: r2(imponibile), cassa, base, iva, anticipazioni: antic,
-           totale: r2(base + iva + antic), ritenuta: rit,
-           netto: r2(base + iva + antic - rit) };
+           totale: r2(base + iva + antic), ritenuta: rit, split: !!split,
+           netto: r2(base + (split ? 0 : iva) + antic - rit) };
 }
+/* I conti di uno scaglione con le regole della sua commessa */
+const contiScaglione = f => calcolaFattura(impFattura(f), 0, !!(byId(S.projects, f.project_id) || {}).split_payment);
+/* La cifra da mostrare negli elenchi: con la scissione, quello che arriva davvero */
+const cellaTotale = c => c.split
+  ? feuro(c.netto) + '<div style="font-size:10px;color:var(--blue)" title="IVA ' + feuro(c.iva)
+    + ' versata dall’ente all’erario (art. 17-ter DPR 633/72)">split payment</div>'
+  : feuro(c.totale);
 
 /* --------------------------------------------------------------------------
    CONTO CORRENTE DI ACCREDITO
@@ -6651,7 +6661,7 @@ function fatturePanel(pid) {
     + (imp ? Math.min(100, v / imp * 100) : 0) + '%;background:' + col + '"></div></div></div>';
 
   const righe = list.map(f => {
-    const c = calcolaFattura(impFattura(f));
+    const c = contiScaglione(f);
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     const rr = righeFattura(f.id);
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
@@ -6669,7 +6679,7 @@ function fatturePanel(pid) {
             + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '') + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
         + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
-      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
+      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
@@ -6780,7 +6790,7 @@ function rFatturare() {
   }
 
   const riga = f => {
-    const c = calcolaFattura(impFattura(f));
+    const c = contiScaglione(f);
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
       + '<td style="font-size:12px"><b>' + esc(pn(f.project_id)) + '</b>'
@@ -6794,7 +6804,7 @@ function rFatturare() {
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
                 + esc(f.richiesta_note) + '</div>' : '') : '') + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
-      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + feuro(c.totale) + '</td>'
+      + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
       + '<td class="ac" style="white-space:nowrap">' + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
         + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
@@ -7332,12 +7342,13 @@ function aggiornaCalcolo() {
       : p.amount
         ? 'Importo di commessa: ' + feuro(p.amount) + '. Indica una percentuale, un importo fisso o i servizi.'
         : 'La commessa non ha un importo: usa un valore fisso o elenca i servizi.'; return; }
-  const c = calcolaFattura(imp);
+  const c = calcolaFattura(imp, 0, !!p.split_payment);
   el('fa-calc').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b>'
     + (c.cassa ? ' · cassa ' + STUDIO.aliquotaCassa + '% ' + feuro(c.cassa) : '')
     + ' · IVA ' + STUDIO.aliquotaIva + '% ' + feuro(c.iva)
     + (c.ritenuta ? ' · ritenuta −' + feuro(c.ritenuta) : '')
     + ' → totale <b>' + feuro(c.totale) + '</b>'
+    + (c.split ? ' · <b>da incassare ' + feuro(c.netto) + '</b> (scissione dei pagamenti: l’IVA la versa l’ente)' : '')
     + (c.ritenuta ? ', netto a pagare ' + feuro(c.netto) : '');
 }
 
@@ -7576,6 +7587,12 @@ function prossimoNumero(anno, escludi) {
   return numeroSuccessivo(numeriDellAnno('numero_fattura', 'data_fattura', anno, escludi), anno, anno + '/001');
 }
 
+/* Ha l'aria di un ente pubblico? Dal nome, o dal codice destinatario di sei
+   caratteri, che e' quello degli uffici della PA. Serve solo ad avvisare. */
+const RE_ENTE_PUBBLICO = /\b(comune|provincia|regione|ministero|prefettura|questura|asl|ast|asur|azienda sanitaria|azienda ospedaliera|universit[aà]|unione (dei comuni|montana)|comunit[aà] montana|consorzio di bonifica|camera di commercio|istituto comprensivo|istituto (di istruzione|tecnico|professionale)|liceo|agenzia (delle|del|per)|autorit[aà]|parco nazionale|inps|inail|demanio|soprintendenza|vigili del fuoco|genio civile|tribunale|corte dei conti|corte d.appello)(?![a-zàèéìòù])/i;
+const sembraEntePubblico = (nome, dest) => RE_ENTE_PUBBLICO.test(String(nome || ''))
+  || /^[A-Z0-9]{6}$/.test(String(dest || '').trim().toUpperCase());
+
 function disegnaRevisione() {
   const d = REV;
   const t = (l, k, ph, tipo, hint) =>
@@ -7643,6 +7660,22 @@ function disegnaRevisione() {
       + 'Le note interne dello scaglione e la nota all’amministrazione restano fra voi.</div></div>'
 
     + sez('Destinatario', d.pa ? 'ente pubblico: formato FPA12' : 'privato: formato FPR12')
+    /* «Comune di Jesi» trattato da privato: la fattura uscirebbe con l'IVA a
+       carico dell'ente e nel formato dei privati. Si dice, e si corregge qui. */
+    + (!d.pa && sembraEntePubblico(d.cliente, d.destinatario)
+        ? '<div class="wbox mb16" style="font-size:12.5px"><b>«' + esc(d.cliente) + '» sembra un ente pubblico</b>, '
+          + 'ma la commessa è segnata come committente privato: la fattura uscirebbe con l’IVA da incassare e nel '
+          + 'formato dei privati. Per gli enti pubblici vale la <b>scissione dei pagamenti</b> (art. 17-ter DPR 633/72): '
+          + 'l’IVA si indica in fattura ma la versa l’ente all’erario.'
+          + '<div style="margin-top:8px"><button class="btn btn-sm btn-p" id="rev-pa-fix" type="button">'
+          + 'È un ente pubblico: applica la scissione dei pagamenti</button></div>'
+          + '<div class="hint" style="margin-top:6px">Vale per questo file. Per tutte le fatture della commessa: '
+          + '<i>Modifica commessa</i> → spunta «Il committente è un ente pubblico».</div></div>'
+        : '')
+    + (d.pa && !d.split
+        ? '<div class="ibox mb16" style="font-size:12px">Ente pubblico <b>senza</b> scissione dei pagamenti: '
+          + 'l’IVA la incassa lo studio. È corretto solo per gli enti esclusi dall’art. 17-ter: in caso di dubbio '
+          + 'scegli «Scissione dei pagamenti» qui sotto.</div>' : '')
     + '<div class="fg2">'
       + '<div class="fg"><label class="fl">Tipo di committente</label>'
         + '<select class="fc" data-rev="pa">'
@@ -7789,6 +7822,8 @@ function revCambia(k, v) {
   if (k === 'proformaNumero') REV._pfAuto = false;
   if (k === 'data' && REV._numAuto) segui('numero', true, prossimoNumero(annoDi(v), REV.fattId));
   if (k === 'proformaData' && REV._pfAuto) segui('proformaNumero', true, prossimaProforma(annoDi(v), REV.fattId));
+  /* passando a ente pubblico, la scissione dei pagamenti e' la regola */
+  if (k === 'pa' && REV.pa) REV.split = true;
   if (k === 'pa') { disegnaRevisione(); return; }   /* cambiano i campi mostrati */
   aggiornaTotali();
 }
@@ -8308,9 +8343,11 @@ async function saveCliente() {
       return toast('Esiste già un cliente con questa partita IVA.', 'error');
     return sbErr(error, 'cliente');
   }
+  /* la modifica arriva a tutte le sue commesse e ai preventivi in bozza */
+  const n = id ? await propagaCliente(Object.assign({}, byId(S.clienti, id) || {}, data || {}, pay, { id })) : 0;
   closeM('m-cli');
   await loadAll(true); render();
-  toast('Cliente salvato', 'success');
+  toast('Cliente salvato' + (n ? ': aggiornati i dati in ' + n + (n === 1 ? ' commessa' : ' commesse') : ''), 'success');
   return data;
 }
 
@@ -8339,6 +8376,80 @@ function applicaCliente(cid) {
     referente_tec: c.referente_tec, referente_tec_ruolo: c.referente_tec_ruolo,
     referente_tec_email: c.referente_tec_email, referente_tec_tel: c.referente_tec_tel
   });
+}
+
+/* ===========================================================================
+   I DATI DEL CLIENTE SONO UNO SOLO
+   Prima la commessa ne copiava una fotografia al momento della creazione, e
+   da li' anagrafica e commessa vivevano separate: correggere la PEC in Clienti
+   non la correggeva nelle commesse, e la fattura partiva con quella vecchia.
+   Ora una modifica da una parte arriva dall'altra: dall'anagrafica a tutte le
+   commesse del cliente (e ai suoi preventivi ancora in bozza), dalla commessa
+   all'anagrafica e alle altre commesse dello stesso cliente.
+   =========================================================================== */
+const CAMPI_CLIENTE = [
+  ['denominazione', 'client'], ['piva', 'cliente_piva'], ['cf', 'cliente_cf'], ['sdi', 'cliente_sdi'],
+  ['pec', 'cliente_pec'], ['indirizzo', 'cliente_indirizzo'], ['cap', 'cliente_cap'],
+  ['comune', 'cliente_comune'], ['provincia', 'cliente_prov'],
+  ['referente', 'referente'], ['referente_ruolo', 'referente_ruolo'],
+  ['referente_email', 'referente_email'], ['referente_tel', 'referente_tel'],
+  ['referente_tec', 'referente_tec'], ['referente_tec_ruolo', 'referente_tec_ruolo'],
+  ['referente_tec_email', 'referente_tec_email'], ['referente_tec_tel', 'referente_tec_tel']];
+const valCli = v => (v === undefined || v === null || String(v).trim() === '') ? null : v;
+const ugualeCli = (a, b) => String(valCli(a) ?? '') === String(valCli(b) ?? '');
+
+/* Dall'anagrafica alle commesse e ai preventivi in bozza. Ritorna quante
+   commesse sono state riallineate. */
+async function propagaCliente(c, escludiPid) {
+  if (!c || !c.id) return 0;
+  let n = 0;
+  for (const p of S.projects.filter(x => x.cliente_id === c.id && x.id !== escludiPid)) {
+    const agg = {};
+    CAMPI_CLIENTE.forEach(([kc, kp]) => { if (!ugualeCli(p[kp], c[kc])) agg[kp] = valCli(c[kc]); });
+    if (c.ente_pubblico && !p.ente_pubblico) { agg.ente_pubblico = true; agg.split_payment = c.split_payment !== false; }
+    if (!Object.keys(agg).length) continue;
+    const { error } = await SB.from('projects').update(agg).eq('id', p.id);
+    if (error) { console.warn('riallineo commessa', error); continue; }
+    Object.assign(p, agg); n++;
+  }
+  for (const pv of (S.preventivi || []).filter(x => x.cliente_id === c.id && x.stato === 'bozza')) {
+    const agg = { cliente_nome: c.denominazione, cliente_indirizzo: valCli(c.indirizzo), cliente_cap: valCli(c.cap),
+      cliente_comune: valCli(c.comune), cliente_prov: valCli(c.provincia), cliente_cf: valCli(c.cf),
+      cliente_piva: valCli(c.piva), cliente_pec: valCli(c.pec || c.referente_email), cliente_tel: valCli(c.referente_tel) };
+    if (Object.keys(agg).every(k => ugualeCli(pv[k], agg[k]))) continue;
+    const { error } = await SB.from('preventivi').update(agg).eq('id', pv.id);
+    if (!error) Object.assign(pv, agg);
+  }
+  return n;
+}
+
+/* Dalla commessa all'anagrafica: solo i campi che in questo salvataggio sono
+   cambiati, cosi' una commessa con una copia vecchia non riporta indietro i
+   dati corretti nel frattempo da un'altra parte. Senza scheda cliente, la si
+   crea (o la si trova per nome) e la si collega. */
+async function clienteDaCommessa(dopo, prima) {
+  let cid = dopo.cliente_id;
+  if (!cid && dopo.client) {
+    cid = await creaClienteDaCommessa(dopo);
+    if (cid) await SB.from('projects').update({ cliente_id: cid }).eq('id', dopo.id);
+  }
+  const c = cid ? byId(S.clienti, cid) : null;
+  if (!c) return 0;
+  const agg = {};
+  CAMPI_CLIENTE.forEach(([kc, kp]) => {
+    /* su una commessa nuova conta solo cio' che e' scritto: un campo lasciato
+       vuoto non cancella un dato che in anagrafica c'e' */
+    const cambiato = prima ? !ugualeCli(dopo[kp], prima[kp]) : !!valCli(dopo[kp]);
+    if (cambiato && !ugualeCli(dopo[kp], c[kc]) && (kc !== 'denominazione' || valCli(dopo[kp]))) agg[kc] = valCli(dopo[kp]);
+  });
+  /* un ente pubblico resta tale per le commesse che verranno */
+  if (dopo.ente_pubblico && !c.ente_pubblico) Object.assign(agg, { ente_pubblico: true,
+    split_payment: dopo.split_payment !== false, codice_ufficio: dopo.codice_ufficio || null });
+  if (!Object.keys(agg).length) return 0;
+  const { error } = await SB.from('clienti').update(agg).eq('id', c.id);
+  if (error) { console.warn('anagrafica cliente', error); return 0; }
+  Object.assign(c, agg);
+  return 1 + await propagaCliente(c, dopo.id);
 }
 
 /* Alla creazione di una commessa con un cliente nuovo, lo aggiunge all'anagrafica */
@@ -8551,7 +8662,7 @@ function mailFattura(fid) {
   const f = byId(S.fatture, fid); if (!f) return;
   const p = byId(S.projects, f.project_id) || {};
   if (!p.referente_email) return toast('La commessa non ha l’email del referente amministrativo.', 'error');
-  const c = calcolaFattura(impFattura(f));
+  const c = contiScaglione(f);
   const rows = [
     'Gentile ' + (p.referente || 'referente') + ',',
     '',
@@ -8562,9 +8673,9 @@ function mailFattura(fid) {
     f.numero_fattura ? 'Fattura n. ' + f.numero_fattura + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '') : '',
     'Imponibile: ' + feuro(c.imponibile),
     c.cassa ? 'Contributo cassa: ' + feuro(c.cassa) : '',
-    'IVA: ' + feuro(c.iva),
+    'IVA: ' + feuro(c.iva) + (c.split ? ' (scissione dei pagamenti: versata dall’ente, art. 17-ter DPR 633/72)' : ''),
     'Totale documento: ' + feuro(c.totale),
-    c.ritenuta ? 'Netto a pagare: ' + feuro(c.netto) : '',
+    c.ritenuta || c.split ? 'Netto a pagare: ' + feuro(c.netto) : '',
     '',
     'Cordiali saluti,',
     S.prof.full_name || '',
@@ -8645,9 +8756,10 @@ function disegnaChiedi() {
       ? 'Indica un imponibile oppure una percentuale dell’importo di commessa.'
       : 'Questo scaglione non ha ancora un importo: aprilo dalla scheda Fatturazione e completalo.';
     return; }
-  const c = calcolaFattura(imp);
+  const c = calcolaFattura(imp, 0, !!(p && p.split_payment));
   el('ch-riep').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b> → totale documento <b>'
-    + feuro(c.totale) + '</b>' + (c.ritenuta ? ', netto a pagare ' + feuro(c.netto) : '');
+    + feuro(c.totale) + '</b>' + (c.ritenuta || c.split ? ', netto a pagare ' + feuro(c.netto) : '')
+    + (c.split ? ' (scissione dei pagamenti)' : '');
 }
 
 async function inviaChiedi() {
@@ -8710,7 +8822,7 @@ function mailAmministrazione(fid) {
 function mailtoAmministrazione(fid) {
   const f = byId(S.fatture, fid); if (!f) return null;
   const p = byId(S.projects, f.project_id) || {};
-  const c = calcolaFattura(impFattura(f));
+  const c = contiScaglione(f);
   const cl = clienteDi(p.id);
   const rows = [
     'Si può procedere alla fatturazione dello scaglione indicato di seguito.',
@@ -8725,9 +8837,9 @@ function mailtoAmministrazione(fid) {
     'Scaglione: ' + f.descrizione,
     'Imponibile: ' + feuro(c.imponibile),
     c.cassa ? 'Contributo cassa: ' + feuro(c.cassa) : '',
-    'IVA: ' + feuro(c.iva),
+    'IVA: ' + feuro(c.iva) + (c.split ? ' (scissione dei pagamenti: versata dall’ente, art. 17-ter DPR 633/72)' : ''),
     'Totale documento: ' + feuro(c.totale),
-    c.ritenuta ? 'Netto a pagare: ' + feuro(c.netto) : '',
+    c.ritenuta || c.split ? 'Netto a pagare: ' + feuro(c.netto) : '',
     p.sisma ? 'Lavori di ricostruzione post-sisma: usare l’IBAN dedicato.' : '',
     '',
     f.richiesta_note ? 'Note: ' + f.richiesta_note : '',
@@ -10450,7 +10562,11 @@ function drawWizard() {
       + sez('Committente pubblico', 'stazione appaltante: cambia il formato della fattura')
       + '<div class="fg"><label class="row" style="cursor:pointer;font-size:13px">'
         + '<input type="checkbox" id="w-pa"' + (d.ente_pubblico ? ' checked' : '') + '>'
-        + '&nbsp;<b>Il committente è un ente pubblico</b></label></div>'
+        + '&nbsp;<b>Il committente è un ente pubblico</b></label>'
+        + (!d.ente_pubblico && sembraEntePubblico(d.client)
+            ? '<div class="wbox" style="font-size:12px;margin-top:6px">«' + esc(d.client) + '» sembra un ente pubblico: '
+              + 'se lo è, spunta la casella. Altrimenti le fatture escono con l’IVA da incassare, senza scissione dei pagamenti.</div>' : '')
+        + '</div>'
       + '<div id="w-pa-box"' + (d.ente_pubblico ? '' : ' style="display:none"') + '>' + paBoxHtml(d) + '</div>'
       + sez('Dati fiscali del committente', 'servono solo per generare l’XML della fattura')
       + '<div class="fg3">'
@@ -10774,9 +10890,13 @@ async function wzSave() {
 
   try {
     if (WZ.edit) {
+      const primaDi = Object.assign({}, byId(S.projects, WZ.edit) || {});
       const { error } = await SB.from('projects').update(pay).eq('id', WZ.edit);
       if (error) return sbErr(error, 'salva commessa');
       if (pay.ente_pubblico) await registraEnte(pay);
+      /* i dati del committente corretti qui arrivano in anagrafica e nelle
+         altre commesse dello stesso cliente */
+      await clienteDaCommessa(Object.assign({}, primaDi, pay, { id: WZ.edit }), primaDi);
 
       /* Il percorso di lavoro puo' essere cambiato: si allinea la struttura a
          quello che ora e' previsto. Le aggiunte partono sempre, le rimozioni
@@ -10807,6 +10927,8 @@ async function wzSave() {
     if (!pay.cliente_id && pay.client) pay.cliente_id = await creaClienteDaCommessa(pay);
     const { data, error } = await SB.from('projects').insert(pay).select().single();
     if (error) return sbErr(error, 'crea commessa');
+    /* cliente scelto dall'anagrafica e poi corretto qui: la correzione vale ovunque */
+    if (pay.cliente_id) await clienteDaCommessa(Object.assign({}, pay, { id: data.id }), null);
     /* L'ufficio destinatario entra nel registro: alla prossima commessa per lo
        stesso ente bastera' digitare il codice univoco. */
     if (pay.ente_pubblico) await registraEnte(pay);
@@ -11853,6 +11975,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* Committente pubblico: mostra o nasconde il blocco senza ridisegnare */
     if (e.target.id === 'w-pa' && el('w-pa-box')) {
+      /* Spuntando "ente pubblico" la scissione dei pagamenti e' la regola
+         (art. 17-ter DPR 633/72): prima il menu ripartiva da "nessuna
+         scissione", il valore registrato mentre la casella era vuota, e la
+         fattura usciva con l'IVA a carico dell'ente. */
+      if (e.target.checked && !WZ.d.ente_pubblico) {
+        WZ.d.split_payment = true;
+        if (el('w-split')) el('w-split').value = '1';
+      }
       if (e.target.checked && !el('w-uff')) el('w-pa-box').innerHTML = paBoxHtml(WZ.d);
       el('w-pa-box').style.display = e.target.checked ? '' : 'none';
     }
@@ -11982,6 +12112,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const k = e.target.dataset.rev; if (k) revCambia(k, e.target.value); };
+  el('rev-body').addEventListener('click', e => {
+    if (e.target.id !== 'rev-pa-fix') return;
+    REV.pa = true; REV.split = true;
+    if (/^[A-Z0-9]{7}$/.test(String(REV.destinatario || ''))) REV.destinatario = '';   /* il codice SDI dei privati non vale per la PA */
+    disegnaRevisione();
+    toast('Ente pubblico con scissione dei pagamenti: completa il codice univoco ufficio e il CIG', 'success');
+  });
   el('rev-body').addEventListener('input',  revIn);
   el('rev-body').addEventListener('change', revIn);
   el('fa-perc').oninput  = aggiornaCalcolo;
