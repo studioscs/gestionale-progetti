@@ -716,6 +716,28 @@ dice quante commesse e schede ha sistemato. Nella scheda *Anagrafica* di ogni
 commessa si vede se è collegata alla scheda cliente; se non lo è, **Collega e
 allinea** lo fa per quella.
 
+**Nuova commessa: prima la scheda del committente.** Il primo passo del
+modulo comincia con la scheda completa del cliente, con gli stessi campi di
+*Clienti* e nello stesso ordine: denominazione, tipo (società/ente o persona
+fisica), P.IVA, C.F., SDI, PEC, indirizzo, i due referenti, le note e la
+casella *ente pubblico*. Poi vengono nome e codice della commessa, l'immobile,
+importi e date. Scegliendo un cliente già in anagrafica si compila tutto da
+solo; se è nuovo, al salvataggio entra in anagrafica già completo (tipo e note
+compresi, che stanno solo nella scheda e non nella commessa).
+
+**Dal preventivo alla commessa, e ritorno.**
+
+- In *Preventivi* (riga o editor) **➜ Crea commessa** apre il modulo già
+  compilato: committente dalla sua scheda (creata al volo se manca), importo
+  = somma delle prestazioni senza cassa e IVA, descrizione con le voci del
+  preventivo, immobile nell'indirizzo, percorso proposto dal modello
+  (strutture, sanatoria → violazioni sismiche, architettonico → edilizia
+  privata). Salvata la commessa, il preventivo risulta **accettato e
+  collegato**: al posto del pulsante compare **📁 Commessa**, che la apre.
+- Nella scheda *Anagrafica* della commessa il riquadro **Preventivi** elenca
+  quelli collegati e **+ Preventivo per questo committente** ne apre uno nuovo
+  già intestato, con l'immobile della commessa.
+
 ## Enti pubblici: la scissione dei pagamenti
 
 Per gli enti pubblici vale la **scissione dei pagamenti** (art. 17-ter DPR

@@ -3889,6 +3889,83 @@ function launchOpts(){
     await p.evaluate(()=>{ S.prof.role='admin'; go('oggi'); });
   });
 
+  /* ---------------- COMMITTENTE COMPLETO NEL MODULO COMMESSA, PREVENTIVO -> COMMESSA ---------------- */
+  await t('il modulo commessa si apre con la scheda completa del committente',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; go('projects'); }); await p.waitForTimeout(300);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    const g=await p.evaluate(()=>{ const prima=(a,b)=>!!(el(a).compareDocumentPosition(el(b))&Node.DOCUMENT_POSITION_FOLLOWING);
+      return {tipo:!!el('w-ctipo'),note:!!el('w-cnote'),
+        ordine:['w-clid','w-cli','w-cpiva','w-cpec','w-cind','w-ref','w-ref2','w-cnote','w-pa','w-name','w-com']
+          .every((id,i,a)=>!i||prima(a[i-1],id))}; });
+    must(g.tipo&&g.note,'mancano tipo o note del cliente: '+JSON.stringify(g));
+    must(g.ordine,'i dati del committente non sono raggruppati prima di quelli della commessa');
+  });
+  await t('tipo e note scritti nella commessa finiscono nella scheda cliente',async()=>{
+    await p.fill('#w-cli','Anna Rossi'); await p.fill('#w-ccf','RSSNNA80A41H211X');
+    await p.selectOption('#w-ctipo','persona'); await p.fill('#w-cnote','Preferisce essere chiamata al mattino');
+    await p.fill('#w-cpec','anna.rossi@pec.it'); await p.fill('#w-ref','Anna Rossi'); await p.fill('#w-reft','333 1234567');
+    await p.fill('#w-name','Bagno Rossi'); await p.fill('#w-com','Osimo');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.waitForTimeout(1600);
+    const g=await p.evaluate(()=>{ const c=__DB.clienti.find(x=>x.denominazione==='Anna Rossi');
+      const pr=__DB.projects.find(x=>x.name==='Bagno Rossi');
+      return {c:c&&{tipo:c.tipo,note:c.note,pec:c.pec,cf:c.cf,tel:c.referente_tel},link:!!(c&&pr&&pr.cliente_id===c.id),
+        colonne:pr&&('tipo' in pr||'note' in pr)}; });
+    must(g.c&&g.c.tipo==='persona'&&g.c.note==='Preferisce essere chiamata al mattino','tipo o note non salvati: '+JSON.stringify(g.c));
+    must(g.c.pec==='anna.rossi@pec.it'&&g.c.cf==='RSSNNA80A41H211X'&&g.c.tel==='333 1234567','scheda incompleta: '+JSON.stringify(g.c));
+    must(g.link,'commessa non collegata alla scheda');
+    must(!g.colonne,'tipo/note finiti nella tabella delle commesse');
+  });
+  await t('in modifica le note del cliente si correggono dalla commessa',async()=>{
+    const pid=await p.evaluate(()=>__DB.projects.find(x=>x.name==='Bagno Rossi').id);
+    await p.evaluate(pid=>openEditProj(pid),pid); await p.waitForSelector('#m-proj.show');
+    must(await p.inputValue('#w-cnote')==='Preferisce essere chiamata al mattino','le note della scheda non si vedono');
+    must(await p.inputValue('#w-ctipo')==='persona','il tipo della scheda non si vede');
+    await p.fill('#w-cnote','Chiamare dopo le 15'); await p.click('#mp-save'); await p.waitForTimeout(1400);
+    must(await p.evaluate(()=>__DB.clienti.find(x=>x.denominazione==='Anna Rossi').note)==='Chiamare dopo le 15','note non aggiornate');
+  });
+  let PVC=null;
+  await t('dal preventivo nasce la commessa, già compilata',async()=>{
+    PVC=await p.evaluate(()=>{ const x=__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl');
+      return {id:x.id,cli:x.cliente_id,imp:contiDocumento(x.voci).imponibile,num:numeroPreventivo(x)}; });
+    await p.evaluate(()=>go('preventivi')); await p.waitForTimeout(300);
+    await p.click('.pv-desk [data-prevcomm="'+PVC.id+'"]'); await p.waitForSelector('#m-proj.show',{timeout:4000});
+    const g=await p.evaluate(()=>({clid:el('w-clid').value,cli:el('w-cli').value,piva:el('w-cpiva').value,pec:el('w-cpec').value,
+      com:el('w-ccom').value,imp:Number(el('w-imp').value),desc:el('w-desc').value,name:el('w-name').value,
+      box:el('mp-body').textContent,t:el('mp-t').textContent}));
+    must(g.clid===PVC.cli&&g.cli==='Bianchi Costruzioni Srl'&&g.piva==='01234567890'&&g.pec==='bianchi@pec.it'&&g.com==='Recanati',
+      'committente non riportato: '+JSON.stringify(g));
+    must(Math.abs(g.imp-PVC.imp)<0.01,'importo '+g.imp+' invece di '+PVC.imp);
+    must(g.desc.indexOf('Dal preventivo '+PVC.num)===0&&/\nA\. /.test(g.desc),'descrizione: '+g.desc);
+    must(g.name&&/preventivo/.test(g.box)&&/dal preventivo/.test(g.t),'nome o avviso mancanti');
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.waitForTimeout(1600);
+    const r=await p.evaluate(id=>{ const x=__DB.preventivi.find(y=>y.id===id); const pr=x&&__DB.projects.find(y=>y.id===x.project_id);
+      return {stato:x.stato,pr:pr&&{cli:pr.cliente_id,amount:Number(pr.amount)}}; },PVC.id);
+    must(r.pr,'il preventivo non è collegato alla commessa');
+    must(r.stato==='accettato','il preventivo non risulta accettato: '+r.stato);
+    must(r.pr.cli===PVC.cli&&Math.abs(r.pr.amount-PVC.imp)<0.01,'commessa: '+JSON.stringify(r.pr));
+  });
+  await t('il preventivo collegato porta alla sua commessa',async()=>{
+    await p.evaluate(()=>{ document.querySelectorAll('.ov.show').forEach(m=>m.classList.remove('show')); go('preventivi'); });
+    await p.waitForTimeout(300);
+    must(await p.locator('.pv-desk [data-prevcomm="'+PVC.id+'"]').count()===0,'si può ancora creare una seconda commessa');
+    const pid=await p.evaluate(id=>__DB.preventivi.find(y=>y.id===id).project_id,PVC.id);
+    await p.click('tr[data-prev="'+PVC.id+'"] .pv-desk [data-proj="'+pid+'"]'); await p.waitForTimeout(400);
+    must(await p.evaluate(pid=>S.projId===pid&&S.page==='project',pid),'il pulsante Commessa non apre la commessa');
+  });
+  await t('dalla commessa un preventivo già intestato al committente',async()=>{
+    const pid=await p.evaluate(()=>__DB.projects.find(x=>x.name==='Bagno Rossi').id);
+    await p.evaluate(pid=>goProject(pid,'anagrafica'),pid); await p.waitForTimeout(400);
+    await p.click('[data-act="prevdacomm"]'); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    const g=await p.evaluate(()=>({n:document.querySelector('[data-pv="cliente_nome"]').value,
+      pec:document.querySelector('[data-pv="cliente_pec"]').value,imm:document.querySelector('[data-pv="immobile"]').value}));
+    must(g.n==='Anna Rossi'&&g.pec==='anna.rossi@pec.it'&&/OSIMO/.test(g.imm),'preventivo non intestato: '+JSON.stringify(g));
+    await p.click('#pv-save'); await p.waitForTimeout(900);
+    must(await p.evaluate(pid=>__DB.preventivi.some(x=>x.project_id===pid&&x.cliente_nome==='Anna Rossi'),pid),'preventivo non collegato alla commessa');
+    await p.evaluate(()=>closeM('m-prev'));
+  });
+
   /* ---------------- PRATICHE: CATALOGO, PROPOSTE, ATTIVITA' COLLEGATE ---------------- */
   let PRID=null;
   await t('creando una commessa le pratiche non nascono più da sole',async()=>{

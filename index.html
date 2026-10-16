@@ -696,6 +696,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn" id="pv-ripr" style="display:none">Ripristina l’originale</button>
         <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
         <button class="btn" id="pv-copia" style="display:none">&#10697; Duplica preventivo</button>
+        <button class="btn" id="pv-comm" style="display:none" title="La commessa nasce con committente, importo e voci di questo preventivo">&#10140; Crea commessa</button>
         <button class="btn" id="pv-damod" style="display:none" title="Voci, articoli e note diventano un modello nuovo">&#128203; Salva come modello</button>
       </span>
       <button class="btn" data-close="m-prev">Chiudi</button>
@@ -1445,7 +1446,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.16.2';
+const VERSIONE = '2026.10.16.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5550,6 +5551,10 @@ const azioniPrev = x => '<div class="pv-az">'
   + '<button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196; PDF</button>'
   + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039; Email</button>'
   + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Nuovo preventivo con le stesse voci">&#10697; Duplica</button>'
+  + (x.project_id && byId(S.projects, x.project_id)
+      ? '<button class="btn btn-xs" data-proj="' + x.project_id + '" title="Apri la commessa nata da questo preventivo">&#128193; Commessa</button>'
+      : x.stato !== 'rifiutato' && canW()
+        ? '<button class="btn btn-xs" data-prevcomm="' + x.id + '" title="Crea la commessa con committente, importo e voci del preventivo">&#10140; Crea commessa</button>' : '')
   + '</div>';
 function rPreventivi() {
   if (!vedeTutto()) {
@@ -5669,6 +5674,9 @@ function apriEditorPrev() {
     : (PV.id ? 'Preventivo ' + numeroPreventivo(PV)
              : 'Nuovo preventivo' + (PV._copiaDi ? ' — copia del ' + PV._copiaDi : ''));
   el('pv-copia').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
+  const giaComm = PV.project_id && byId(S.projects, PV.project_id);
+  el('pv-comm').style.display = (!mod && canW() && (giaComm || PV.stato !== 'rifiutato')) ? 'inline-flex' : 'none';
+  el('pv-comm').innerHTML = giaComm ? '&#128193; Apri commessa' : '&#10140; Crea commessa';
   el('pv-del').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
   el('pv-dup').style.display = (mod && PV.chiave) ? 'inline-flex' : 'none';
@@ -5944,7 +5952,8 @@ async function salvaPreventivo(silenzioso) {
     cliente_prov: d.cliente_prov || null, cliente_cf: d.cliente_cf || null, cliente_piva: d.cliente_piva || null,
     cliente_pec: d.cliente_pec || null, cliente_tel: d.cliente_tel || null,
     immobile: d.immobile || null, oggetto: d.oggetto || null, voci: vociPulite(d.voci),
-    articoli: articoliPuliti(d.articoli), note: d.note || null, scadenza: d.scadenza || null };
+    articoli: articoliPuliti(d.articoli), note: d.note || null, scadenza: d.scadenza || null,
+    project_id: d.project_id || null };
   setLoading('pv-save', true);
   const r = d.id
     ? await SB.from('preventivi').update(pay).eq('id', d.id).select().single()
@@ -5976,6 +5985,62 @@ async function pdfDaEditor() {
 async function mailDaEditor() {
   const x = await salvaPreventivo(true); if (!x) return;
   closeM('m-prev'); apriInvioPreventivo(x.id);
+}
+/* ---------------------------------------------------------------------------
+   DAL PREVENTIVO ALLA COMMESSA, E DALLA COMMESSA AL PREVENTIVO
+   Il committente e' lo stesso dappertutto: la commessa si apre con la sua
+   scheda, l'importo e' la somma delle prestazioni (senza cassa e IVA), la
+   descrizione elenca le voci. Salvata la commessa, il preventivo risulta
+   accettato e collegato.
+   --------------------------------------------------------------------------- */
+const PERCORSO_DA_MODELLO = { strutture: 'strutture', architettonico: 'privato', sanatoria: 'sismica' };
+async function commessaDaPreventivo(id) {
+  let x = byId(S.preventivi, id); if (!x) return;
+  if (x.project_id && byId(S.projects, x.project_id)) return goProject(x.project_id);
+  /* senza scheda cliente la si crea adesso, cosi' la commessa nasce collegata */
+  if (!x.cliente_id && String(x.cliente_nome || '').trim()) {
+    const cli = await clienteDaPreventivo(x);
+    if (cli) { await SB.from('preventivi').update({ cliente_id: cli.id }).eq('id', x.id); x.cliente_id = cli.id; }
+  }
+  openNewProj();
+  const c = x.cliente_id ? byId(S.clienti, x.cliente_id) : null;
+  const pec = String(x.cliente_pec || '').trim(), ePec = /(^|[.@])pec\.|legalmail|postacert|cert\./i.test(pec);
+  if (c) applicaCliente(c.id);
+  /* quello che la scheda non ha lo prende dal preventivo */
+  const dalPrev = { client: x.cliente_nome, cliente_indirizzo: x.cliente_indirizzo, cliente_cap: x.cliente_cap,
+    cliente_comune: x.cliente_comune, cliente_prov: x.cliente_prov, cliente_cf: x.cliente_cf,
+    cliente_piva: x.cliente_piva, cliente_pec: ePec ? pec : null,
+    referente_email: pec && !ePec ? pec : null, referente_tel: x.cliente_tel };
+  Object.keys(dalPrev).forEach(k => { if (!valCli(WZ.d[k]) && valCli(dalPrev[k])) WZ.d[k] = dalPrev[k]; });
+  if (!c) WZ.cli = { tipo: tipoProbabile(x.cliente_piva, x.cliente_cf), note: null };
+  const voci = (x.voci || []).filter(v => String(v.descrizione || '').trim());
+  const m = modelloDi(x.modello);
+  Object.assign(WZ.d, {
+    name: [(m && m.nome) || x.titolo || 'Incarico', x.immobile || x.cliente_nome].filter(Boolean).join(' — '),
+    indirizzo: x.immobile || null,
+    amount: r2(contiDocumento(x.voci || []).imponibile) || null,
+    description: 'Dal preventivo ' + numeroPreventivo(x) + ' del ' + fdate(x.data) + (voci.length ? ':\n'
+      + voci.map((v, i) => lettera(i) + '. ' + String(v.descrizione).trim()).join('\n') : '')
+  });
+  WZ.tpl = (c && c.ente_pubblico) ? 'pubblico' : (PERCORSO_DA_MODELLO[x.modello] || 'vuoto');
+  if (c && c.ente_pubblico) Object.assign(WZ.d, { ente_pubblico: true, split_payment: c.split_payment !== false,
+    codice_ufficio: c.codice_ufficio || null });
+  WZ.daPrev = x.id;
+  el('mp-t').textContent = 'Nuova Commessa dal preventivo ' + numeroPreventivo(x);
+  drawWizard();
+}
+/* Dalla commessa: un preventivo nuovo gia' intestato al committente */
+function preventivoDaCommessa(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  nuovoPreventivo(modelliPreventivo()[0].chiave);
+  if (p.cliente_id && byId(S.clienti, p.cliente_id)) applicaClientePrev(p.cliente_id);
+  else Object.assign(PV, { cliente_nome: p.client || '', cliente_indirizzo: p.cliente_indirizzo || '',
+    cliente_cap: p.cliente_cap || '', cliente_comune: p.cliente_comune || '', cliente_prov: p.cliente_prov || '',
+    cliente_cf: p.cliente_cf || '', cliente_piva: p.cliente_piva || '',
+    cliente_pec: p.cliente_pec || p.referente_email || '', cliente_tel: p.referente_tel || '' });
+  PV.immobile = [p.indirizzo, p.comune].filter(Boolean).join(' A ').toUpperCase();
+  PV.project_id = p.id;
+  disegnaPrev();
 }
 async function pdfPreventivo(id) {
   const x = byId(S.preventivi, id); if (!x) return;
@@ -8369,6 +8434,7 @@ async function delCliente(id) {
 function applicaCliente(cid) {
   const c = byId(S.clienti, cid);
   if (!c) { WZ.d.cliente_id = null; return; }
+  WZ.cli = { cid: c.id, tipo: c.tipo || null, note: c.note || null };
   Object.assign(WZ.d, {
     cliente_id: c.id, client: c.denominazione,
     cliente_piva: c.piva, cliente_cf: c.cf, cliente_sdi: c.sdi, cliente_pec: c.pec,
@@ -8463,7 +8529,7 @@ async function clienteDaCommessa(dopo, prima) {
   let cid = dopo.cliente_id;
   if (!cid && dopo.client) {
     const c0 = S.clienti.find(c => normNome(c.denominazione) === normNome(dopo.client));
-    cid = c0 ? c0.id : await creaClienteDaCommessa(dopo);
+    cid = c0 ? c0.id : await creaClienteDaCommessa(dopo, WZ && WZ.cli);
     if (cid) { await SB.from('projects').update({ cliente_id: cid }).eq('id', dopo.id);
       const pp = byId(S.projects, dopo.id); if (pp) pp.cliente_id = cid; }
   }
@@ -8502,8 +8568,26 @@ async function allineaClienti() {
   return { comm, schede };
 }
 
+/* Persona fisica se ha solo un codice fiscale di 16 caratteri */
+const tipoProbabile = (piva, cf) => !String(piva || '').trim()
+  && /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(String(cf || '').trim().toUpperCase()) ? 'persona' : 'societa';
+
+/* Tipo e note scritti nel modulo della commessa vanno nella scheda */
+async function tipoNoteCliente(cid, cli) {
+  const c = cid ? byId(S.clienti, cid) : null;
+  if (!c || !cli) return;
+  /* la scheda mostrata nel modulo si corregge del tutto; una trovata per nome
+     prende solo quello che le manca */
+  const suaScheda = cli.cid === cid, agg = {};
+  if (cli.tipo && cli.tipo !== c.tipo && (suaScheda || !c.tipo)) agg.tipo = cli.tipo;
+  if (!ugualeCli(cli.note, c.note) && (suaScheda || (valCli(cli.note) && !valCli(c.note)))) agg.note = valCli(cli.note);
+  if (!Object.keys(agg).length) return;
+  const { error } = await SB.from('clienti').update(agg).eq('id', cid);
+  if (error) console.warn('anagrafica cliente', error); else Object.assign(c, agg);
+}
+
 /* Alla creazione di una commessa con un cliente nuovo, lo aggiunge all'anagrafica */
-async function creaClienteDaCommessa(d) {
+async function creaClienteDaCommessa(d, cli) {
   if (!d.client) return null;
   const esiste = S.clienti.find(c => (c.denominazione || '').toLowerCase() === d.client.toLowerCase());
   if (esiste) return esiste.id;
@@ -8515,9 +8599,11 @@ async function creaClienteDaCommessa(d) {
     referente_email: d.referente_email, referente_tel: d.referente_tel,
     referente_tec: d.referente_tec, referente_tec_ruolo: d.referente_tec_ruolo,
     referente_tec_email: d.referente_tec_email, referente_tec_tel: d.referente_tec_tel,
+    tipo: (cli && cli.tipo) || tipoProbabile(d.cliente_piva, d.cliente_cf), note: (cli && cli.note) || null,
     created_by: S.me.id
   }).select().maybeSingle();
   if (error) { console.warn('anagrafica cliente', error); return null; }
+  if (data && !byId(S.clienti, data.id)) S.clienti.push(data);
   return data ? data.id : null;
 }
 
@@ -8658,6 +8744,15 @@ function anagraficaPanel(p) {
             + 'all’anagrafica clienti</b>: i dati del committente qui e in Clienti non si aggiornano a vicenda.</span>'
             + (canW() ? '<button class="btn btn-sm" data-act="collegacli">Collega e allinea</button>' : '') + '</div>')
           + '</div>'; })()
+    + (vedeTutto() ? (() => { const pvs = (S.preventivi || []).filter(x => x.project_id === p.id);
+        return '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Preventivi</span>'
+          + '<button class="btn btn-sm" data-act="prevdacomm">&#43; Preventivo per questo committente</button></div>'
+          + (pvs.length ? pvs.map(x => '<div class="spread" data-prev="' + x.id + '" style="cursor:pointer;padding:5px 0;'
+              + 'border-bottom:1px solid var(--bord);font-size:12.5px"><span><b>' + esc(numeroPreventivo(x)) + '</b> — '
+              + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + '</span><span>' + feuro(totalePreventivo(x))
+              + ' ' + bdg(x.stato, ST_PREV) + '</span></div>').join('')
+            : '<span style="font-size:12px;color:var(--mut)">Nessun preventivo collegato. Il nuovo parte già con i dati del committente e dell’immobile.</span>')
+          + '</div>'; })() : '')
     + '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Referenti del committente</span></div>'
       + '<div class="g2">'
         + referenteBox('Amministrativo', 'riceve la copia della fattura', p.referente, p.referente_ruolo,
@@ -10524,7 +10619,7 @@ let WZ = null;
 
 function openNewProj() {
   WZ = { step:1, edit:null, rimuovi:false, tpl:'privato',
-         conds:['strutture','geologia','impianti','energetico','sicurezza','dl','catasto','agibilita'], d:{} };
+         conds:['strutture','geologia','impianti','energetico','sicurezza','dl','catasto','agibilita'], d:{}, cli:{} };
   el('mp-t').textContent = 'Nuova Commessa';
   drawWizard(); openM('m-proj');
 }
@@ -10552,6 +10647,8 @@ function openEditProj(pid) {
   WZ = { step:1, edit:pid, rimuovi:false,
          tpl: p.template_key || templateProbabile(pid) || 'vuoto',
          conds:(p.condizioni || []).slice(), d:Object.assign({}, p) };
+  const c = p.cliente_id ? byId(S.clienti, p.cliente_id) : null;
+  WZ.cli = c ? { cid: c.id, tipo: c.tipo || null, note: c.note || null } : {};
   el('mp-t').textContent = 'Modifica Commessa';
   drawWizard(); openM('m-proj');
 }
@@ -10580,19 +10677,39 @@ function drawWizard() {
       + S.clienti.filter(c => c.attivo !== false).map(c => '<option value="' + c.id + '"'
           + (d.cliente_id === c.id ? ' selected' : '') + '>' + esc(c.denominazione)
           + (c.comune ? ' — ' + esc(c.comune) : '') + '</option>').join('');
-    h = '<div class="fg"><label class="fl">Cliente dall’anagrafica</label>'
+    /* IL COMMITTENTE PER PRIMO, CON LA SCHEDA COMPLETA
+       Sono gli stessi campi della scheda in Clienti, nello stesso ordine:
+       quello che si scrive qui diventa la scheda (o la corregge) e da li'
+       arriva a preventivi e altre commesse. Prima i dati del committente
+       erano sparsi fra quelli dell'immobile e mancavano tipo e note, cosi'
+       la scheda nata dalla commessa restava a meta'. */
+    const cl = WZ.cli || {};
+    const pv = WZ.daPrev ? byId(S.preventivi || [], WZ.daPrev) : null;
+    const tipoCli = cl.tipo || tipoProbabile(d.cliente_piva, d.cliente_cf);
+    h = (pv ? '<div class="ibox mb16" style="font-size:12.5px">Dati presi dal <b>preventivo ' + esc(numeroPreventivo(pv))
+          + '</b>: committente, importo e descrizione sono già compilati. Salvando, il preventivo risulta '
+          + '<b>accettato</b> e collegato a questa commessa.</div>' : '')
+      + sez('Committente', 'la scheda dell’anagrafica clienti')
+      + '<div class="fg"><label class="fl">Cliente dall’anagrafica</label>'
       + '<select class="fc" id="w-clid">' + opz + '</select>'
-      + '<div class="hint">Scegliendo un cliente già presente, dati fiscali e referenti vengono compilati da soli. '
-      + 'Se è nuovo, lascia questa voce e compila i campi: verrà aggiunto all’anagrafica al salvataggio.</div></div>'
+      + '<div class="hint">' + (d.cliente_id
+          ? 'Collegato alla scheda in Clienti: quello che correggi qui si corregge anche lì, nei preventivi in bozza e nelle altre commesse dello stesso cliente.'
+          : 'Scegliendo un cliente già presente, tutti i suoi dati vengono compilati da soli. '
+            + 'Se è nuovo, compila la scheda qui sotto: al salvataggio entra in anagrafica, completa.') + '</div></div>'
       + '<div class="fg2">'
-      + fld('Nome commessa *', 'w-name', d.name)
-      + fld('Codice commessa *', 'w-cod', d.codice || (WZ.edit ? '' : prossimoCodice()), 'Es. 2026_06')
-      + '</div>'
-      + '<div class="hint" style="margin:-8px 0 14px">Il <b>codice commessa</b> è obbligatorio: è con quello '
-      + 'che l’elenco viene ordinato e con quello che si ritrova una pratica fra due anni. '
-      + 'Per una commessa nuova è già proposto il primo libero dell’anno.</div>'
-      + '<div class="fg">'
-      + fld('Cliente / committente', 'w-cli', d.client)
+      + fld('Denominazione / nome e cognome *', 'w-cli', d.client, 'Ragione sociale oppure nome e cognome')
+      + '<div class="fg"><label class="fl">Tipo</label><select class="fc" id="w-ctipo">'
+        + '<option value="societa"' + (tipoCli === 'societa' ? ' selected' : '') + '>Società / ente</option>'
+        + '<option value="persona"' + (tipoCli === 'persona' ? ' selected' : '') + '>Persona fisica</option></select></div>'
+      + '</div><div class="fg3">'
+      + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
+      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri')
+      + '</div><div class="fg2">'
+      + fld('PEC', 'w-cpec', d.cliente_pec, 'se non c’è il codice SDI')
+      + fld('Indirizzo (sede o residenza)', 'w-cind', d.cliente_indirizzo)
+      + '</div><div class="fg3">'
+      + fld('CAP', 'w-ccap', d.cliente_cap) + fld('Comune', 'w-ccom', d.cliente_comune)
+      + fld('Provincia', 'w-cprov', d.cliente_prov, 'MC')
       + '</div>'
       + sez('Referente amministrativo', 'riceve la copia della fattura')
       + '<div class="fg3">'
@@ -10608,7 +10725,26 @@ function drawWizard() {
       + '</div><div class="fg">'
       + fld('Email', 'w-ref2e', d.referente_tec_email, 'tecnico@cliente.it')
       + '</div>'
-      + sez('Immobile e commessa')
+      + '<div class="fg"><label class="fl">Note sul cliente</label><textarea class="fc" id="w-cnote" rows="2">'
+        + esc(cl.note || '') + '</textarea></div>'
+      + '<div class="fg"><label class="row" style="cursor:pointer;font-size:13px">'
+        + '<input type="checkbox" id="w-pa"' + (d.ente_pubblico ? ' checked' : '') + '>'
+        + '&nbsp;<b>Il committente è un ente pubblico</b></label>'
+        + '<div class="hint">Stazione appaltante: cambia il formato della fattura.</div>'
+        + (!d.ente_pubblico && sembraEntePubblico(d.client)
+            ? '<div class="wbox" style="font-size:12px;margin-top:6px">«' + esc(d.client) + '» sembra un ente pubblico: '
+              + 'se lo è, spunta la casella. Altrimenti le fatture escono con l’IVA da incassare, senza scissione dei pagamenti.</div>' : '')
+        + '</div>'
+      + '<div id="w-pa-box"' + (d.ente_pubblico ? '' : ' style="display:none"') + '>' + paBoxHtml(d) + '</div>'
+      + sez('Commessa')
+      + '<div class="fg2">'
+      + fld('Nome commessa *', 'w-name', d.name)
+      + fld('Codice commessa *', 'w-cod', d.codice || (WZ.edit ? '' : prossimoCodice()), 'Es. 2026_06')
+      + '</div>'
+      + '<div class="hint" style="margin:-8px 0 14px">Il <b>codice commessa</b> è obbligatorio: è con quello '
+      + 'che l’elenco viene ordinato e con quello che si ritrova una pratica fra due anni. '
+      + 'Per una commessa nuova è già proposto il primo libero dell’anno.</div>'
+      + sez('Immobile')
       + '<div class="fg2">'
       + fld('Comune', 'w-com', d.comune) + fld('Provincia', 'w-prov', d.provincia)
       + '</div><div class="fg2">'
@@ -10618,25 +10754,6 @@ function drawWizard() {
         + '<input type="checkbox" id="w-sisma"' + (d.sisma ? ' checked' : '') + '>'
         + '&nbsp;<b>Lavoro di ricostruzione post-sisma</b></label>'
         + '<div class="hint" id="w-sisma-h">' + ibanHint(d.sisma) + '</div></div>'
-      + sez('Committente pubblico', 'stazione appaltante: cambia il formato della fattura')
-      + '<div class="fg"><label class="row" style="cursor:pointer;font-size:13px">'
-        + '<input type="checkbox" id="w-pa"' + (d.ente_pubblico ? ' checked' : '') + '>'
-        + '&nbsp;<b>Il committente è un ente pubblico</b></label>'
-        + (!d.ente_pubblico && sembraEntePubblico(d.client)
-            ? '<div class="wbox" style="font-size:12px;margin-top:6px">«' + esc(d.client) + '» sembra un ente pubblico: '
-              + 'se lo è, spunta la casella. Altrimenti le fatture escono con l’IVA da incassare, senza scissione dei pagamenti.</div>' : '')
-        + '</div>'
-      + '<div id="w-pa-box"' + (d.ente_pubblico ? '' : ' style="display:none"') + '>' + paBoxHtml(d) + '</div>'
-      + sez('Dati fiscali del committente', 'servono solo per generare l’XML della fattura')
-      + '<div class="fg3">'
-      + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
-      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri, solo privati')
-      + '</div><div class="fg2">'
-      + fld('PEC', 'w-cpec', d.cliente_pec, 'se non c’è il codice SDI')
-      + fld('Indirizzo di fatturazione', 'w-cind', d.cliente_indirizzo)
-      + '</div><div class="fg3">'
-      + fld('CAP', 'w-ccap', d.cliente_cap) + fld('Comune', 'w-ccom', d.cliente_comune)
-      + fld('Provincia', 'w-cprov', d.cliente_prov, 'PG')
       + '</div><div class="fg3">'
       + '<div class="fg"><label class="fl">Stato</label><select class="fc" id="w-st">'
         + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + ((d.status || 'attivo') === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
@@ -10913,6 +11030,10 @@ function wzCollect() {
      tiene aggiornato da solo. */
   if (el('w-imp') && !el('w-imp').disabled) WZ.d.amount = el('w-imp').value || null;
   if (el('w-clid'))  WZ.d.cliente_id = el('w-clid').value || null;
+  /* tipo e note sono della scheda cliente, non della commessa: stanno a parte
+     e non vanno nella tabella delle commesse */
+  if (el('w-ctipo')) WZ.cli = Object.assign({}, WZ.cli, { tipo: el('w-ctipo').value || null,
+                                note: el('w-cnote') ? el('w-cnote').value.trim() || null : null });
   if (el('w-sisma')) WZ.d.sisma = el('w-sisma').checked;
 
   /* Committente pubblico: i campi esistono solo quando la casella e' spuntata */
@@ -10956,6 +11077,7 @@ async function wzSave() {
       /* i dati del committente corretti qui arrivano in anagrafica e nelle
          altre commesse dello stesso cliente */
       await clienteDaCommessa(Object.assign({}, primaDi, pay, { id: WZ.edit }), primaDi);
+      await tipoNoteCliente((byId(S.projects, WZ.edit) || pay).cliente_id, WZ.cli);
 
       /* Il percorso di lavoro puo' essere cambiato: si allinea la struttura a
          quello che ora e' previsto. Le aggiunte partono sempre, le rimozioni
@@ -10983,7 +11105,8 @@ async function wzSave() {
     }
     pay.created_by = S.me.id;
     /* Cliente nuovo: entra in anagrafica cosi' la prossima volta si riusa */
-    if (!pay.cliente_id && pay.client) pay.cliente_id = await creaClienteDaCommessa(pay);
+    if (!pay.cliente_id && pay.client) pay.cliente_id = await creaClienteDaCommessa(pay, WZ.cli);
+    if (pay.cliente_id) await tipoNoteCliente(pay.cliente_id, WZ.cli);
     const { data, error } = await SB.from('projects').insert(pay).select().single();
     if (error) return sbErr(error, 'crea commessa');
     /* cliente scelto dall'anagrafica e poi corretto qui: la correzione vale ovunque */
@@ -10991,6 +11114,15 @@ async function wzSave() {
     /* L'ufficio destinatario entra nel registro: alla prossima commessa per lo
        stesso ente bastera' digitare il codice univoco. */
     if (pay.ente_pubblico) await registraEnte(pay);
+    /* nata da un preventivo: lo si collega e risulta accettato */
+    if (WZ.daPrev) {
+      const pv = byId(S.preventivi || [], WZ.daPrev);
+      const agg = { project_id: data.id };
+      if (pv && pv.stato !== 'accettato') agg.stato = 'accettato';
+      if (pay.cliente_id && pv && !pv.cliente_id) agg.cliente_id = pay.cliente_id;
+      const { error: e2 } = await SB.from('preventivi').update(agg).eq('id', WZ.daPrev);
+      if (e2) console.warn('preventivo → commessa', e2);
+    }
 
     /* cartella della commessa su Storage (non bloccante) */
     SB.storage.from('commesse').upload(data.id + '/.keep', new Blob([''], {type:'text/plain'}), {upsert:true})
@@ -12154,6 +12286,9 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pc-ripr').onclick = ripristinaVoceCatalogo;
   el('pv-mail').onclick = mailDaEditor;
   el('pv-damod').onclick = modelloDaPreventivo;
+  /* si salva prima: la commessa deve partire da quello che si vede */
+  el('pv-comm').onclick = async () => { const x = await salvaPreventivo(true); if (!x) return;
+    closeM('m-prev'); commessaDaPreventivo(x.id); };
   el('pv-copia').onclick = () => { const id = PV && PV.id; closeM('m-prev'); if (id) duplicaPreventivo(id); };
   el('mm-share').onclick  = () => invioPreventivo('share');
   el('mm-eml').onclick    = () => invioPreventivo('eml');
@@ -12257,6 +12392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
+    if ((n = f('data-prevcomm')))  { e.stopPropagation(); return commessaDaPreventivo(n.dataset.prevcomm); }
     if ((n = f('data-pcat')))      { return apriVoceCatalogo(n.dataset.pcat); }
     if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
     if ((n = f('data-pvmodmod')))  { return apriModello(n.dataset.pvmodmod); }
@@ -12313,6 +12449,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast('Allineamento fatto: ' + r.comm + (r.comm === 1 ? ' commessa aggiornata' : ' commesse aggiornate')
           + ', ' + r.schede + (r.schede === 1 ? ' scheda cliente completata' : ' schede cliente completate'), 'success');
       })();
+      if (a === 'prevdacomm') return preventivoDaCommessa(S.projId);
       if (a === 'collegacli') return (async () => {
         const p = byId(S.projects, S.projId); if (!p) return;
         await clienteDaCommessa(Object.assign({}, p), Object.assign({}, p));
