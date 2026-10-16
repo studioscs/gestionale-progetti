@@ -693,23 +693,28 @@ pratica elenca le sue attività.
 
 ## Il cliente è uno solo, dappertutto
 
-I dati del committente non sono più una fotografia presa alla creazione della
-commessa: **si modificano in un posto e arrivano ovunque**.
+I dati del committente (denominazione, P.IVA, C.F., SDI, PEC, indirizzo,
+**referente amministrativo e operativo**) si modificano in un posto e arrivano
+ovunque: da *Clienti* a tutte le commesse del cliente e ai suoi preventivi in
+bozza, da *Modifica commessa* all'anagrafica e alle altre commesse dello stesso
+cliente. I dati del cantiere (comune e indirizzo dell'immobile) non c'entrano.
 
-- **Da Clienti**: salvando la scheda, gli stessi dati (denominazione, P.IVA,
-  C.F., SDI, PEC, indirizzo, referenti) si aggiornano in **tutte le commesse
-  di quel cliente** e nei suoi **preventivi in bozza**; quelli già inviati,
-  accettati o rifiutati restano come sono stati mandati. Il messaggio dice
-  quante commesse ha riallineato.
-- **Dalla commessa** (*Modifica commessa*): i dati del committente cambiati lì
-  arrivano in anagrafica e nelle altre commesse dello stesso cliente. Arrivano
-  solo i campi cambiati in quel salvataggio, così una commessa con una copia
-  vecchia non riporta indietro dati corretti nel frattempo altrove; e una
-  commessa nuova con un campo lasciato vuoto non cancella un dato che in
-  anagrafica c'è. Una commessa senza scheda cliente la crea (o la trova per
-  nome) e ci si collega.
-- I dati del cantiere (comune e indirizzo dell'immobile) sono un'altra cosa e
-  non vengono toccati.
+**La regola, uguale nei due sensi**
+
+- un dato **cambiato** in quel salvataggio vince, anche se lo si è svuotato
+  apposta;
+- per il resto **un dato scritto vince su uno vuoto**: una scheda senza
+  referente non cancella il referente scritto nella commessa, anzi lo prende e
+  lo passa alle altre commesse;
+- le commesse con **lo stesso nome** del cliente ma non collegate (create
+  prima dell'anagrafica, o con maiuscole e spazi diversi) si collegano;
+- i preventivi già inviati, accettati o rifiutati non cambiano.
+
+**Per i dati che c'erano già**: in *Clienti* il pulsante **⇄ Allinea con le
+commesse** collega e allinea tutto in una volta, senza cancellare niente, e
+dice quante commesse e schede ha sistemato. Nella scheda *Anagrafica* di ogni
+commessa si vede se è collegata alla scheda cliente; se non lo è, **Collega e
+allinea** lo fa per quella.
 
 ## Enti pubblici: la scissione dei pagamenti
 

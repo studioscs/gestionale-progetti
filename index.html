@@ -1445,7 +1445,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.16.1';
+const VERSIONE = '2026.10.16.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8211,7 +8211,8 @@ function rClienti() {
       '<input class="srch" id="cl-q" placeholder="Cerca per nome, P.IVA, comune..." value="' + esc(S.clQ || '') + '">'
     + ' <label class="row" style="gap:4px;font-size:12px;white-space:nowrap"><input type="checkbox" id="cl-dacompl"'
       + (S.clDaCompletare ? ' checked' : '') + '> Solo da completare</label> '
-    + (canW() ? '<button class="btn btn-p btn-sm" data-newcli="1">＋ Nuovo cliente</button>' : '');
+    + (canW() ? '<button class="btn btn-sm" data-act="allineacli" title="Collega le commesse ai clienti e allinea i dati nei due sensi">&#8644; Allinea con le commesse</button> '
+      + '<button class="btn btn-p btn-sm" data-newcli="1">＋ Nuovo cliente</button>' : '');
   el('cl-q').oninput = e => { S.clQ = e.target.value; drawClienti(); };
   el('cl-dacompl').onchange = e => { S.clDaCompletare = e.target.checked; drawClienti(); };
   drawClienti();
@@ -8333,6 +8334,7 @@ async function saveCliente() {
     referente_tec_email: g('cl-ref2e'), referente_tec_tel: g('cl-ref2t'),
     note: g('cl-note')
   };
+  const primaCli = id ? Object.assign({}, byId(S.clienti, id) || {}) : null;
   setLoading('cl-save', true);
   const { data, error } = id
     ? await SB.from('clienti').update(pay).eq('id', id).select().maybeSingle()
@@ -8344,7 +8346,8 @@ async function saveCliente() {
     return sbErr(error, 'cliente');
   }
   /* la modifica arriva a tutte le sue commesse e ai preventivi in bozza */
-  const n = id ? await propagaCliente(Object.assign({}, byId(S.clienti, id) || {}, data || {}, pay, { id })) : 0;
+  const n = id ? await propagaCliente(Object.assign({}, byId(S.clienti, id) || {}, data || {}, pay, { id }),
+                                      null, primaCli) : 0;
   closeM('m-cli');
   await loadAll(true); render();
   toast('Cliente salvato' + (n ? ': aggiornati i dati in ' + n + (n === 1 ? ' commessa' : ' commesse') : ''), 'success');
@@ -8398,24 +8401,53 @@ const CAMPI_CLIENTE = [
 const valCli = v => (v === undefined || v === null || String(v).trim() === '') ? null : v;
 const ugualeCli = (a, b) => String(valCli(a) ?? '') === String(valCli(b) ?? '');
 
-/* Dall'anagrafica alle commesse e ai preventivi in bozza. Ritorna quante
-   commesse sono state riallineate. */
-async function propagaCliente(c, escludiPid) {
+/* LA REGOLA, UGUALE NEI DUE SENSI
+   - un dato cambiato in questo salvataggio vince, anche se lo si e' svuotato
+     apposta;
+   - per il resto, un dato scritto vince su uno vuoto: la scheda senza
+     referente non cancella il referente scritto nella commessa, anzi lo prende;
+   - le commesse con lo stesso nome del cliente ma non collegate (create prima
+     dell'anagrafica) si collegano.
+   Prima la copia andava solo dalla scheda alle commesse gia' collegate e solo
+   per i campi diversi: le altre restavano indietro, e una scheda con un campo
+   vuoto lo svuotava anche nelle commesse. */
+/* dalla piu' recente: se due commesse hanno un dato diverso che alla scheda
+   manca, vale quello scritto per ultimo */
+const commesseDelCliente = c => S.projects.filter(x => x.cliente_id === c.id
+  || (!x.cliente_id && normNome(x.client) && normNome(x.client) === normNome(c.denominazione)))
+  .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+
+/* Dall'anagrafica alle commesse e ai preventivi in bozza. prima = la scheda
+   com'era prima del salvataggio. Ritorna quante commesse sono cambiate. */
+async function propagaCliente(c, escludiPid, prima) {
   if (!c || !c.id) return 0;
   let n = 0;
-  for (const p of S.projects.filter(x => x.cliente_id === c.id && x.id !== escludiPid)) {
+  const daCompletare = {};          /* dati che la scheda non ha e una commessa si' */
+  for (const p of commesseDelCliente(c).filter(x => x.id !== escludiPid)) {
     const agg = {};
-    CAMPI_CLIENTE.forEach(([kc, kp]) => { if (!ugualeCli(p[kp], c[kc])) agg[kp] = valCli(c[kc]); });
+    if (p.cliente_id !== c.id) agg.cliente_id = c.id;
+    CAMPI_CLIENTE.forEach(([kc, kp]) => {
+      const cambiatoOra = prima && !ugualeCli(prima[kc], c[kc]);
+      if (cambiatoOra || valCli(c[kc])) { if (!ugualeCli(p[kp], c[kc])) agg[kp] = valCli(c[kc]); }
+      else if (valCli(p[kp]) && !daCompletare[kc]) daCompletare[kc] = p[kp];
+    });
     if (c.ente_pubblico && !p.ente_pubblico) { agg.ente_pubblico = true; agg.split_payment = c.split_payment !== false; }
     if (!Object.keys(agg).length) continue;
     const { error } = await SB.from('projects').update(agg).eq('id', p.id);
     if (error) { console.warn('riallineo commessa', error); continue; }
     Object.assign(p, agg); n++;
   }
+  /* la scheda prende dalle commesse quello che le manca */
+  if (Object.keys(daCompletare).length) {
+    const { error } = await SB.from('clienti').update(daCompletare).eq('id', c.id);
+    if (!error) { Object.assign(c, daCompletare); const sc = byId(S.clienti, c.id); if (sc && sc !== c) Object.assign(sc, daCompletare);
+      if (prima !== undefined) n += await propagaCliente(c, escludiPid); }
+  }
   for (const pv of (S.preventivi || []).filter(x => x.cliente_id === c.id && x.stato === 'bozza')) {
     const agg = { cliente_nome: c.denominazione, cliente_indirizzo: valCli(c.indirizzo), cliente_cap: valCli(c.cap),
       cliente_comune: valCli(c.comune), cliente_prov: valCli(c.provincia), cliente_cf: valCli(c.cf),
       cliente_piva: valCli(c.piva), cliente_pec: valCli(c.pec || c.referente_email), cliente_tel: valCli(c.referente_tel) };
+    Object.keys(agg).forEach(k => { if (!agg[k] && !(prima && valCli(prima[k]))) delete agg[k]; });
     if (Object.keys(agg).every(k => ugualeCli(pv[k], agg[k]))) continue;
     const { error } = await SB.from('preventivi').update(agg).eq('id', pv.id);
     if (!error) Object.assign(pv, agg);
@@ -8423,33 +8455,51 @@ async function propagaCliente(c, escludiPid) {
   return n;
 }
 
-/* Dalla commessa all'anagrafica: solo i campi che in questo salvataggio sono
-   cambiati, cosi' una commessa con una copia vecchia non riporta indietro i
-   dati corretti nel frattempo da un'altra parte. Senza scheda cliente, la si
-   crea (o la si trova per nome) e la si collega. */
+/* Dalla commessa all'anagrafica: i campi cambiati in questo salvataggio, piu'
+   quelli che la scheda non ha. Su una commessa nuova conta solo cio' che e'
+   scritto: un campo lasciato vuoto non cancella un dato in anagrafica. Senza
+   scheda cliente, la si crea (o la si trova per nome) e la si collega. */
 async function clienteDaCommessa(dopo, prima) {
   let cid = dopo.cliente_id;
   if (!cid && dopo.client) {
-    cid = await creaClienteDaCommessa(dopo);
-    if (cid) await SB.from('projects').update({ cliente_id: cid }).eq('id', dopo.id);
+    const c0 = S.clienti.find(c => normNome(c.denominazione) === normNome(dopo.client));
+    cid = c0 ? c0.id : await creaClienteDaCommessa(dopo);
+    if (cid) { await SB.from('projects').update({ cliente_id: cid }).eq('id', dopo.id);
+      const pp = byId(S.projects, dopo.id); if (pp) pp.cliente_id = cid; }
   }
   const c = cid ? byId(S.clienti, cid) : null;
   if (!c) return 0;
   const agg = {};
   CAMPI_CLIENTE.forEach(([kc, kp]) => {
-    /* su una commessa nuova conta solo cio' che e' scritto: un campo lasciato
-       vuoto non cancella un dato che in anagrafica c'e' */
     const cambiato = prima ? !ugualeCli(dopo[kp], prima[kp]) : !!valCli(dopo[kp]);
-    if (cambiato && !ugualeCli(dopo[kp], c[kc]) && (kc !== 'denominazione' || valCli(dopo[kp]))) agg[kc] = valCli(dopo[kp]);
+    const manca = !valCli(c[kc]) && !!valCli(dopo[kp]);
+    if ((cambiato || manca) && !ugualeCli(dopo[kp], c[kc]) && (kc !== 'denominazione' || valCli(dopo[kp]))) agg[kc] = valCli(dopo[kp]);
   });
   /* un ente pubblico resta tale per le commesse che verranno */
   if (dopo.ente_pubblico && !c.ente_pubblico) Object.assign(agg, { ente_pubblico: true,
     split_payment: dopo.split_payment !== false, codice_ufficio: dopo.codice_ufficio || null });
   if (!Object.keys(agg).length) return 0;
+  const primaC = Object.assign({}, c);
   const { error } = await SB.from('clienti').update(agg).eq('id', c.id);
   if (error) { console.warn('anagrafica cliente', error); return 0; }
   Object.assign(c, agg);
-  return 1 + await propagaCliente(c, dopo.id);
+  return 1 + await propagaCliente(c, dopo.id, primaC);
+}
+
+/* RIALLINEAMENTO DI TUTTO: per i dati gia' esistenti, che fino a questa
+   versione vivevano separati. Collega, completa i vuoti nei due sensi e porta
+   nelle commesse i dati della scheda. Non cancella niente. */
+async function allineaClienti() {
+  let comm = 0, schede = 0;
+  for (const c of S.clienti.slice()) {
+    const prima = Object.assign({}, c);
+    comm += await propagaCliente(c);
+    if (CAMPI_CLIENTE.some(([kc]) => !ugualeCli(prima[kc], c[kc]))) {
+      schede++;
+      comm += await propagaCliente(c);        /* quello che la scheda ha appena preso va alle altre commesse */
+    }
+  }
+  return { comm, schede };
 }
 
 /* Alla creazione di una commessa con un cliente nuovo, lo aggiunge all'anagrafica */
@@ -8599,6 +8649,15 @@ function anagraficaPanel(p) {
     + '<div class="card"><div class="card-h"><span class="card-t">Immobile</span></div>'
       + '<div class="fg2">' + f('Comune', p.comune) + f('Provincia', p.provincia) + '</div>'
       + f('Indirizzo', p.indirizzo) + f('Dati catastali', p.dati_catastali) + '</div>'
+    + (() => { const c = p.cliente_id ? byId(S.clienti, p.cliente_id) : null;
+        return '<div class="card" style="grid-column:1/-1">' + (c
+          ? '<div class="spread" style="font-size:12.5px"><span>Dati del committente collegati alla scheda <b data-cli="' + c.id
+            + '" style="cursor:pointer;color:var(--blue)">' + esc(c.denominazione) + '</b> in Clienti: '
+            + 'si modificano da una parte e arrivano dall’altra.</span></div>'
+          : '<div class="wbox spread" style="gap:10px;align-items:center;font-size:12.5px"><span><b>Commessa non collegata '
+            + 'all’anagrafica clienti</b>: i dati del committente qui e in Clienti non si aggiornano a vicenda.</span>'
+            + (canW() ? '<button class="btn btn-sm" data-act="collegacli">Collega e allinea</button>' : '') + '</div>')
+          + '</div>'; })()
     + '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Referenti del committente</span></div>'
       + '<div class="g2">'
         + referenteBox('Amministrativo', 'riceve la copia della fattura', p.referente, p.referente_ruolo,
@@ -12246,6 +12305,22 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'expand')   { fasiOf(S.projId).forEach(x => S.openGrp.add(x.id)); return render(); }
       if (a === 'collapse') { S.openGrp.clear(); return render(); }
       if (a === 'sceltapratiche') return apriSceltaPratiche(S.projId);
+      if (a === 'allineacli') return (async () => {
+        if (!confirm('Allineare anagrafica clienti e commesse?\n\n• le commesse con lo stesso nome di un cliente vengono collegate;\n'
+          + '• i dati della scheda cliente vanno nelle sue commesse;\n• quello che manca nella scheda lo prende dalle commesse.\n\n'
+          + 'Non viene cancellato niente.')) return;
+        const r = await allineaClienti(); await loadAll(true); render();
+        toast('Allineamento fatto: ' + r.comm + (r.comm === 1 ? ' commessa aggiornata' : ' commesse aggiornate')
+          + ', ' + r.schede + (r.schede === 1 ? ' scheda cliente completata' : ' schede cliente completate'), 'success');
+      })();
+      if (a === 'collegacli') return (async () => {
+        const p = byId(S.projects, S.projId); if (!p) return;
+        await clienteDaCommessa(Object.assign({}, p), Object.assign({}, p));
+        const c = p.cliente_id ? byId(S.clienti, p.cliente_id) : null;
+        if (c) await propagaCliente(c);
+        await loadAll(true); render();
+        toast(c ? 'Commessa collegata a «' + c.denominazione + '» e dati allineati' : 'Commessa collegata all’anagrafica', 'success');
+      })();
       if (a === 'back')     return go('projects');
     }
   }

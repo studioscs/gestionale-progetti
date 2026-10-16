@@ -4093,6 +4093,62 @@ function launchOpts(){
     must(g.pec==='dallacommessa@pec.it','una commessa nuova con la PEC vuota l ha cancellata in anagrafica');
   });
 
+  await t('il referente amministrativo della scheda arriva nella commessa che non l aveva',async()=>{
+    const x=await p.evaluate(async()=>{
+      const {data:c}=await SB.from('clienti').insert({denominazione:'Referenti Spa',piva:'01112223334',
+        referente:'Laura Neri',referente_ruolo:'Amministrazione',referente_email:'laura@referenti.it',referente_tel:'071 555'}).select().single();
+      /* commessa collegata ma creata prima che il referente fosse scritto in anagrafica */
+      const a=(await SB.from('projects').insert({codice:'REF_A',name:'Ref A',status:'attivo',cliente_id:c.id,client:'Referenti Spa'}).select().single()).data;
+      /* commessa mai collegata, nome scritto diversamente */
+      const b=(await SB.from('projects').insert({codice:'REF_B',name:'Ref B',status:'attivo',client:'REFERENTI  spa',
+        referente_tec:'Geom. Bianchi'}).select().single()).data;
+      await loadAll(true); return {c:c.id,a:a.id,b:b.id}; });
+    await p.evaluate(id=>{ go('clienti'); openCliente(id); },x.c); await p.waitForSelector('#m-cli.show',{timeout:4000});
+    await p.fill('#cl-reft','071 999'); await p.click('#cl-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(x=>({a:__DB.projects.find(y=>y.id===x.a),b:__DB.projects.find(y=>y.id===x.b),c:__DB.clienti.find(y=>y.id===x.c)}),x);
+    must(g.a.referente==='Laura Neri'&&g.a.referente_email==='laura@referenti.it','il referente non è arrivato nella commessa collegata: '+g.a.referente);
+    must(g.a.referente_tel==='071 999','il telefono appena cambiato non è arrivato');
+    must(g.b.cliente_id===x.c,'la commessa con lo stesso nome non è stata collegata');
+    must(g.b.referente==='Laura Neri','il referente non è arrivato nella commessa appena collegata');
+    must(g.b.referente_tec==='Geom. Bianchi','un dato della commessa che la scheda non aveva è stato cancellato');
+    must(g.c.referente_tec==='Geom. Bianchi','la scheda non ha preso il referente operativo che le mancava');
+    must(g.a.referente_tec==='Geom. Bianchi','il dato preso dalla commessa B non è arrivato alla commessa A');
+  });
+  await t('svuotando apposta un campo in Clienti si svuota anche nelle commesse',async()=>{
+    const id=await p.evaluate(()=>__DB.clienti.find(y=>y.denominazione==='Referenti Spa').id);
+    await p.evaluate(id=>openCliente(id),id); await p.waitForSelector('#m-cli.show',{timeout:4000});
+    await p.fill('#cl-refr',''); await p.click('#cl-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(()=>__DB.projects.filter(y=>/^REF_/.test(y.codice)).map(y=>y.referente_ruolo));
+    must(g.every(v=>!v),'il ruolo svuotato in anagrafica è rimasto nelle commesse: '+JSON.stringify(g));
+  });
+  await t('Allinea con le commesse sistema i dati esistenti e non cancella niente',async()=>{
+    const x=await p.evaluate(async()=>{
+      const {data:c}=await SB.from('clienti').insert({denominazione:'Allinea Srl',pec:'allinea@pec.it'}).select().single();
+      const a=(await SB.from('projects').insert({codice:'ALL_A',name:'All A',status:'attivo',client:'Allinea Srl',
+        referente:'Mario Viola',referente_email:'mv@allinea.it'}).select().single()).data;
+      const b=(await SB.from('projects').insert({codice:'ALL_B',name:'All B',status:'attivo',client:'allinea srl',
+        cliente_pec:'vecchia@pec.it'}).select().single()).data;
+      await loadAll(true); go('clienti'); return {c:c.id,a:a.id,b:b.id}; });
+    await p.click('[data-act="allineacli"]'); await p.waitForTimeout(1500);
+    const g=await p.evaluate(x=>({a:__DB.projects.find(y=>y.id===x.a),b:__DB.projects.find(y=>y.id===x.b),c:__DB.clienti.find(y=>y.id===x.c)}),x);
+    must(g.a.cliente_id===x.c&&g.b.cliente_id===x.c,'commesse non collegate');
+    must(g.c.referente==='Mario Viola','la scheda non ha preso il referente dalla commessa');
+    must(g.b.referente==='Mario Viola'&&g.b.referente_email==='mv@allinea.it','il referente non è arrivato all altra commessa');
+    must(g.a.cliente_pec==='allinea@pec.it'&&g.b.cliente_pec==='allinea@pec.it','la PEC della scheda non vince su quella vecchia');
+    must(/Allineamento fatto/.test(await p.textContent('#tc')),'nessun resoconto');
+  });
+  await t('nella commessa si vede se è collegata alla scheda, e si collega con un clic',async()=>{
+    const pid=await p.evaluate(async()=>{ const {data}=await SB.from('projects').insert({codice:'SOLA_1',name:'Sola',status:'attivo',
+      client:'Cliente Solitario',referente:'Anna Blu'}).select().single(); await loadAll(true);
+      S.projId=data.id; S.tab='anagrafica'; go('project'); return data.id; });
+    await p.waitForTimeout(300);
+    must(/non collegata/.test(await p.textContent('#page')),'non dice che la commessa non è collegata');
+    await p.click('[data-act="collegacli"]'); await p.waitForTimeout(1000);
+    const g=await p.evaluate(id=>{ const pr=__DB.projects.find(y=>y.id===id); return {cid:pr.cliente_id,
+      c:__DB.clienti.find(y=>y.id===pr.cliente_id)}; },pid);
+    must(g.cid&&g.c&&g.c.denominazione==='Cliente Solitario'&&g.c.referente==='Anna Blu','collegamento o dati sbagliati: '+JSON.stringify(g.c));
+    must(/collegati alla scheda/.test(await p.textContent('#page')),'dopo il collegamento non lo dice');
+  });
   /* ---------------- SPLIT PAYMENT PER GLI ENTI PUBBLICI ---------------- */
   await t('spuntando «ente pubblico» su una commessa esistente la scissione è proposta',async()=>{
     /* le commesse esistenti hanno split_payment = false di partenza (migrazione 011):
