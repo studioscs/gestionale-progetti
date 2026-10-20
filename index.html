@@ -167,6 +167,9 @@ textarea.fc { resize:vertical; min-height:64px; }
 /* ---------- CARDS / GRID ---------- */
 .card { background:#fff; border:1px solid var(--bord); border-radius:10px; padding:18px; }
 .card-h { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.note-testo { white-space:pre-wrap; font-size:13px; line-height:1.5; max-height:320px; overflow:auto; }
+.note-atto { font-size:11.5px; color:var(--mut); margin-top:3px; white-space:pre-wrap; }
+.card.card-piatta { border:0; padding:0; background:transparent; }
 .card-t { font-size:14px; font-weight:600; }
 .g2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 .g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
@@ -571,14 +574,48 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Telefono</label><input class="fc" id="cl-ref2t"></div>
       </div>
       <div class="fg"><label class="fl">Email</label><input class="fc" id="cl-ref2e"></div>
-      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="cl-note" rows="2"></textarea></div>
+      <div id="cl-sez3"></div>
+      <div class="fg"><textarea class="fc" id="cl-note" rows="5" placeholder="Telefonate, accordi, preferenze, come pagare… tutto quello che non sta negli altri campi"></textarea>
+        <button class="btn btn-xs" data-notaoggi="cl-note" style="margin-top:6px">&#43; Nota con la data di oggi</button></div>
       <div id="cl-comm"></div>
       <input type="hidden" id="cl-id">
     </div>
     <div class="mf">
       <button class="btn btn-d left" id="cl-del" style="display:none">Elimina</button>
+      <button class="btn" id="cl-stampa" title="Scheda anagrafica con le note: su carta o in PDF">&#128424;&#65039; Stampa / PDF</button>
       <button class="btn" data-close="m-cli">Annulla</button>
       <button class="btn btn-p" id="cl-save">Salva Cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Note della commessa / dei contratti -->
+<div class="ov" id="m-note">
+  <div class="modal">
+    <div class="mh"><h3 id="mno-t">Note</h3><button class="mx" data-close="m-note">&#10005;</button></div>
+    <div class="mb">
+      <div class="hint" id="mno-h" style="margin-bottom:8px"></div>
+      <textarea class="fc" id="mno-testo" rows="12" placeholder="Scrivi qui. Con il pulsante sotto, ogni nota parte con la data e il tuo nome."></textarea>
+      <button class="btn btn-xs" data-notaoggi="mno-testo" style="margin-top:6px">&#43; Nota con la data di oggi</button>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-note">Annulla</button>
+      <button class="btn btn-p" id="mno-save">Salva note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stampa di una scheda: carta o PDF -->
+<div class="ov" id="m-stampa">
+  <div class="modal" style="max-width:440px">
+    <div class="mh"><h3>Stampa scheda</h3><button class="mx" data-close="m-stampa">&#10005;</button></div>
+    <div class="mb">
+      <p id="mst-t" style="font-weight:600;margin-bottom:12px"></p>
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <button class="btn btn-p" id="mst-carta">&#128424;&#65039; Stampa su carta</button>
+        <button class="btn" id="mst-pdf">&#128196; Scarica PDF</button>
+      </div>
+      <div class="hint" style="margin-top:10px">Dalla finestra di stampa puoi anche scegliere «Salva come PDF».</div>
     </div>
   </div>
 </div>
@@ -827,7 +864,8 @@ tbody tr:hover td { background:#f0f4f9; }
           <input class="fc" id="mc-rif" placeholder="Preventivo, delibera, protocollo"></div>
       </div>
       <div class="hint" id="mc-calc" style="margin:-8px 0 14px"></div>
-      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="mc-note" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">Note sull’atto</label><textarea class="fc" id="mc-note" rows="3"></textarea>
+        <button class="btn btn-xs" data-notaoggi="mc-note" style="margin-top:6px">&#43; Nota con la data di oggi</button></div>
       <div class="fg" id="mc-scag-box">
         <label class="row" style="cursor:pointer;font-size:13px">
           <input type="checkbox" id="mc-scag" checked>&nbsp;<b>Crea subito lo scaglione di fatturazione</b></label>
@@ -1446,7 +1484,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.16.3';
+const VERSIONE = '2026.10.20.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5300,6 +5338,212 @@ async function scaricaPdf(doc, nomeFile) {
 const nomeFilePdf = (tipo, numero) => tipo + '-' + String(numero || 'bozza').replace(/[^\w-]+/g, '_') + '.pdf';
 
 /* ===========================================================================
+   SCHEDE DA STAMPARE: CLIENTE E COMMESSA
+   Una scheda e' un elenco di sezioni (campi, tabella, testo, barra di
+   avanzamento). La stessa scheda diventa una pagina da stampare su carta -
+   dalla finestra di stampa si puo' anche salvare in PDF - oppure un PDF
+   scaricato direttamente: il contenuto e' uno solo, cosi' carta e PDF non
+   dicono mai cose diverse.
+   =========================================================================== */
+const testoScheda = v => (v === null || v === undefined || String(v).trim() === '') ? '—' : String(v);
+
+function htmlScheda(s) {
+  const e = x => esc(testoScheda(x));
+  const sezione = z => '<section><h2>' + esc(z.titolo) + '</h2>'
+    + (z.barra !== undefined ? '<div class="barra"><div style="width:' + Math.max(0, Math.min(100, z.barra)) + '%"></div></div>'
+        + '<div class="pct">' + esc(z.barraTesto || (z.barra + '%')) + '</div>' : '')
+    + (z.campi && z.campi.length ? '<table class="campi">' + z.campi.map(c => '<tr><th>' + esc(c[0]) + '</th><td>'
+        + e(c[1]).replace(/\n/g, '<br>') + '</td></tr>').join('') + '</table>' : '')
+    + (z.tabella ? (z.tabella.righe.length
+        ? '<table class="tab"><thead><tr>' + z.tabella.col.map((c, i) => '<th' + ((z.tabella.dx || []).indexOf(i) >= 0 ? ' class="dx"' : '')
+            + '>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>'
+          + z.tabella.righe.map(r => '<tr>' + r.map((c, i) => '<td' + ((z.tabella.dx || []).indexOf(i) >= 0 ? ' class="dx"' : '') + '>'
+              + esc(c === null || c === undefined ? '' : String(c)).replace(/\n/g, '<br>') + '</td>').join('') + '</tr>').join('')
+          + '</tbody>' + (z.tabella.tot ? '<tfoot>' + z.tabella.tot.map(r => '<tr><td colspan="' + (z.tabella.col.length - 1) + '">'
+              + esc(r[0]) + '</td><td class="dx">' + esc(r[1]) + '</td></tr>').join('') + '</tfoot>' : '') + '</table>'
+        : '<p class="vuoto">' + esc(z.tabella.vuoto || 'Nessuna voce.') + '</p>') : '')
+    + (z.testo !== undefined ? '<div class="note">' + (String(z.testo || '').trim() ? esc(z.testo) : '<span class="vuoto">Nessuna nota.</span>') + '</div>' : '')
+    + '</section>';
+  return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(s.titolo) + '</title>'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<style>@page{size:A4;margin:14mm}body{font:11pt/1.4 Helvetica,Arial,sans-serif;color:#1d2733;margin:0 auto;max-width:190mm;padding:12px}'
+    + 'header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1f3a5f;padding-bottom:8px;margin-bottom:12px}'
+    + 'header img{height:52px}header .st{font-size:9pt;color:#5b6673}header .st b{color:#1d2733;font-size:10.5pt}'
+    + 'h1{font-size:16pt;margin:4px 0 2px;color:#1f3a5f}.sub{color:#5b6673;font-size:10pt;margin-bottom:10px}'
+    + 'h2{font-size:11pt;text-transform:uppercase;letter-spacing:.05em;color:#2f6fb2;border-bottom:1px solid #d5dbe2;padding-bottom:3px;margin:16px 0 6px}'
+    + 'section{break-inside:avoid-page}table{border-collapse:collapse;width:100%}'
+    + '.campi th{text-align:left;font-weight:normal;color:#5b6673;width:34%;padding:2px 8px 2px 0;vertical-align:top}.campi td{padding:2px 0}'
+    + '.tab th{background:#eef1f4;text-align:left;font-size:9pt;padding:4px 6px}.tab td{border-bottom:1px solid #e3e7ec;padding:4px 6px;font-size:10pt;vertical-align:top}'
+    + '.tab tfoot td{font-weight:bold;border-bottom:none}.tab .dx{text-align:right;white-space:nowrap}'
+    + '.note{white-space:pre-wrap;border:1px solid #d5dbe2;border-radius:4px;padding:8px;min-height:40px}.vuoto{color:#8a95a3;font-style:italic}'
+    + '.barra{height:10px;background:#e3e7ec;border-radius:5px;overflow:hidden}.barra div{height:100%;background:#2f6fb2}.pct{font-size:10pt;margin:3px 0 8px}'
+    + 'footer{margin-top:18px;font-size:8.5pt;color:#8a95a3;border-top:1px solid #d5dbe2;padding-top:4px}'
+    + '@media print{body{padding:0}}</style></head><body>'
+    + '<header><img src="' + LOGO_STUDIO + '" alt=""><div class="st"><b>' + esc(STUDIO.denominazione || '') + '</b><br>'
+      + esc([STUDIO.indirizzo, STUDIO.civico].filter(Boolean).join(' ') + ', ' + (STUDIO.cap || '') + ' ' + (STUDIO.comune || '')) + '</div></header>'
+    + '<h1>' + esc(s.titolo) + '</h1>' + (s.sottotitolo ? '<div class="sub">' + esc(s.sottotitolo) + '</div>' : '')
+    + s.sezioni.map(sezione).join('')
+    + '<footer>Stampata il ' + esc(fdate(todayISO())) + ' dal gestionale dello studio.</footer></body></html>';
+}
+
+function pdfScheda(s) {
+  const blu = '#2f6fb2', grigio = '#5b6673';
+  const cont = [
+    { columns: [{ image: LOGO_STUDIO, width: 80 },
+      { stack: [{ text: STUDIO.denominazione || '', bold: true, fontSize: 10.5 },
+        { text: [STUDIO.indirizzo, STUDIO.civico].filter(Boolean).join(' ') + ', ' + (STUDIO.cap || '') + ' ' + (STUDIO.comune || ''),
+          color: grigio, fontSize: 8.5 }], margin: [10, 8, 0, 0] }] },
+    { canvas: [{ type: 'line', x1: 0, y1: 4, x2: 515, y2: 4, lineWidth: 1.5, lineColor: '#1f3a5f' }], margin: [0, 4, 0, 8] },
+    { text: s.titolo, fontSize: 15, bold: true, color: '#1f3a5f' }
+  ];
+  if (s.sottotitolo) cont.push({ text: s.sottotitolo, color: grigio, margin: [0, 2, 0, 4] });
+  s.sezioni.forEach(z => {
+    cont.push({ text: String(z.titolo).toUpperCase(), color: blu, bold: true, fontSize: 10, margin: [0, 12, 0, 4] });
+    if (z.barra !== undefined) {
+      const w = 515 * Math.max(0, Math.min(100, z.barra)) / 100;
+      cont.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 8, r: 4, color: '#e3e7ec' }]
+        .concat(w > 0 ? [{ type: 'rect', x: 0, y: 0, w: w, h: 8, r: 4, color: blu }] : []) });
+      cont.push({ text: z.barraTesto || (z.barra + '%'), margin: [0, 3, 0, 6] });
+    }
+    if (z.campi && z.campi.length) cont.push({ layout: 'noBorders', table: { widths: [150, '*'],
+      body: z.campi.map(c => [{ text: c[0], color: grigio }, { text: testoScheda(c[1]) }]) } });
+    if (z.tabella) {
+      const t = z.tabella;
+      const allinea = i => (t.dx || []).indexOf(i) >= 0 ? 'right' : 'left';
+      if (!t.righe.length) cont.push({ text: t.vuoto || 'Nessuna voce.', italics: true, color: '#8a95a3' });
+      else {
+        const body = [t.col.map((c, i) => ({ text: c, bold: true, fontSize: 8.5, fillColor: '#eef1f4', alignment: allinea(i) }))]
+          .concat(t.righe.map(r => r.map((c, i) => ({ text: c === null || c === undefined ? '' : String(c), fontSize: 9, alignment: allinea(i) }))));
+        (t.tot || []).forEach(r => body.push([{ text: r[0], bold: true, colSpan: t.col.length - 1 }]
+          .concat(t.col.slice(2).map(() => '')).concat([{ text: r[1], bold: true, alignment: 'right' }])));
+        cont.push({ table: { headerRows: 1, widths: t.col.map((c, i) => i === (t.largo || 0) ? '*' : 'auto'), body },
+          layout: { hLineColor: '#e3e7ec', vLineWidth: () => 0 } });
+      }
+    }
+    if (z.testo !== undefined) cont.push(String(z.testo || '').trim()
+      ? { table: { widths: ['*'], body: [[{ text: z.testo, margin: [4, 4, 4, 4] }]] }, layout: { hLineColor: '#d5dbe2', vLineColor: '#d5dbe2' } }
+      : { text: 'Nessuna nota.', italics: true, color: '#8a95a3' });
+  });
+  cont.push({ text: 'Stampata il ' + fdate(todayISO()) + ' dal gestionale dello studio.', fontSize: 8, color: '#8a95a3', margin: [0, 16, 0, 0] });
+  return { pageSize: 'A4', pageMargins: [40, 36, 40, 40], content: cont, defaultStyle: { fontSize: 10 },
+           info: { title: s.titolo } };
+}
+
+/* Stampa su carta: la finestra di stampa del sistema, da cui si puo' anche
+   "salvare come PDF". Si apre subito, dentro il clic, altrimenti il browser
+   la blocca come finestra non richiesta. */
+function stampaScheda(s) {
+  const html = htmlScheda(s);
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.open(); w.document.write(html); w.document.close();
+    w.focus(); setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+    return true;
+  }
+  /* finestre bloccate: si stampa da una cornice invisibile */
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {}
+    setTimeout(() => f.remove(), 60000); }, 400);
+  return true;
+}
+async function pdfSchedaScarica(s, nomeFile) {
+  let pm;
+  try { pm = await caricaPdfMake(); }
+  catch (e) { toast('Non riesco a preparare il PDF: controlla la connessione e riprova.', 'error'); return false; }
+  pm.createPdf(pdfScheda(s)).download(nomeFile);
+  return true;
+}
+
+/* Scheda anagrafica del cliente, note comprese */
+function schedaCliente(c) {
+  const comm = c.id ? commesseDi(c.id) : [];
+  const prev = c.id ? (S.preventivi || []).filter(x => x.cliente_id === c.id) : [];
+  const sede = [c.indirizzo, [c.cap, c.comune].filter(Boolean).join(' ') + (c.provincia ? ' (' + c.provincia + ')' : '')]
+    .filter(x => x && x.trim()).join(', ');
+  const ref = (n, r, t, m) => [n, r ? '(' + r + ')' : '', t ? 'tel. ' + t : '', m].filter(Boolean).join('  ·  ');
+  return {
+    titolo: 'Scheda cliente — ' + (c.denominazione || ''),
+    sottotitolo: (c.tipo === 'persona' ? 'Persona fisica' : 'Società / ente') + (c.ente_pubblico ? ' · ente pubblico' : ''),
+    sezioni: [
+      { titolo: 'Dati anagrafici e fiscali', campi: [
+        ['Denominazione', c.denominazione], ['Partita IVA', c.piva], ['Codice fiscale', c.cf],
+        ['Codice destinatario SDI', c.sdi], ['PEC', c.pec], ['Sede / residenza', sede]] },
+      { titolo: 'Referenti', campi: [
+        ['Amministrativo', ref(c.referente, c.referente_ruolo, c.referente_tel, c.referente_email)],
+        ['Operativo', ref(c.referente_tec, c.referente_tec_ruolo, c.referente_tec_tel, c.referente_tec_email)]] },
+      { titolo: 'Note', testo: c.note || '' },
+      { titolo: 'Commesse', tabella: { col: ['Codice', 'Commessa', 'Stato', 'Importo'], dx: [3], largo: 1,
+          righe: comm.map(p => [p.codice || '', p.name, (ST_PROJ[p.status] || [p.status])[0], feuro(p.amount)]),
+          vuoto: 'Nessuna commessa.' } },
+      { titolo: 'Preventivi', tabella: { col: ['Numero', 'Tipo', 'Stato', 'Totale'], dx: [3], largo: 1,
+          righe: prev.map(x => [numeroPreventivo(x), (modelloDi(x.modello) || {}).nome || x.titolo || '',
+            (ST_PREV[x.stato] || [x.stato])[0], feuro(totalePreventivo(x))]), vuoto: 'Nessun preventivo.' } }
+    ]
+  };
+}
+
+/* Scheda della commessa: SOLO avanzamento generale, contratti e fatturazione.
+   Niente attivita' una per una, ore o costi: e' il foglio da mettere sul
+   tavolo con il committente o in amministrazione. */
+function schedaCommessa(pid) {
+  const p = byId(S.projects, pid); if (!p) return null;
+  const pr = progressOf(pid);
+  const fasi = fasiOf(pid).map(f => {
+    const tt = S.tasks.filter(t => t.commessa_fase_id === f.id && !t.opzionale);
+    const fatte = tt.filter(t => t.status === 'completato').length;
+    return [f.nome, fatte + ' / ' + tt.length, tt.length ? Math.round(fatte / tt.length * 100) + '%' : '—'];
+  });
+  const co = contoContratti(pid);
+  const ff = fattureOf(pid);
+  const somma = cond => r2(ff.filter(cond).reduce((a, f) => a + impFattura(f), 0));
+  const incassato = r2(ff.filter(f => f.stato === 'incassata').reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0));
+  const contratti = { titolo: 'Contratti', tabella: { col: ['N.', 'Atto', 'Oggetto', 'Stato', 'Data', 'Importo'], dx: [5], largo: 2,
+      righe: co.list.map(c => [c.numero || '', TIPO_CONTR[c.tipo] || c.tipo,
+        (c.oggetto || '') + (c.riferimento ? '\n' + c.riferimento : '') + (c.note ? '\nNota: ' + c.note : ''),
+        (ST_CONTR[c.stato] || [c.stato])[0], fdate(c.data_atto), feuro(c.importo)]),
+      tot: co.list.length ? [['Incarico originario', feuro(co.originario)]]
+        .concat(co.aggiunto ? [['Integrazioni accettate', feuro(co.aggiunto)]] : [])
+        .concat([['Importo della commessa', feuro(co.accettato)]])
+        .concat(co.proposto ? [['Atti proposti, non ancora firmati', feuro(co.proposto)]] : []) : null,
+      vuoto: 'Nessun atto registrato: importo della commessa ' + feuro(p.amount) + '.' } };
+  return {
+    titolo: 'Scheda commessa — ' + (p.codice ? p.codice + ' ' : '') + p.name,
+    sottotitolo: [p.client, [p.indirizzo, p.comune].filter(Boolean).join(', ')].filter(Boolean).join(' · '),
+    sezioni: [
+      { titolo: 'Dati generali', campi: [
+        ['Committente', p.client], ['Stato', (ST_PROJ[p.status] || [p.status])[0]],
+        ['Responsabile', p.owner_id ? un(p.owner_id) : ''], ['Inizio', fdate(p.start_date)],
+        ['Fine prevista', fdate(p.end_date)], ['Importo', feuro(p.amount)]] },
+      { titolo: 'Stato di avanzamento generale', barra: pr.pct,
+        barraTesto: pr.pct + '% — ' + pr.done + ' attività completate su ' + pr.tot,
+        tabella: { col: ['Fase', 'Attività', 'Avanzamento'], dx: [1, 2], largo: 0, righe: fasi, vuoto: 'Nessuna fase.' } },
+      contratti,
+      { titolo: 'Note sui contratti', testo: p.note_contratti || '' },
+      { titolo: 'Fatturazione', tabella: { col: ['Scaglione', 'Stato', 'Fattura', 'Imponibile', 'Totale'], dx: [3, 4], largo: 0,
+          righe: ff.map(f => { const c = contiScaglione(f);
+            return [f.descrizione || '', (ST_FATT[f.stato] || [f.stato])[0],
+              f.numero_fattura ? f.numero_fattura + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '') : (f.data_prevista ? 'prevista ' + fdate(f.data_prevista) : ''),
+              feuro(c.imponibile), feuro(c.totale)]; }),
+          tot: ff.length ? [['Fatturato (emesse e incassate), imponibile', feuro(somma(f => ['emessa', 'incassata'].indexOf(f.stato) >= 0))],
+            ['Incassato', feuro(incassato)], ['Ancora da fatturare, imponibile', feuro(somma(fattAperta))]] : null,
+          vuoto: 'Nessuno scaglione di fatturazione.' } }
+    ]
+  };
+}
+
+/* La scelta fra carta e PDF, per qualunque scheda */
+let SCHEDA = null;
+function apriStampa(s, nomeFile) {
+  if (!s) return;
+  SCHEDA = { s, nomeFile };
+  el('mst-t').textContent = s.titolo;
+  openM('m-stampa');
+}
+
+/* ===========================================================================
    PREVENTIVI
    Le cinque bozze che lo studio usava in FatturaElettronica APP, diventate
    modelli: si sceglie il tipo di lavoro, si mette il committente e l'immobile,
@@ -6674,7 +6918,8 @@ function contrattiPanel(p) {
       + '<td style="white-space:nowrap"><b>' + (c.numero || '') + '</b> '
         + '<span style="font-size:11px;color:var(--mut)">' + esc(TIPO_CONTR[c.tipo] || c.tipo) + '</span></td>'
       + '<td>' + esc(c.oggetto)
-        + (c.riferimento ? '<div style="font-size:11px;color:var(--mut)">' + esc(c.riferimento) + '</div>' : '') + '</td>'
+        + (c.riferimento ? '<div style="font-size:11px;color:var(--mut)">' + esc(c.riferimento) + '</div>' : '')
+        + (c.note ? '<div class="note-atto">&#128221; ' + esc(c.note) + '</div>' : '') + '</td>'
       + '<td>' + bdg(c.stato, ST_CONTR) + '</td>'
       + '<td style="font-size:12px;color:var(--mut);white-space:nowrap">' + fdate(c.data_atto) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.importo) + '</b></td>'
@@ -6707,6 +6952,8 @@ function contrattiPanel(p) {
           + '<p style="font-size:12px;margin-top:6px">Registrando l’incarico originario, da qui in avanti '
           + 'l’importo lo calcola il gestionale sommando gli atti: ogni prestazione aggiuntiva diventa una riga, '
           + 'con il suo scaglione di fatturazione.</p></div>')
+    + '<div style="margin-top:14px;border-top:1px solid var(--bord);padding-top:10px">'
+      + riquadroNote('Note sui contratti', p.note_contratti, 'note_contratti', ' card-piatta') + '</div>'
     + '</div>';
 }
 
@@ -8364,6 +8611,7 @@ function openCliente(id, presetNome) {
   el('cl-note').value  = c ? (c.note || '') : '';
   el('cl-sez1').innerHTML = sez('Referente amministrativo', 'riceve la copia della fattura');
   el('cl-sez2').innerHTML = sez('Referente operativo', 'comunicazioni tecniche e di cantiere');
+  el('cl-sez3').innerHTML = sez('Note', 'restano nella scheda e escono nella stampa');
   el('cl-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
 
   const comm = id ? commesseDi(id) : [];
@@ -8627,6 +8875,7 @@ function rProject() {
     ['ore',         'Ore / costi esterni', null]
   ];
   el('top-act').innerHTML = bdg(p.status, ST_PROJ)
+    + '<button class="btn btn-sm" data-act="schedacomm" title="Avanzamento, contratti e fatturazione: su carta o in PDF">&#128424;&#65039; Scheda</button>'
     + (canW() ? '<button class="btn btn-sm" data-act="editproj">Modifica</button>' : '')
     + (canW() ? '<button class="btn btn-p btn-sm" data-newt="">＋ Attività</button>' : '');
 
@@ -8708,6 +8957,66 @@ function pratichePanel(pid) {
     + 'i regolamenti regionali e comunali vigenti e le eventuali sospensioni per integrazioni.</div></div>';
 }
 
+/* Il riquadro delle note: si leggono sulla pagina, si scrivono in una
+   finestra. Un campo aperto direttamente sulla pagina verrebbe ridisegnato
+   dall'aggiornamento automatico di ogni minuto, e quello che si stava
+   scrivendo andrebbe perso. */
+function riquadroNote(titolo, testo, campo, extra) {
+  return '<div class="card' + (extra || '') + '"><div class="card-h"><span class="card-t">&#128221; ' + titolo + '</span>'
+    + (canW() ? '<button class="btn btn-sm" data-notecomm="' + campo + '">&#9998; ' + (String(testo || '').trim() ? 'Modifica' : 'Scrivi') + '</button>' : '')
+    + '</div>' + (String(testo || '').trim()
+      ? '<div class="note-testo">' + esc(testo) + '</div>'
+      : '<span style="font-size:12px;color:var(--mut)">Nessuna nota.</span>') + '</div>';
+}
+const NOTE_CAMPI = {
+  note:           ['Note della commessa', 'Telefonate, accordi, promemoria: quello che non sta negli altri campi.'],
+  note_contratti: ['Note sui contratti', 'Condizioni particolari, accordi su pagamenti e integrazioni. Escono nella scheda commessa stampata.']
+};
+let NOTE_ED = null;
+function apriNoteCommessa(campo) {
+  const p = byId(S.projects, S.projId); if (!p || !NOTE_CAMPI[campo]) return;
+  NOTE_ED = { pid: p.id, campo };
+  el('mno-t').textContent = NOTE_CAMPI[campo][0] + ' — ' + p.name;
+  el('mno-h').textContent = NOTE_CAMPI[campo][1];
+  el('mno-testo').value = p[campo] || '';
+  openM('m-note');
+  setTimeout(() => el('mno-testo').focus(), 50);
+}
+async function salvaNoteCommessa() {
+  if (!NOTE_ED) return;
+  const v = el('mno-testo').value.replace(/\s+$/, '') || null;
+  setLoading('mno-save', true);
+  const { error } = await SB.from('projects').update({ [NOTE_ED.campo]: v }).eq('id', NOTE_ED.pid);
+  setLoading('mno-save', false);
+  if (error) {
+    if (/note/.test(error.message || '') && /column|colonna|schema/i.test(error.message || ''))
+      return toast('Per salvare le note serve la migrazione 034 (sql/034_note_commessa.sql), poi la 018.', 'error');
+    return sbErr(error, 'note');
+  }
+  const p = byId(S.projects, NOTE_ED.pid); if (p) p[NOTE_ED.campo] = v;
+  closeM('m-note'); render(); toast('Note salvate', 'success');
+}
+/* Una nota nuova in cima, con data e nome: le piu' recenti si leggono per prime */
+function notaOggi(id) {
+  const t = el(id); if (!t) return;
+  const testa = fdate(todayISO()) + ' · ' + ((S.prof && S.prof.full_name) || '') + ': ';
+  const resto = t.value.replace(/^\s+/, '');
+  t.value = testa + (resto ? '\n\n' + resto : '');
+  t.focus(); t.setSelectionRange(testa.length, testa.length);
+  t.dispatchEvent(new Event('input', { bubbles: true }));
+}
+/* La scheda del cliente com'e' scritta nel modulo, anche prima di salvare */
+function clienteDalModulo() {
+  const g = x => el(x).value.trim();
+  const id = el('cl-id').value;
+  return Object.assign({}, id ? byId(S.clienti, id) : {}, { id: id || null,
+    denominazione: g('cl-den'), tipo: el('cl-tipo').value, piva: g('cl-piva'), cf: g('cl-cf'), sdi: g('cl-sdi'),
+    pec: g('cl-pec'), indirizzo: g('cl-ind'), cap: g('cl-cap'), comune: g('cl-com'), provincia: g('cl-prov'),
+    referente: g('cl-ref'), referente_ruolo: g('cl-refr'), referente_email: g('cl-refe'), referente_tel: g('cl-reft'),
+    referente_tec: g('cl-ref2'), referente_tec_ruolo: g('cl-ref2r'), referente_tec_email: g('cl-ref2e'),
+    referente_tec_tel: g('cl-ref2t'), note: el('cl-note').value });
+}
+
 function anagraficaPanel(p) {
   const f = (l, v) => '<div class="fg"><label class="fl">' + l + '</label><div style="font-size:13px">' + esc(v || '-') + '</div></div>';
   const cond = (p.condizioni || []).map(c => {
@@ -8715,6 +9024,7 @@ function anagraficaPanel(p) {
     return '<span class="chip chip-c" style="margin:2px 3px 2px 0;display:inline-block">' + esc(o ? o.l : c) + '</span>';
   }).join('');
   return '<div class="g2">'
+    + riquadroNote('Note della commessa', p.note, 'note', '" style="grid-column:1/-1')
     + '<div class="card"><div class="card-h"><span class="card-t">Commessa</span></div>'
       + '<div class="fg2">' + f('Codice', p.codice) + f('Cliente', p.client) + '</div>'
       + '<div class="fg2">' + f('CIG', p.cig) + f('CUP', p.cup) + '</div>'
@@ -12156,6 +12466,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('va-save').onclick = salvaVar;
   el('va-del').onclick  = () => delVar(el('va-id').value);
   el('cl-save').onclick = saveCliente;
+  el('cl-stampa').onclick = () => { const c = clienteDalModulo();
+    if (!c.denominazione) return toast('Scrivi prima la denominazione.', 'error');
+    apriStampa(schedaCliente(c), nomeFilePdf('Scheda-cliente', c.denominazione)); };
+  el('mno-save').onclick = salvaNoteCommessa;
+  el('mst-carta').onclick = () => { if (SCHEDA) stampaScheda(SCHEDA.s); closeM('m-stampa'); };
+  el('mst-pdf').onclick = async () => { if (!SCHEDA) return; setLoading('mst-pdf', true);
+    const ok = await pdfSchedaScarica(SCHEDA.s, SCHEDA.nomeFile); setLoading('mst-pdf', false);
+    if (ok) { closeM('m-stampa'); toast('PDF scaricato', 'success'); } };
+  /* "Nota con la data di oggi": vale per ogni campo note che lo dichiara */
+  document.addEventListener('click', e => { const b = e.target.closest('[data-notaoggi]');
+    if (b) { e.preventDefault(); notaOggi(b.dataset.notaoggi); } });
   el('cl-del').onclick  = () => delCliente(el('cl-id').value);
   el('mp-body').addEventListener('change', e => {
     if (e.target.id === 'w-clid') { wzCollect(); applicaCliente(e.target.value); drawWizard(); }
@@ -12392,6 +12713,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
+    if ((n = f('data-notecomm')))  { return apriNoteCommessa(n.dataset.notecomm); }
     if ((n = f('data-prevcomm')))  { e.stopPropagation(); return commessaDaPreventivo(n.dataset.prevcomm); }
     if ((n = f('data-pcat')))      { return apriVoceCatalogo(n.dataset.pcat); }
     if ((n = f('data-pvmodello'))) { return nuovoPreventivo(n.dataset.pvmodello); }
@@ -12450,6 +12772,8 @@ document.addEventListener('DOMContentLoaded', () => {
           + ', ' + r.schede + (r.schede === 1 ? ' scheda cliente completata' : ' schede cliente completate'), 'success');
       })();
       if (a === 'prevdacomm') return preventivoDaCommessa(S.projId);
+      if (a === 'schedacomm') { const sc = schedaCommessa(S.projId), p = byId(S.projects, S.projId);
+        return apriStampa(sc, nomeFilePdf('Scheda-commessa', (p && (p.codice || p.name)) || '')); }
       if (a === 'collegacli') return (async () => {
         const p = byId(S.projects, S.projId); if (!p) return;
         await clienteDaCommessa(Object.assign({}, p), Object.assign({}, p));

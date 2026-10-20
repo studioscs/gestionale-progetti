@@ -51,6 +51,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 30. [`sql/031_costi_generali.sql`](sql/031_costi_generali.sql) — costi generali dello studio, fuori dalle commesse
 31. [`sql/032_proforma_preventivi.sql`](sql/032_proforma_preventivi.sql) — proforma PDF prima della fattura, e i preventivi
 32. [`sql/033_catalogo_pratiche.sql`](sql/033_catalogo_pratiche.sql) — catalogo delle pratiche, attività che avviano o concludono una pratica
+33. [`sql/034_note_commessa.sql`](sql/034_note_commessa.sql) — note della commessa e note sui contratti
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -737,6 +738,39 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Nella scheda *Anagrafica* della commessa il riquadro **Preventivi** elenca
   quelli collegati e **+ Preventivo per questo committente** ne apre uno nuovo
   già intestato, con l'immobile della commessa.
+
+## Note e schede da stampare
+
+**Note.** Ci sono in quattro posti:
+
+- nella **scheda cliente** (*Clienti*), sezione *Note*;
+- nella **commessa**, scheda *Anagrafica*: riquadro *Note della commessa*;
+- nella **parte dei contratti** (scheda *Fatturazione*, sotto *Contratto e
+  integrazioni*): riquadro *Note sui contratti*;
+- in **ogni singolo atto** (incarico, integrazione): campo *Note* della sua
+  finestra, e la nota si legge nella riga dell'atto.
+
+Il pulsante **+ Nota con la data di oggi** mette in cima una riga con data e
+nome di chi scrive: le note più recenti si leggono per prime. Le note della
+commessa e dei contratti si scrivono in una finestra e non direttamente nella
+pagina, perché l'aggiornamento automatico di ogni minuto ridisegna la pagina e
+cancellerebbe quello che si sta scrivendo. Le due note della commessa
+richiedono la **migrazione 034** (poi la 018); senza, il gestionale dice che
+cosa manca.
+
+**Schede da stampare.** Dalla scheda cliente (**🖨️ Stampa / PDF**) e dalla
+commessa (**🖨️ Scheda**, in alto) si sceglie **Stampa su carta** (la finestra
+di stampa del sistema, da cui si può anche salvare in PDF) oppure **Scarica
+PDF**. Il contenuto è lo stesso nei due casi.
+
+- *Scheda cliente*: dati anagrafici e fiscali, referenti, **note**, commesse
+  e preventivi del cliente. Si stampa quello che c'è nel modulo, anche prima
+  di salvarlo.
+- *Scheda commessa*: **solo** dati generali, **stato di avanzamento
+  generale** (percentuale complessiva e fase per fase), **contratti** (con le
+  note degli atti e le note sui contratti) e **fatturazione** (scaglioni,
+  fatture emesse, fatturato, incassato, ancora da fatturare). Non escono le
+  attività una per una, le ore, i costi né le note generali della commessa.
 
 ## Enti pubblici: la scissione dei pagamenti
 

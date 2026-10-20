@@ -3,6 +3,7 @@ const fs=require('fs'),path=require('path');
 /* Il testo di un PDF scaricato, per controllare che cosa c'e' scritto davvero */
 const pdfParse=require('pdf-parse/lib/pdf-parse.js');
 const testoPdf=async file=>(await pdfParse(fs.readFileSync(file))).text;
+const esc2=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 /* Costruisce la pagina di test: index.html con il CDN Supabase sostituito dal mock */
 function build(){
@@ -3964,6 +3965,103 @@ function launchOpts(){
     await p.click('#pv-save'); await p.waitForTimeout(900);
     must(await p.evaluate(pid=>__DB.preventivi.some(x=>x.project_id===pid&&x.cliente_nome==='Anna Rossi'),pid),'preventivo non collegato alla commessa');
     await p.evaluate(()=>closeM('m-prev'));
+  });
+
+  /* ---------------- NOTE E SCHEDE DA STAMPARE ---------------- */
+  /* la finestra di stampa si sostituisce con una che conserva la pagina */
+  const catturaStampa=()=>p.evaluate(()=>{ window.__STAMPA=null;
+    window.open=()=>{ const d={html:'',open(){},write(h){this.html+=h;},close(){}};
+      const w={document:d,focus(){},print(){ window.__STAMPA=d.html; }}; window.__STAMPAW=w; return w; }; });
+  await t('la scheda cliente ha le note, con la data di oggi a portata di clic',async()=>{
+    const id=await p.evaluate(()=>__DB.clienti.find(c=>c.denominazione==='Anna Rossi').id);
+    await p.evaluate(id=>openCliente(id),id); await p.waitForSelector('#m-cli.show');
+    must(/Note/.test(await p.textContent('#cl-sez3')),'manca la sezione Note');
+    await p.click('[data-notaoggi="cl-note"]');
+    const v=await p.inputValue('#cl-note');
+    const oggi=await p.evaluate(()=>fdate(todayISO())+' · '+S.prof.full_name+': ');
+    must(v.indexOf(oggi)===0&&/Chiamare dopo le 15/.test(v),'nota del giorno non inserita in cima: '+v);
+    await p.fill('#cl-note',oggi+'Vuole il preventivo per PEC\n\nChiamare dopo le 15');
+    await p.click('#cl-save'); await p.waitForTimeout(900);
+    must(/Vuole il preventivo per PEC/.test(await p.evaluate(()=>__DB.clienti.find(c=>c.denominazione==='Anna Rossi').note)),'nota non salvata');
+  });
+  await t('la scheda cliente si stampa su carta con anagrafica e note',async()=>{
+    await catturaStampa();
+    const id=await p.evaluate(()=>__DB.clienti.find(c=>c.denominazione==='Anna Rossi').id);
+    await p.evaluate(id=>openCliente(id),id); await p.waitForSelector('#m-cli.show');
+    await p.click('#cl-stampa'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    await p.click('#mst-carta'); await p.waitForTimeout(700);
+    const h=await p.evaluate(()=>window.__STAMPA||'');
+    must(/Scheda cliente — Anna Rossi/.test(h)&&/RSSNNA80A41H211X/.test(h)&&/anna\.rossi@pec\.it/.test(h),'anagrafica non stampata');
+    must(/Vuole il preventivo per PEC/.test(h),'note non stampate');
+    must(/Bagno Rossi/.test(h),'commesse del cliente non stampate');
+    must(!(await p.isVisible('#m-stampa')),'la scelta di stampa resta aperta');
+    await p.evaluate(()=>closeM('m-cli'));
+  });
+  await t('la scheda cliente si scarica in PDF con le note',async()=>{
+    const id=await p.evaluate(()=>__DB.clienti.find(c=>c.denominazione==='Anna Rossi').id);
+    await p.evaluate(id=>openCliente(id),id); await p.waitForSelector('#m-cli.show');
+    await p.click('#cl-stampa'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mst-pdf')]);
+    must(dl,'nessun PDF scaricato');
+    must(/^Scheda-cliente-Anna_Rossi\.pdf$/.test(dl.suggestedFilename()),'nome file: '+dl.suggestedFilename());
+    const txt=await testoPdf(await dl.path());
+    must(/Anna Rossi/.test(txt)&&/Vuole il preventivo per PEC/.test(txt)&&/RSSNNA80A41H211X/.test(txt),'PDF incompleto: '+txt.slice(0,300));
+    await p.evaluate(()=>closeM('m-cli'));
+  });
+  let PNOTE=null;
+  await t('la commessa ha le sue note, scritte in una finestra',async()=>{
+    PNOTE=await p.evaluate(async()=>{ const pr=__DB.projects.find(x=>x.name==='Bagno Rossi');
+      await SB.from('commessa_contratti').insert({project_id:pr.id,numero:1,tipo:'incarico',oggetto:'Progetto e DL bagno',
+        importo:4000,stato:'accettato',data_atto:'2026-09-10',note:'Firmato in studio, copia al cliente'});
+      await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Acconto 30%',imponibile:1200,stato:'emessa',
+        numero_fattura:'12/2026',data_fattura:'2026-09-15',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Saldo',imponibile:2800,stato:'da_emettere',ordine:2});
+      await loadAll(true); goProject(pr.id,'anagrafica'); return pr.id; });
+    await p.waitForTimeout(300);
+    await p.click('[data-notecomm="note"]'); await p.waitForSelector('#m-note.show',{timeout:3000});
+    await p.click('[data-notaoggi="mno-testo"]');
+    await p.type('#mno-testo','Chiavi dal portiere');
+    await p.click('#mno-save'); await p.waitForTimeout(700);
+    const v=await p.evaluate(id=>__DB.projects.find(x=>x.id===id).note,PNOTE);
+    must(/Chiavi dal portiere/.test(v||'')&&v.indexOf(await p.evaluate(()=>fdate(todayISO())))===0,'nota non salvata: '+v);
+    must(/Chiavi dal portiere/.test(await p.textContent('#page')),'la nota non si vede nella scheda Anagrafica');
+  });
+  await t('accanto ai contratti: note della sezione e nota del singolo atto',async()=>{
+    await p.evaluate(id=>goProject(id,'fatture'),PNOTE); await p.waitForTimeout(300);
+    must(/Firmato in studio, copia al cliente/.test(await p.textContent('#page')),'la nota dell atto non si vede');
+    await p.click('[data-notecomm="note_contratti"]'); await p.waitForSelector('#m-note.show',{timeout:3000});
+    await p.fill('#mno-testo','Integrazione per la DL da concordare a fine lavori');
+    await p.click('#mno-save'); await p.waitForTimeout(700);
+    must(await p.evaluate(id=>__DB.projects.find(x=>x.id===id).note_contratti,PNOTE)==='Integrazione per la DL da concordare a fine lavori','note contratti non salvate');
+    must(/da concordare a fine lavori/.test(await p.textContent('#page')),'note contratti non visibili');
+  });
+  await t('la scheda commessa stampa solo avanzamento, contratti e fatturazione',async()=>{
+    await catturaStampa();
+    await p.click('[data-act="schedacomm"]'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    await p.click('#mst-carta'); await p.waitForTimeout(700);
+    const g=await p.evaluate(id=>({h:window.__STAMPA||'',pct:progressOf(id).pct,
+      att:S.tasks.filter(t=>t.project_id===id).map(t=>t.title).slice(0,3)}),PNOTE);
+    must(/Stato di avanzamento generale/.test(g.h)&&g.h.indexOf(g.pct+'%')>=0,'manca l avanzamento');
+    must(/Progetto e DL bagno/.test(g.h)&&/Firmato in studio/.test(g.h)&&/da concordare a fine lavori/.test(g.h),'mancano contratti o loro note');
+    must(/Acconto 30%/.test(g.h)&&/12\/2026/.test(g.h)&&/Saldo/.test(g.h),'manca la fatturazione');
+    must(!/Chiavi dal portiere/.test(g.h),'le note generali non dovevano uscire');
+    must(!g.att.some(a=>g.h.indexOf(esc2(a))>=0),'escono le singole attività');
+  });
+  await t('la scheda commessa si scarica in PDF',async()=>{
+    await p.click('[data-act="schedacomm"]'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mst-pdf')]);
+    must(dl,'nessun PDF scaricato');
+    const txt=await testoPdf(await dl.path());
+    must(/Bagno Rossi/.test(txt)&&/AVANZAMENTO/.test(txt)&&/Acconto 30%/.test(txt)&&/Progetto e DL bagno/.test(txt),'PDF incompleto: '+txt.slice(0,400));
+  });
+  await t('senza la migrazione 034 le note dicono che cosa manca',async()=>{
+    await p.evaluate(()=>{ window.__COLONNE_ASSENTI=['note']; });
+    await p.evaluate(id=>goProject(id,'anagrafica'),PNOTE); await p.waitForTimeout(300);
+    await p.click('[data-notecomm="note"]'); await p.waitForSelector('#m-note.show',{timeout:3000});
+    await p.fill('#mno-testo','prova'); await p.click('#mno-save'); await p.waitForTimeout(600);
+    const tst=await p.evaluate(()=>Array.from(document.querySelectorAll('.toast')).map(x=>x.textContent).join(' | '));
+    await p.evaluate(()=>{ window.__COLONNE_ASSENTI=[]; closeM('m-note'); });
+    must(/migrazione 034/.test(tst),'messaggio: '+tst);
   });
 
   /* ---------------- PRATICHE: CATALOGO, PROPOSTE, ATTIVITA' COLLEGATE ---------------- */
