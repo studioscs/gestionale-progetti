@@ -4117,6 +4117,51 @@ function launchOpts(){
     const txt=await testoPdf(await dl.path());
     must(/BL-1\/PA/.test(txt)&&/PROFORMA BL7/.test(txt)&&/Fornitore BL/.test(txt)&&/6\.295,24/.test(txt),'PDF incompleto: '+txt.slice(0,400));
   });
+  await t('si segnano i solleciti di una fattura emessa, in ordine',async()=>{
+    const fid=await p.evaluate(()=>{ S.prof.role='admin'; go('fatturare'); return S.fatture.find(f=>f.numero_fattura==='BL-1/PA').id; });
+    await p.waitForTimeout(300);
+    await p.click('[data-soll="'+fid+'"]'); await p.waitForSelector('#m-soll.show',{timeout:3000});
+    must(/BL-1\/PA/.test(await p.textContent('#mso-doc')),'la finestra non dice di quale fattura si tratta');
+    must(await p.isDisabled('#mso-2')&&await p.isDisabled('#mso-3'),'secondo sollecito o mora disponibili prima del primo');
+    await p.click('[data-sollinoggi="mso-1"]');
+    must(await p.inputValue('#mso-1')===await p.evaluate(()=>todayISO()),'Oggi non compila la data');
+    must(!(await p.isDisabled('#mso-2'))&&await p.isDisabled('#mso-3'),'il secondo non si sblocca dopo il primo');
+    await p.fill('#mso-2','2020-01-01'); await p.click('#mso-save'); await p.waitForTimeout(300);
+    must(await p.isVisible('#m-soll'),'accettate date fuori ordine');
+    await p.click('[data-sollinoggi="mso-2"]'); await p.click('#mso-save'); await p.waitForTimeout(700);
+    const g=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {a:f.sollecito_1,b:f.sollecito_2,m:f.messa_in_mora}; },fid);
+    must(g.a&&g.b&&!g.m,'solleciti non salvati: '+JSON.stringify(g));
+    must(/1° .*2° /.test(await p.textContent('#page')),'i solleciti non si vedono nella riga');
+  });
+  await t('al terzo passo la messa in mora, con l avvocato',async()=>{
+    const fid=await p.evaluate(()=>S.fatture.find(f=>f.numero_fattura==='BL-1/PA').id);
+    await p.click('[data-soll="'+fid+'"]'); await p.waitForSelector('#m-soll.show',{timeout:3000});
+    must(!(await p.isDisabled('#mso-3')),'la messa in mora non si sblocca dopo il secondo sollecito');
+    await p.click('[data-sollinoggi="mso-3"]'); await p.click('#mso-save'); await p.waitForTimeout(300);
+    must(await p.isVisible('#m-soll'),'messa in mora accettata senza avvocato');
+    await p.fill('#mso-avv','Avv. Maria Verdi'); await p.fill('#mso-note','Raccomandata A/R spedita');
+    await p.click('#mso-save'); await p.waitForTimeout(700);
+    const g=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {m:f.messa_in_mora,a:f.avvocato,n:f.note_solleciti}; },fid);
+    must(g.m&&g.a==='Avv. Maria Verdi'&&g.n==='Raccomandata A/R spedita','mora non salvata: '+JSON.stringify(g));
+    const txt=await p.textContent('#page');
+    must(/MORA .*Avv\. Maria Verdi/.test(txt)&&!/avv\. Avv\./i.test(txt),'la mora non si vede bene nella riga');
+    must(/In mora con l’avvocato/.test(txt),'manca il riquadro delle posizioni in mora');
+    must(await p.evaluate(id=>document.querySelector('[data-soll="'+id+'"]').classList.contains('btn-d'),fid),'il pulsante non segnala la mora');
+  });
+  await t('si sollecita una proforma, non uno scaglione senza proforma',async()=>{
+    const g=await p.evaluate(()=>{ const pf=S.fatture.find(f=>f.proforma_numero==='BL7'), no=S.fatture.find(f=>f.descrizione==='Senza proforma');
+      return {pf:!!document.querySelector('[data-soll="'+pf.id+'"]'),no:!!document.querySelector('[data-soll="'+no.id+'"]')}; });
+    must(g.pf&&!g.no,'pulsanti solleciti: '+JSON.stringify(g));
+  });
+  await t('il report riporta solleciti e messa in mora',async()=>{
+    await catturaStampa();
+    await p.click('#bl-btn'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    await p.click('#mst-carta'); await p.waitForTimeout(700);
+    const h=await p.evaluate(()=>window.__STAMPA||'');
+    const riga=h.slice(h.indexOf('BL-1/PA'),h.indexOf('BL-1/PA')+600);
+    must(/1° /.test(riga)&&/2° /.test(riga)&&/MORA /.test(riga)&&/Maria Verdi/.test(riga),'colonna solleciti vuota: '+riga.replace(/<[^>]+>/g,' ').slice(0,200));
+    must(/In mora con l’avvocato/.test(h),'riepilogo senza le posizioni in mora');
+  });
   await t('un collaboratore non ha il report incassi',async()=>{
     const v=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('fatturare');
       const r=!!el('bl-btn'); S.prof.role='admin'; go('oggi'); return r; });

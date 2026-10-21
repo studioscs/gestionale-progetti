@@ -52,6 +52,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 31. [`sql/032_proforma_preventivi.sql`](sql/032_proforma_preventivi.sql) — proforma PDF prima della fattura, e i preventivi
 32. [`sql/033_catalogo_pratiche.sql`](sql/033_catalogo_pratiche.sql) — catalogo delle pratiche, attività che avviano o concludono una pratica
 33. [`sql/034_note_commessa.sql`](sql/034_note_commessa.sql) — note della commessa e note sui contratti
+34. [`sql/035_solleciti.sql`](sql/035_solleciti.sql) — solleciti di pagamento e messa in mora con l'avvocato
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -793,7 +794,28 @@ studio teneva a mano:
 - **Da saldare**: parcelle degli esterni non pagate e costi generali non
   pagati.
 
-La colonna *Solleciti* è lasciata vuota apposta, per segnare a penna.
+La colonna *Solleciti* riporta i solleciti segnati nel gestionale (vedi
+sotto); nel riepilogo compaiono anche le posizioni **in mora con
+l'avvocato**.
+
+### Solleciti e messa in mora
+
+Su una fattura **emessa e non pagata**, o su una **proforma mandata e non
+saldata**, il pulsante 🔔 (in *Da fatturare* e nella scheda *Fatturazione*
+della commessa, solo per chi tiene l'amministrazione) apre la finestra dei
+solleciti:
+
+1. **1° sollecito** — la data (pulsante *Oggi*);
+2. **2° sollecito** — si sblocca dopo il primo;
+3. **messa in mora con l'avvocato** — il terzo passo, si sblocca dopo il
+   secondo e chiede il nome dell'avvocato.
+
+Le date devono andare in ordine; nelle note si scrive come si è sollecitato e
+che cosa ha risposto il cliente. Nella riga compare lo stato (🔔 1° … 2° …,
+⚖️ MORA in rosso), in *Da fatturare* il riquadro **In mora con l'avvocato**
+con quante posizioni e quanto vale, e tutto esce nel report. Quando la
+fattura viene incassata la storia dei solleciti resta registrata. Serve la
+**migrazione 035** (poi la 018).
 
 ## Enti pubblici: la scissione dei pagamenti
 

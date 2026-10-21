@@ -168,6 +168,8 @@ textarea.fc { resize:vertical; min-height:64px; }
 .card { background:#fff; border:1px solid var(--bord); border-radius:10px; padding:18px; }
 .card-h { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
 .note-testo { white-space:pre-wrap; font-size:13px; line-height:1.5; max-height:320px; overflow:auto; }
+.soll { font-size:11px; color:var(--ora); font-weight:600; margin-top:3px; white-space:normal; }
+.soll.soll-mora { color:var(--red); }
 .note-atto { font-size:11.5px; color:var(--mut); margin-top:3px; white-space:pre-wrap; }
 .card.card-piatta { border:0; padding:0; background:transparent; }
 .card-t { font-size:14px; font-weight:600; }
@@ -601,6 +603,29 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mf">
       <button class="btn" data-close="m-note">Annulla</button>
       <button class="btn btn-p" id="mno-save">Salva note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Solleciti di pagamento e messa in mora -->
+<div class="ov" id="m-soll">
+  <div class="modal" style="max-width:560px">
+    <div class="mh"><h3 id="mso-t">Solleciti</h3><button class="mx" data-close="m-soll">&#10005;</button></div>
+    <div class="mb">
+      <div class="ibox mb16" id="mso-doc" style="font-size:12.5px"></div>
+      <div class="fg2"><div id="mso-r1"><div class="fg"><label class="fl">1&deg; sollecito</label><div class="row" style="gap:8px;flex-wrap:nowrap"><input class="fc" type="date" id="mso-1" style="flex:1;min-width:0"><button class="btn btn-sm" data-sollinoggi="mso-1">Oggi</button></div></div></div>
+        <div id="mso-r2"><div class="fg"><label class="fl">2&deg; sollecito</label><div class="row" style="gap:8px;flex-wrap:nowrap"><input class="fc" type="date" id="mso-2" style="flex:1;min-width:0"><button class="btn btn-sm" data-sollinoggi="mso-2">Oggi</button></div></div></div></div>
+      <div id="mso-r3" style="border:1px solid var(--red);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-weight:700;color:var(--red);margin-bottom:6px">&#9878;&#65039; 3&deg; passo: messa in mora con l’avvocato</div>
+        <div class="fg2"><div class="fg"><label class="fl">Data della messa in mora</label><div class="row" style="gap:8px;flex-wrap:nowrap"><input class="fc" type="date" id="mso-3" style="flex:1;min-width:0"><button class="btn btn-sm" data-sollinoggi="mso-3">Oggi</button></div></div>
+          <div class="fg"><label class="fl">Avvocato *</label><input class="fc" id="mso-avv" placeholder="Avv. Nome Cognome"></div></div>
+      </div>
+      <div class="fg"><label class="fl">Note</label><textarea class="fc" id="mso-note" rows="3" placeholder="Come è stato sollecitato (PEC, telefono, raccomandata), che cosa ha risposto…"></textarea>
+        <button class="btn btn-xs" data-notaoggi="mso-note" style="margin-top:6px">&#43; Nota con la data di oggi</button></div>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close="m-soll">Annulla</button>
+      <button class="btn btn-p" id="mso-save">Salva</button>
     </div>
   </div>
 </div>
@@ -1485,7 +1510,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.21.1';
+const VERSIONE = '2026.10.21.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1689,7 +1714,9 @@ const MIGRAZIONI = {
   '030_isa':                 ['isa_tipo','anno_competenza'],
   '031_costi_generali':      ['costi_generali'],
   '032_proforma_preventivi': ['proforma_numero','proforma_data','proforma_at','preventivi','preventivo_modelli'],
-  '033_catalogo_pratiche':   ['pratiche_catalogo','pratica_ruolo']
+  '033_catalogo_pratiche':   ['pratiche_catalogo','pratica_ruolo'],
+  '034_note_commessa':       ['note_contratti'],
+  '035_solleciti':           ['sollecito_1','sollecito_2','messa_in_mora','avvocato','note_solleciti']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -6996,14 +7023,14 @@ function fatturePanel(pid) {
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut)">' + esc(f.richiesta_note) + '</div>' : '')
           : '') + '</td>'
       + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
-            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '') + '</td>'
+            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '') + chipSolleciti(f) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
         + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
-      + '<td class="ac" style="white-space:nowrap">'
+      + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f)
         + (canW() && fattAperta(f)
             ? '<button class="btn btn-xs" data-chiedi="' + f.id + '" title="Dì all’amministrazione che si può fatturare">&#128227;</button> ' : '')
         + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF da mandare prima della fattura">&#128196;</button> ' : '')
@@ -7071,6 +7098,77 @@ function fatturePanel(pid) {
 
 /* ------------------------- PAGINA: DA FATTURARE ------------------------- */
 /* ---------------------------------------------------------------------------
+   SOLLECITI E MESSA IN MORA
+   Le tre crocette che si segnavano a penna sul foglio: primo sollecito,
+   secondo sollecito e, al terzo passo, la messa in mora affidata
+   all'avvocato. Valgono per una fattura emessa e non pagata, o per una
+   proforma mandata e non saldata.
+   --------------------------------------------------------------------------- */
+const sollecitabile = f => !!f && (f.stato === 'emessa' || (fattAperta(f) && !!f.proforma_numero));
+const passoSollecito = f => f.messa_in_mora ? 3 : f.sollecito_2 ? 2 : f.sollecito_1 ? 1 : 0;
+/* "avv." davanti al nome, se chi l'ha scritto non l'ha gia' messo */
+const nomeAvvocato = a => /^\s*avv/i.test(a || '') ? String(a).trim() : 'avv. ' + String(a || '').trim();
+const dataBreve = d => d ? fdate(d).slice(0, 6) + fdate(d).slice(8) : '';
+function testoSolleciti(f) {
+  const v = [];
+  if (f.sollecito_1) v.push('1° ' + dataBreve(f.sollecito_1));
+  if (f.sollecito_2) v.push('2° ' + dataBreve(f.sollecito_2));
+  if (f.messa_in_mora) v.push('MORA ' + dataBreve(f.messa_in_mora) + (f.avvocato ? ' ' + nomeAvvocato(f.avvocato) : ''));
+  return v.join(' · ');
+}
+function chipSolleciti(f) {
+  if (!passoSollecito(f)) return '';
+  return '<div class="soll' + (f.messa_in_mora ? ' soll-mora' : '') + '">'
+    + (f.messa_in_mora ? '&#9878;&#65039; ' : '&#128276; ') + esc(testoSolleciti(f)) + '</div>';
+}
+const bottoneSolleciti = f => sollecitabile(f) && vedeTutto()
+  ? '<button class="btn btn-xs' + (f.messa_in_mora ? ' btn-d' : '') + '" data-soll="' + f.id + '" title="Solleciti di pagamento e messa in mora">'
+    + (f.messa_in_mora ? '&#9878;&#65039;' : '&#128276;') + (passoSollecito(f) ? ' ' + passoSollecito(f) : '') + '</button> ' : '';
+
+let SOLL = null;
+function apriSolleciti(fid) {
+  const f = byId(S.fatture, fid); if (!f) return;
+  if (!vedeTutto()) return toast('I solleciti li gestisce chi tiene l’amministrazione.', 'error');
+  SOLL = fid;
+  const doc = f.stato === 'emessa' ? 'Fattura ' + (f.numero_fattura || '') + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '')
+    : 'Proforma ' + f.proforma_numero + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '');
+  el('mso-t').textContent = 'Solleciti — ' + intestatarioDi(f);
+  el('mso-doc').innerHTML = '<b>' + esc(doc) + '</b> · ' + esc(pn(f.project_id)) + ' · ' + esc(f.descrizione || '')
+    + '<br>Da incassare: <b>' + feuro(daIncassareDi(f, f.stato !== 'emessa')) + '</b>';
+  el('mso-1').value = f.sollecito_1 || ''; el('mso-2').value = f.sollecito_2 || '';
+  el('mso-3').value = f.messa_in_mora || ''; el('mso-avv').value = f.avvocato || '';
+  el('mso-note').value = f.note_solleciti || '';
+  aggiornaPassiSolleciti();
+  openM('m-soll');
+}
+/* Si va per ordine: il secondo dopo il primo, la mora dopo il secondo */
+function aggiornaPassiSolleciti() {
+  const v1 = !!el('mso-1').value, v2 = !!el('mso-2').value;
+  el('mso-r2').style.opacity = v1 ? '' : '.45'; el('mso-2').disabled = !v1 && !el('mso-2').value;
+  el('mso-r3').style.opacity = v2 ? '' : '.45'; el('mso-3').disabled = !v2 && !el('mso-3').value;
+  el('mso-avv').disabled = el('mso-3').disabled;
+  qsa('#m-soll [data-sollinoggi]').forEach(b => { b.disabled = el(b.dataset.sollinoggi).disabled; });
+}
+async function salvaSolleciti() {
+  const f = byId(S.fatture, SOLL); if (!f) return;
+  const d1 = el('mso-1').value || null, d2 = el('mso-2').value || null, d3 = el('mso-3').value || null;
+  const avv = el('mso-avv').value.trim() || null;
+  if (d2 && !d1) return toast('Prima del secondo sollecito va segnato il primo.', 'error');
+  if (d3 && !d2) return toast('La messa in mora è il terzo passo: prima vanno segnati i due solleciti.', 'error');
+  if ((d1 && d2 && d2 < d1) || (d2 && d3 && d3 < d2)) return toast('Le date vanno in ordine: primo, secondo, messa in mora.', 'error');
+  if (d3 && !avv) return toast('Indica l’avvocato a cui è affidata la messa in mora.', 'error');
+  const pay = { sollecito_1: d1, sollecito_2: d2, messa_in_mora: d3, avvocato: d3 ? avv : (avv || null),
+                note_solleciti: el('mso-note').value.replace(/\s+$/, '') || null };
+  setLoading('mso-save', true);
+  const { error } = await SB.from('commessa_fatture').update(pay).eq('id', f.id);
+  setLoading('mso-save', false);
+  if (error) return sbErr(error, 'solleciti');
+  Object.assign(f, pay);
+  closeM('m-soll'); render();
+  toast(d3 ? 'Messa in mora registrata (' + nomeAvvocato(avv) + ')' : 'Solleciti salvati', 'success');
+}
+
+/* ---------------------------------------------------------------------------
    REPORT INCASSI E PAGAMENTI ("black list")
    Lo stesso foglio che lo studio teneva a mano: le fatture emesse e non
    ancora pagate, le proforme mandate e non ancora saldate, e quello che lo
@@ -7116,7 +7214,8 @@ function reportIncassi(saldo) {
   const d = datiReportIncassi();
   const s = saldo === '' || saldo === null || saldo === undefined || isNaN(Number(saldo)) ? null : r2(Number(saldo));
   const nome = (STUDIO.denominazione || 'Studio').replace(/\s+(S\.?R\.?L\.?|STP|S\.?P\.?A\.?)\b.*$/i, '').trim();
-  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), '', feuro(x.importo)];
+  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), x.f ? testoSolleciti(x.f) : '', feuro(x.importo)];
+  const inMora = d.emesse.concat(d.proforme).filter(x => x.f.messa_in_mora);
   const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Importo'];
   return {
     titolo: 'Black list — ' + nome,
@@ -7126,6 +7225,8 @@ function reportIncassi(saldo) {
         ['Saldo conto', s === null ? 'non indicato' : feuro(s)],
         ['Totale da incassare', feuro(d.totIncassare) + '  (fatture ' + feuro(d.totEmesse) + ' + proforme ' + feuro(d.totProforme) + ')'],
         ['Totale da saldare', feuro(d.totSaldare)]]
+        .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
+          + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
       { titolo: 'Black list — fatture emesse non ancora incassate', tabella: { col, dx: [4], largo: 2, totCol: 4,
           righe: d.emesse.map(riga), tot: d.emesse.length ? [['Totale fatture da incassare', feuro(d.totEmesse)]] : null,
@@ -7216,11 +7317,11 @@ function rFatturare() {
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
             + '📣 ' + esc(un(f.richiesta_da)) + ' · ' + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
-                + esc(f.richiesta_note) + '</div>' : '') : '') + '</td>'
+                + esc(f.richiesta_note) + '</div>' : '') : '') + chipSolleciti(f) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
-      + '<td class="ac" style="white-space:nowrap">' + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
+      + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f) + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
         + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
   };
   const tabella = (arr, titolo, colore) => !arr.length ? '' :
@@ -7241,6 +7342,9 @@ function rFatturare() {
       + kpi('Emesse non incassate', emesse.length,
             feuro(emesse.reduce((a, f) => a + impFattura(f), 0)), emesse.length ? 100 : 0, 'var(--blue)')
       + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
+      + (() => { const m = S.fatture.filter(f => sollecitabile(f) && f.messa_in_mora);
+          return m.length ? kpi('In mora con l’avvocato', m.length,
+            feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
     + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
@@ -12572,6 +12676,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!c.denominazione) return toast('Scrivi prima la denominazione.', 'error');
     apriStampa(schedaCliente(c), nomeFilePdf('Scheda-cliente', c.denominazione)); };
   el('mno-save').onclick = salvaNoteCommessa;
+  el('mso-save').onclick = salvaSolleciti;
+  ['mso-1', 'mso-2', 'mso-3'].forEach(id => el(id).addEventListener('input', aggiornaPassiSolleciti));
+  el('m-soll').addEventListener('click', e => { const b = e.target.closest('[data-sollinoggi]'); if (!b || b.disabled) return;
+    el(b.dataset.sollinoggi).value = todayISO(); aggiornaPassiSolleciti(); });
   el('mst-carta').onclick = () => { const sc = schedaDaStampare(); if (sc) stampaScheda(sc); closeM('m-stampa'); };
   el('mst-pdf').onclick = async () => { const sc = schedaDaStampare(); if (!sc) return; setLoading('mst-pdf', true);
     const ok = await pdfSchedaScarica(sc, SCHEDA.nomeFile); setLoading('mst-pdf', false);
@@ -12815,6 +12923,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
+    if ((n = f('data-soll')))      { e.stopPropagation(); return apriSolleciti(n.dataset.soll); }
     if ((n = f('data-notecomm')))  { return apriNoteCommessa(n.dataset.notecomm); }
     if ((n = f('data-prevcomm')))  { e.stopPropagation(); return commessaDaPreventivo(n.dataset.prevcomm); }
     if ((n = f('data-pcat')))      { return apriVoceCatalogo(n.dataset.pcat); }
