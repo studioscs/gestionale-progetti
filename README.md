@@ -772,6 +772,29 @@ PDF**. Il contenuto è lo stesso nei due casi.
   fatture emesse, fatturato, incassato, ancora da fatturare). Non escono le
   attività una per una, le ore, i costi né le note generali della commessa.
 
+## Report incassi e pagamenti ("black list")
+
+In *Da fatturare* il pulsante **🖨️ Report incassi** (solo per chi tiene
+l'amministrazione) stampa su carta o scarica in PDF lo stesso foglio che lo
+studio teneva a mano:
+
+- **Riepilogo**: saldo del conto, totale da incassare (fatture + proforme),
+  totale da saldare e, se il saldo è indicato, *saldo + da incassare − da
+  saldare*. Il saldo del conto il gestionale non lo conosce: si scrive al
+  momento della stampa e resta ricordato su quel dispositivo (si può lasciare
+  vuoto).
+- **Black list**: fatture **emesse e non ancora incassate**, con anno, numero,
+  intestatario e quanto il committente deve versare (imponibile, cassa, IVA,
+  spese anticipate, meno l'eventuale ritenuta; per gli enti in scissione dei
+  pagamenti senza l'IVA, che l'ente versa all'erario).
+- **Proforme** mandate e non ancora pagate (scaglioni con proforma ancora da
+  fatturare), con lo stesso importo del PDF della proforma: comprese le spese
+  anticipate non ancora fatturate della commessa, contate una volta sola.
+- **Da saldare**: parcelle degli esterni non pagate e costi generali non
+  pagati.
+
+La colonna *Solleciti* è lasciata vuota apposta, per segnare a penna.
+
 ## Enti pubblici: la scissione dei pagamenti
 
 Per gli enti pubblici vale la **scissione dei pagamenti** (art. 17-ter DPR

@@ -611,6 +611,7 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3>Stampa scheda</h3><button class="mx" data-close="m-stampa">&#10005;</button></div>
     <div class="mb">
       <p id="mst-t" style="font-weight:600;margin-bottom:12px"></p>
+      <div id="mst-extra"></div>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <button class="btn btn-p" id="mst-carta">&#128424;&#65039; Stampa su carta</button>
         <button class="btn" id="mst-pdf">&#128196; Scarica PDF</button>
@@ -1484,7 +1485,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.20.1';
+const VERSIONE = '2026.10.21.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5345,6 +5346,8 @@ const nomeFilePdf = (tipo, numero) => tipo + '-' + String(numero || 'bozza').rep
    scaricato direttamente: il contenuto e' uno solo, cosi' carta e PDF non
    dicono mai cose diverse.
    =========================================================================== */
+/* in quale colonna va la cifra delle righe di totale: l'ultima, salvo diverso avviso */
+const colonnaTotale = t => t.totCol === undefined ? t.col.length - 1 : t.totCol;
 const testoScheda = v => (v === null || v === undefined || String(v).trim() === '') ? '—' : String(v);
 
 function htmlScheda(s) {
@@ -5359,8 +5362,10 @@ function htmlScheda(s) {
             + '>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>'
           + z.tabella.righe.map(r => '<tr>' + r.map((c, i) => '<td' + ((z.tabella.dx || []).indexOf(i) >= 0 ? ' class="dx"' : '') + '>'
               + esc(c === null || c === undefined ? '' : String(c)).replace(/\n/g, '<br>') + '</td>').join('') + '</tr>').join('')
-          + '</tbody>' + (z.tabella.tot ? '<tfoot>' + z.tabella.tot.map(r => '<tr><td colspan="' + (z.tabella.col.length - 1) + '">'
-              + esc(r[0]) + '</td><td class="dx">' + esc(r[1]) + '</td></tr>').join('') + '</tfoot>' : '') + '</table>'
+          + '</tbody>' + (z.tabella.tot ? '<tfoot>' + z.tabella.tot.map(r => { const k = colonnaTotale(z.tabella);
+              return '<tr><td colspan="' + k + '">' + esc(r[0]) + '</td><td class="dx">' + esc(r[1]) + '</td>'
+                + (z.tabella.col.length - k - 1 > 0 ? '<td colspan="' + (z.tabella.col.length - k - 1) + '"></td>' : '') + '</tr>'; }).join('')
+              + '</tfoot>' : '') + '</table>'
         : '<p class="vuoto">' + esc(z.tabella.vuoto || 'Nessuna voce.') + '</p>') : '')
     + (z.testo !== undefined ? '<div class="note">' + (String(z.testo || '').trim() ? esc(z.testo) : '<span class="vuoto">Nessuna nota.</span>') + '</div>' : '')
     + '</section>';
@@ -5414,8 +5419,10 @@ function pdfScheda(s) {
       else {
         const body = [t.col.map((c, i) => ({ text: c, bold: true, fontSize: 8.5, fillColor: '#eef1f4', alignment: allinea(i) }))]
           .concat(t.righe.map(r => r.map((c, i) => ({ text: c === null || c === undefined ? '' : String(c), fontSize: 9, alignment: allinea(i) }))));
-        (t.tot || []).forEach(r => body.push([{ text: r[0], bold: true, colSpan: t.col.length - 1 }]
-          .concat(t.col.slice(2).map(() => '')).concat([{ text: r[1], bold: true, alignment: 'right' }])));
+        const k = colonnaTotale(t);
+        (t.tot || []).forEach(r => body.push([{ text: r[0], bold: true, colSpan: k }]
+          .concat(t.col.slice(1, k).map(() => '')).concat([{ text: r[1], bold: true, alignment: 'right' }])
+          .concat(t.col.slice(k + 1).map(() => ''))));
         cont.push({ table: { headerRows: 1, widths: t.col.map((c, i) => i === (t.largo || 0) ? '*' : 'auto'), body },
           layout: { hLineColor: '#e3e7ec', vLineWidth: () => 0 } });
       }
@@ -5540,6 +5547,7 @@ function apriStampa(s, nomeFile) {
   if (!s) return;
   SCHEDA = { s, nomeFile };
   el('mst-t').textContent = s.titolo;
+  el('mst-extra').innerHTML = '';
   openM('m-stampa');
 }
 
@@ -7062,14 +7070,108 @@ function fatturePanel(pid) {
 }
 
 /* ------------------------- PAGINA: DA FATTURARE ------------------------- */
+/* ---------------------------------------------------------------------------
+   REPORT INCASSI E PAGAMENTI ("black list")
+   Lo stesso foglio che lo studio teneva a mano: le fatture emesse e non
+   ancora pagate, le proforme mandate e non ancora saldate, e quello che lo
+   studio deve a fornitori ed esterni. Il saldo del conto in banca il
+   gestionale non lo conosce: si scrive al momento di stampare.
+   --------------------------------------------------------------------------- */
+const annoDiData = d => d ? String(d).slice(0, 4) : '';
+const intestatarioDi = f => { const p = byId(S.projects, f.project_id) || {};
+  return p.client || ((p.cliente_id && byId(S.clienti, p.cliente_id)) || {}).denominazione || pn(f.project_id); };
+/* Quanto il committente deve versare per questo documento: imponibile, cassa,
+   IVA (non in scissione dei pagamenti), spese anticipate, meno la ritenuta.
+   Sulla proforma vanno anche le spese della commessa non ancora fatturate,
+   come nel PDF della proforma - ma una volta sola, sulla prima. */
+function daIncassareDi(f, conSpeseAperte) {
+  const p = byId(S.projects, f.project_id) || {};
+  const spese = totSpese(speseDiFatt(f.id)) + (conSpeseAperte ? totSpese(speseAperte(f.project_id)) : 0);
+  return calcolaFattura(impFattura(f), spese, !!p.split_payment).netto;
+}
+function datiReportIncassi() {
+  const perData = k => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''));
+  const emesse = S.fatture.filter(f => f.stato === 'emessa').sort(perData('data_fattura'))
+    .map(f => ({ f, anno: annoDiData(f.data_fattura), num: f.numero_fattura || '—', chi: intestatarioDi(f),
+                 importo: daIncassareDi(f, false) }));
+  const giaSpese = {};
+  const proforme = S.fatture.filter(f => fattAperta(f) && f.proforma_numero)
+    .sort((a, b) => (perData('proforma_data')(a, b)) || ((a.ordine || 0) - (b.ordine || 0)))
+    .map(f => { const prima = !giaSpese[f.project_id]; giaSpese[f.project_id] = true;
+      return { f, anno: annoDiData(f.proforma_data), num: 'PROFORMA ' + f.proforma_numero, chi: intestatarioDi(f),
+               importo: daIncassareDi(f, prima) }; });
+  const costi = (S.costiGen || []).filter(c => !c.pagato).sort(perData('data_spesa'))
+    .map(c => ({ anno: String(c.anno_competenza || annoDiData(c.data_spesa)), num: '',
+                 chi: c.fornitore || c.descrizione, det: c.fornitore ? c.descrizione : nomeCategoria(c.categoria),
+                 importo: r2(Number(c.importo) || 0) }));
+  const parcelle = daPagare(esterniTutti()).sort(perData('entry_date'))
+    .map(e => ({ anno: annoDiData(e.entry_date), num: 'PARCELLA', chi: e.esterno, det: pn(e.project_id),
+                 importo: r2(Number(e.costo_totale) || 0) }));
+  const tot = arr => r2(arr.reduce((a, x) => a + x.importo, 0));
+  const daSaldare = parcelle.concat(costi);
+  return { emesse, proforme, daSaldare, totEmesse: tot(emesse), totProforme: tot(proforme),
+           totIncassare: r2(tot(emesse) + tot(proforme)), totSaldare: tot(daSaldare) };
+}
+function reportIncassi(saldo) {
+  const d = datiReportIncassi();
+  const s = saldo === '' || saldo === null || saldo === undefined || isNaN(Number(saldo)) ? null : r2(Number(saldo));
+  const nome = (STUDIO.denominazione || 'Studio').replace(/\s+(S\.?R\.?L\.?|STP|S\.?P\.?A\.?)\b.*$/i, '').trim();
+  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), '', feuro(x.importo)];
+  const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Importo'];
+  return {
+    titolo: 'Black list — ' + nome,
+    sottotitolo: 'Situazione al ' + fdate(todayISO()) + ': chi ci deve pagare e chi dobbiamo pagare',
+    sezioni: [
+      { titolo: 'Riepilogo', campi: [
+        ['Saldo conto', s === null ? 'non indicato' : feuro(s)],
+        ['Totale da incassare', feuro(d.totIncassare) + '  (fatture ' + feuro(d.totEmesse) + ' + proforme ' + feuro(d.totProforme) + ')'],
+        ['Totale da saldare', feuro(d.totSaldare)]]
+        .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
+      { titolo: 'Black list — fatture emesse non ancora incassate', tabella: { col, dx: [4], largo: 2, totCol: 4,
+          righe: d.emesse.map(riga), tot: d.emesse.length ? [['Totale fatture da incassare', feuro(d.totEmesse)]] : null,
+          vuoto: 'Nessuna fattura emessa in attesa di pagamento.' } },
+      { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: [4], largo: 2, totCol: 4,
+          righe: d.proforme.map(riga), tot: d.proforme.length ? [['Totale proforme', feuro(d.totProforme)]] : null,
+          vuoto: 'Nessuna proforma in attesa.' } },
+      { titolo: 'Da saldare — ' + nome, tabella: { col: ['Anno rif.', 'N. fattura', 'Intestatario', 'Importo'], dx: [3], largo: 2,
+          righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
+          tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
+          vuoto: 'Niente da pagare: costi generali ed esterni sono saldati.' } }
+    ]
+  };
+}
+const SALDO_KEY = 'scs.saldoConto';
+function apriReportIncassi() {
+  let v = '';
+  try { v = localStorage.getItem(SALDO_KEY) || ''; } catch (e) {}
+  SCHEDA = { s: null, crea: reportIncassi, nomeFile: nomeFilePdf('Black-list', todayISO()) };
+  el('mst-t').textContent = 'Black list: incassi e pagamenti in sospeso';
+  el('mst-extra').innerHTML = '<div class="fg"><label class="fl">Saldo del conto oggi €</label>'
+    + '<input class="fc" type="number" step="0.01" id="mst-saldo" value="' + esc(v) + '" placeholder="es. 6295,24">'
+    + '<div class="hint">Il gestionale non vede la banca: lo scrivi tu, e resta su questo dispositivo per la prossima volta. Si può lasciare vuoto.</div></div>';
+  openM('m-stampa');
+}
+/* La scheda da stampare: fissa, oppure costruita adesso con il saldo scritto */
+function schedaDaStampare() {
+  if (!SCHEDA) return null;
+  if (!SCHEDA.crea) return SCHEDA.s;
+  const v = el('mst-saldo') ? el('mst-saldo').value.replace(',', '.').trim() : '';
+  try { if (v) localStorage.setItem(SALDO_KEY, v); else localStorage.removeItem(SALDO_KEY); } catch (e) {}
+  return SCHEDA.crea(v);
+}
+
 function rFatturare() {
   el('crumb').textContent = 'Quello che è maturato e non è ancora stato fatturato.';
   /* Il quadro C del modello ISA si compila una volta l'anno: il pulsante sta
      qui, dove si guardano le fatture, e non in una pagina sua che nessuno
      ricorderebbe di avere. */
-  el('top-act').innerHTML = '<button class="btn btn-sm" id="isa-btn" '
+  el('top-act').innerHTML = (vedeTutto() ? '<button class="btn btn-sm" id="bl-btn" '
+      + 'title="Fatture emesse non pagate, proforme in attesa e quello che lo studio deve pagare: su carta o in PDF">'
+      + '&#128424;&#65039; Report incassi</button> ' : '')
+    + '<button class="btn btn-sm" id="isa-btn" '
     + 'title="Tipologia dell’attività per il modello ISA">&#128202; ISA</button>';
   el('isa-btn').onclick = () => openIsa();
+  if (el('bl-btn')) el('bl-btn').onclick = apriReportIncassi;
   const list = S.fatture.filter(f => {
     const p = byId(S.projects, f.project_id);
     return p && !p.archiviato && fattAperta(f);
@@ -12470,9 +12572,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!c.denominazione) return toast('Scrivi prima la denominazione.', 'error');
     apriStampa(schedaCliente(c), nomeFilePdf('Scheda-cliente', c.denominazione)); };
   el('mno-save').onclick = salvaNoteCommessa;
-  el('mst-carta').onclick = () => { if (SCHEDA) stampaScheda(SCHEDA.s); closeM('m-stampa'); };
-  el('mst-pdf').onclick = async () => { if (!SCHEDA) return; setLoading('mst-pdf', true);
-    const ok = await pdfSchedaScarica(SCHEDA.s, SCHEDA.nomeFile); setLoading('mst-pdf', false);
+  el('mst-carta').onclick = () => { const sc = schedaDaStampare(); if (sc) stampaScheda(sc); closeM('m-stampa'); };
+  el('mst-pdf').onclick = async () => { const sc = schedaDaStampare(); if (!sc) return; setLoading('mst-pdf', true);
+    const ok = await pdfSchedaScarica(sc, SCHEDA.nomeFile); setLoading('mst-pdf', false);
     if (ok) { closeM('m-stampa'); toast('PDF scaricato', 'success'); } };
   /* "Nota con la data di oggi": vale per ogni campo note che lo dichiara */
   document.addEventListener('click', e => { const b = e.target.closest('[data-notaoggi]');

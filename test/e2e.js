@@ -4064,6 +4064,65 @@ function launchOpts(){
     must(/migrazione 034/.test(tst),'messaggio: '+tst);
   });
 
+  /* ---------------- REPORT INCASSI E PAGAMENTI (BLACK LIST) ---------------- */
+  let BL=null;
+  await t('il report incassi raccoglie fatture emesse, proforme e debiti dello studio',async()=>{
+    BL=await p.evaluate(async()=>{ S.prof.role='admin';
+      const mk=async(name,client,x)=>(await SB.from('projects').insert(Object.assign({codice:'BL_'+name.slice(0,3),name,client,status:'attivo'},x||{})).select().single()).data;
+      const e=await mk('Ente BL','COMUNE DI PROVA BL',{ente_pubblico:true,split_payment:true});
+      const q=await mk('Privato BL','SIGNOR BIANCHI BL');
+      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'SAL',imponibile:1000,stato:'emessa',numero_fattura:'BL-1/PA',data_fattura:'2026-05-02',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'Vecchia',imponibile:777,stato:'incassata',numero_fattura:'BL-0',data_fattura:'2026-01-02',ordine:2});
+      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Acconto',imponibile:1000,stato:'pronta',proforma_numero:'BL7',proforma_data:'2026-06-01',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Saldo',imponibile:500,stato:'da_emettere',proforma_numero:'BL8',proforma_data:'2026-07-01',ordine:2});
+      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Senza proforma',imponibile:300,stato:'da_emettere',ordine:3});
+      await SB.from('commessa_spese').insert({project_id:q.id,tipo:'bolli',importo:50,data_spesa:'2026-05-20'});
+      await SB.from('costi_generali').insert({categoria:'utenze',descrizione:'Bolletta',fornitore:'Fornitore BL',importo:99.5,data_spesa:'2026-09-01',pagato:false});
+      await SB.from('costi_generali').insert({categoria:'utenze',descrizione:'Bolletta',fornitore:'Pagato BL',importo:10,data_spesa:'2026-09-01',pagato:true,data_pagamento:'2026-09-02'});
+      await SB.from('time_entries').insert({project_id:q.id,user_id:S.me.id,entry_date:'2026-08-01',hours:0,esterno:'Esterno BL',costo_totale:120,pagato:false});
+      await loadAll(true);
+      const n=(i,sp,split)=>feuro(calcolaFattura(i,sp,split).netto);
+      return {pa:n(1000,0,true),pf1:n(1000,50,false),pf2:n(500,0,false)}; });
+    await p.evaluate(()=>{ try{localStorage.setItem('scs.saldoConto','1234.5');}catch(e){} go('fatturare'); }); await p.waitForTimeout(300);
+    must(await p.isVisible('#bl-btn'),'manca il pulsante Report incassi');
+    await catturaStampa();
+    await p.click('#bl-btn'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    must(await p.inputValue('#mst-saldo')==='1234.5','il saldo non è ricordato');
+    await p.fill('#mst-saldo','6295.24');
+    await p.click('#mst-carta'); await p.waitForTimeout(700);
+    const h=await p.evaluate(()=>window.__STAMPA||'');
+    const blocco=(da,a)=>h.slice(h.indexOf(da),a?h.indexOf(a):undefined);
+    const emesse=blocco('Black list — fatture emesse','Proforme in attesa');
+    const prof=blocco('Proforme in attesa','Da saldare');
+    const deb=blocco('Da saldare');
+    must(/BL-1\/PA/.test(emesse)&&/COMUNE DI PROVA BL/.test(emesse)&&emesse.indexOf(BL.pa)>=0,'fattura PA non riportata o importo diverso da '+BL.pa);
+    must(!/BL-0/.test(h),'compare una fattura già incassata');
+    must(/PROFORMA BL7/.test(prof)&&prof.indexOf(BL.pf1)>=0,'proforma con le spese aperte: atteso '+BL.pf1);
+    must(/PROFORMA BL8/.test(prof)&&prof.indexOf(BL.pf2)>=0,'seconda proforma (spese una volta sola): atteso '+BL.pf2);
+    must(!/Senza proforma/.test(h),'compare uno scaglione senza proforma');
+    must(/Fornitore BL/.test(deb)&&/99,50/.test(deb)&&/Esterno BL/.test(deb)&&/120,00/.test(deb),'debiti dello studio mancanti');
+    must(!/Pagato BL/.test(h),'compare un costo già pagato');
+    must(/6\.295,24/.test(h),'saldo conto non stampato');
+    must(await p.evaluate(()=>localStorage.getItem('scs.saldoConto'))==='6295.24','il saldo non viene ricordato');
+    const tot=await p.evaluate(()=>{ const d=datiReportIncassi(); return {i:d.totIncassare,s:d.totSaldare,
+      ci:r2(d.emesse.concat(d.proforme).reduce((a,x)=>a+x.importo,0)),cs:r2(d.daSaldare.reduce((a,x)=>a+x.importo,0))}; });
+    must(tot.i===tot.ci&&tot.s===tot.cs,'totali incoerenti: '+JSON.stringify(tot));
+    must(h.indexOf(await p.evaluate(v=>feuro(v),tot.i))>=0,'totale da incassare non stampato');
+  });
+  await t('il report incassi si scarica in PDF',async()=>{
+    await p.click('#bl-btn'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mst-pdf')]);
+    must(dl,'nessun PDF scaricato');
+    must(/^Black-list-/.test(dl.suggestedFilename()),'nome file: '+dl.suggestedFilename());
+    const txt=await testoPdf(await dl.path());
+    must(/BL-1\/PA/.test(txt)&&/PROFORMA BL7/.test(txt)&&/Fornitore BL/.test(txt)&&/6\.295,24/.test(txt),'PDF incompleto: '+txt.slice(0,400));
+  });
+  await t('un collaboratore non ha il report incassi',async()=>{
+    const v=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('fatturare');
+      const r=!!el('bl-btn'); S.prof.role='admin'; go('oggi'); return r; });
+    must(!v,'il collaboratore vede il report');
+  });
+
   /* ---------------- PRATICHE: CATALOGO, PROPOSTE, ATTIVITA' COLLEGATE ---------------- */
   let PRID=null;
   await t('creando una commessa le pratiche non nascono più da sole',async()=>{
