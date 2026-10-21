@@ -49,7 +49,8 @@ create index if not exists idx_notif_pratica on public.notifiche(pratica_id)
 -- -----------------------------------------------------------------------------
 -- 3. VISTA DI COMODO - ultimo messaggio e conteggio per pratica
 -- -----------------------------------------------------------------------------
-create or replace view public.v_pratiche_chat as
+create or replace view public.v_pratiche_chat
+with (security_invoker = true) as
 select
   p.id                                          as pratica_id,
   p.project_id,

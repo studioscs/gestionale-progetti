@@ -297,7 +297,8 @@ create policy "notif_delete_own" on public.notifiche for delete to authenticated
 -- -----------------------------------------------------------------------------
 -- 11. VISTA DI RIEPILOGO (avanzamento per commessa, calcolato dal DB)
 -- -----------------------------------------------------------------------------
-create or replace view public.v_avanzamento_commesse as
+create or replace view public.v_avanzamento_commesse
+with (security_invoker = true) as
 select
   p.id                                                        as project_id,
   p.name,

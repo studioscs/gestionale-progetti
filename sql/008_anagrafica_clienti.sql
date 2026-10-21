@@ -149,7 +149,8 @@ end $$;
 -- -----------------------------------------------------------------------------
 -- VISTA: quante commesse e quanto fatturato per cliente
 -- -----------------------------------------------------------------------------
-create or replace view public.v_clienti_riepilogo as
+create or replace view public.v_clienti_riepilogo
+with (security_invoker = true) as
 select
   c.id                                                             as cliente_id,
   c.denominazione,

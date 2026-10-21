@@ -53,6 +53,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 32. [`sql/033_catalogo_pratiche.sql`](sql/033_catalogo_pratiche.sql) — catalogo delle pratiche, attività che avviano o concludono una pratica
 33. [`sql/034_note_commessa.sql`](sql/034_note_commessa.sql) — note della commessa e note sui contratti
 34. [`sql/035_solleciti.sql`](sql/035_solleciti.sql) — solleciti di pagamento e messa in mora con l'avvocato
+35. [`sql/036_viste_sicure.sql`](sql/036_viste_sicure.sql) — **sicurezza: le viste rispettano le regole di accesso, niente si legge senza login** (applicata il 21/10/2026)
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -834,6 +835,23 @@ sollecito** prepara l'email:
 
 Si invia come per i preventivi (bozza con allegato, condividi, solo testo).
 La casella *Segna come 1° (o 2°) sollecito* registra da sola la data di oggi.
+
+## Sicurezza delle viste (migrazione 036)
+
+Il 21/10/2026, controllando il database in uso, è emerso che sette viste
+create dalle prime migrazioni (`v_clienti_riepilogo`, `v_contatti_commessa`,
+`v_da_fatturare`, `v_fatturato_commessa`, `v_avanzamento_commesse`,
+`v_firme_cliente`, `v_pratiche_chat`) giravano con i permessi di chi le aveva
+create: per loro le regole di accesso non valevano, e si potevano leggere
+**anche senza login** con la chiave pubblica che sta in `index.html`. Le
+tabelle erano protette, le viste sopra di esse no.
+
+La **036** (già applicata al database) le fa leggere con i permessi di chi
+interroga e toglie ai visitatori senza login la lettura delle viste e
+l'esecuzione delle funzioni. Le migrazioni 001–008 sono state corrette allo
+stesso modo, e il controllo automatico (`test/audit.js`) ora rifiuta qualunque
+vista senza `security_invoker = true`. Se una migrazione futura aggiunge
+funzioni, rieseguire la 036 le richiude ai visitatori anonimi.
 
 ## Enti pubblici: la scissione dei pagamenti
 

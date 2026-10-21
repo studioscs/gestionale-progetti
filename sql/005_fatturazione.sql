@@ -109,7 +109,8 @@ create trigger trg_matura_scaglioni
 -- -----------------------------------------------------------------------------
 -- 5. VISTE DI RIEPILOGO
 -- -----------------------------------------------------------------------------
-create or replace view public.v_da_fatturare as
+create or replace view public.v_da_fatturare
+with (security_invoker = true) as
 select
   f.id,
   f.project_id,
@@ -128,7 +129,8 @@ left join public.commessa_fasi fa on fa.id = f.fase_id
 where f.stato in ('da_emettere','pronta')
   and p.archiviato = false;
 
-create or replace view public.v_fatturato_commessa as
+create or replace view public.v_fatturato_commessa
+with (security_invoker = true) as
 select
   p.id                                                              as project_id,
   p.name,

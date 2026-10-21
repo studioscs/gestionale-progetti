@@ -169,6 +169,16 @@ for (let n = Math.min(...nums); n < Math.max(...nums); n++) if (!nums.includes(n
 if (salti.length) WARN('numeri di migrazione non presenti: ' + salti.map(n => String(n).padStart(3,'0')).join(', '));
 OK('migrazioni: ' + files.join(', '));
 
+/* Una vista senza security_invoker gira con i permessi di chi l'ha creata e
+   scavalca la RLS: sul database in uso sette viste cosi' erano leggibili
+   anche senza login (corretto dalla 036). Nessuna deve piu' nascere cosi'. */
+const visteNude = [];
+files.forEach(f => { const t = fs.readFileSync(path.join(sqlDir, f), 'utf8');
+  [...t.matchAll(/create\s+(?:or\s+replace\s+)?view\s+(public\.[a-z_]+)([\s\S]{0,60}?)\bas\b/gi)]
+    .forEach(m => { if (!/security_invoker\s*=\s*true/i.test(m[2])) visteNude.push(f + ': ' + m[1]); }); });
+if (visteNude.length) visteNude.forEach(v => KO('sicurezza', 'vista senza security_invoker = true: ' + v));
+else OK('tutte le viste rispettano la RLS di chi le legge (security_invoker)');
+
 console.log('\n— CATALOGHI E TEMPLATE —');
 const fetta = (a, b) => js.slice(js.indexOf(a), js.indexOf(b));
 const dup = (blocco, nome) => {

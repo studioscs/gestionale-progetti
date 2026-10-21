@@ -27,7 +27,8 @@ create index if not exists idx_tasks_firme_aperte on public.tasks(project_id)
 -- -----------------------------------------------------------------------------
 -- Vista: quante firme mancano per commessa (per il cruscotto "Firme cliente")
 -- -----------------------------------------------------------------------------
-create or replace view public.v_firme_cliente as
+create or replace view public.v_firme_cliente
+with (security_invoker = true) as
 select
   t.project_id,
   p.name                                                as commessa,

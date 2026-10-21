@@ -32,7 +32,8 @@ create index if not exists idx_projects_referenti
 -- -----------------------------------------------------------------------------
 -- Vista di comodo: rubrica dei contatti di commessa
 -- -----------------------------------------------------------------------------
-create or replace view public.v_contatti_commessa as
+create or replace view public.v_contatti_commessa
+with (security_invoker = true) as
 select p.id as project_id, p.name as commessa, p.client as committente,
        'amministrativo'::text as tipo,
        p.referente as nominativo, p.referente_ruolo as ruolo,
