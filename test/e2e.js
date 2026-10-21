@@ -3666,7 +3666,7 @@ function launchOpts(){
     must(!(await p.isVisible('#mm-share')),'il pulsante Condividi compare dove il browser non sa condividere file');
   });
   await t('la bozza .eml ha destinatario, testo e PDF allegato',async()=>{
-    const id=await p.evaluate(()=>MAILPV);
+    const id=await p.evaluate(()=>MAIL.id);
     await p.evaluate(id=>{ const x=byId(S.preventivi,id); x.stato='bozza'; __DB.preventivi.find(y=>y.id===id).stato='bozza'; apriInvioPreventivo(id); },id);
     must(await p.isChecked('#mm-inviato'),'non propone di segnarlo come inviato');
     await p.fill('#mm-testo',(await p.inputValue('#mm-testo'))+'\nCordiali saluti');
@@ -3688,7 +3688,7 @@ function launchOpts(){
     must(!(await p.isVisible('#m-mail')),'la finestra è rimasta aperta');
   });
   await t('dove il browser sa condividere file, il PDF va nel pannello di condivisione',async()=>{
-    const id=await p.evaluate(()=>MAILPV);
+    const id=await p.evaluate(()=>MAIL.id);
     await p.evaluate(id=>{ window.__condiviso=null;
       navigator.canShare=()=>true; navigator.share=async d=>{ window.__condiviso={nome:d.files[0].name,tipo:d.files[0].type,
         dim:d.files[0].size,titolo:d.title,testo:d.text}; };
@@ -4161,6 +4161,44 @@ function launchOpts(){
     const riga=h.slice(h.indexOf('BL-1/PA'),h.indexOf('BL-1/PA')+600);
     must(/1° /.test(riga)&&/2° /.test(riga)&&/MORA /.test(riga)&&/Maria Verdi/.test(riga),'colonna solleciti vuota: '+riga.replace(/<[^>]+>/g,' ').slice(0,200));
     must(/In mora con l’avvocato/.test(h),'riepilogo senza le posizioni in mora');
+  });
+  await t('dal sollecito nasce l email: al cliente, in copia al responsabile, oggetto e testo dello studio',async()=>{
+    const g=await p.evaluate(async()=>{ const resp=S.profs.find(x=>x.email&&x.id!==S.me.id)||S.profs.find(x=>x.email);
+      const pr=S.projects.find(x=>x.name==='Privato BL');
+      await SB.from('projects').update({owner_id:resp.id,referente_email:'bianchi@example.it'}).eq('id',pr.id);
+      await loadAll(true); go('fatturare');
+      return {fid:S.fatture.find(f=>f.proforma_numero==='BL7').id,cc:resp.email,cod:pr.codice}; });
+    await p.waitForTimeout(300);
+    await p.click('[data-soll="'+g.fid+'"]'); await p.waitForSelector('#m-soll.show',{timeout:3000});
+    await p.click('#mso-mail'); await p.waitForSelector('#m-mail.show',{timeout:3000});
+    must(await p.inputValue('#mm-a')==='bianchi@example.it','destinatario: '+(await p.inputValue('#mm-a')));
+    must(await p.inputValue('#mm-cc')===g.cc,'copia al responsabile: '+(await p.inputValue('#mm-cc')));
+    must(await p.inputValue('#mm-ogg')===g.cod+'_SIGNOR BIANCHI BL_Sollecito Pagamento','oggetto: '+(await p.inputValue('#mm-ogg')));
+    const tx=await p.inputValue('#mm-testo');
+    must(/^Buongiorno,\nLa informiamo che da un nostro controllo risulta ancora non saldata la Parcella in allegato e già inviata con mail del 01\/06\/2026\./.test(tx),'testo: '+tx.slice(0,200));
+    must(/modalità indicate nella proforma/.test(tx)&&/copia contabile, in risposta alla presente/.test(tx)&&/Distinti saluti\nL’Amministrazione$/.test(tx),'testo incompleto');
+    must(await p.isChecked('#mm-inviato')&&/1° sollecito/.test(await p.textContent('#mm-inviato-lbl')),'non propone di segnare il 1° sollecito');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mm-eml')]);
+    must(dl,'nessuna bozza scaricata');
+    const eml=fs.readFileSync(await dl.path(),'utf8');
+    must(/\r\nTo: bianchi@example\.it\r\n/.test(eml)&&eml.indexOf('\r\nCc: '+g.cc+'\r\n')>=0,'destinatari della bozza sbagliati');
+    const parti=eml.split(/--scs-[a-z0-9]+/);
+    const pdf=Buffer.from(parti[2].split('\r\n\r\n')[1].replace(/\r\n/g,''),'base64');
+    const tmp=path.join(__dirname,'allegato-soll.pdf'); fs.writeFileSync(tmp,pdf);
+    const txt=await testoPdf(tmp); fs.unlinkSync(tmp);
+    must(/proforma/i.test(txt)&&/BL7/.test(txt),'l allegato non è la proforma: '+txt.slice(0,200));
+    await p.waitForTimeout(600);
+    must(await p.evaluate(id=>__DB.commessa_fatture.find(x=>x.id===id).sollecito_1,g.fid)===await p.evaluate(()=>todayISO()),'1° sollecito non segnato');
+  });
+  await t('il sollecito di una fattura emessa parla della fattura e allega la copia di cortesia',async()=>{
+    const g=await p.evaluate(()=>{ const f=S.fatture.find(x=>x.numero_fattura==='BL-1/PA'); apriInvioSollecito(f.id);
+      return {tx:el('mm-testo').value,box:el('mm-inviato-box').style.display,all:el('mm-allegato').textContent,
+        tipo:docSollecito(f).doc.tipo,sc:docSollecito(f).doc.scadenza,att:iso(addD(pd('2026-05-02'),Number((STUDIO.pagamento||{}).giorni||30)))}; });
+    must(g.sc===g.att,'scadenza della copia di cortesia: '+g.sc+' invece di '+g.att);
+    must(/la Fattura n\. BL-1\/PA in allegato e già inviata con mail del 02\/05\/2026/.test(g.tx)&&/indicate nella fattura/.test(g.tx),'testo: '+g.tx.slice(0,200));
+    must(g.box==='none','propone un sollecito oltre il secondo');
+    must(/^Fattura-BL-1_PA\.pdf$/.test(g.all)&&/copia di cortesia/.test(g.tipo),'allegato: '+g.all+' '+g.tipo);
+    await p.evaluate(()=>closeM('m-mail'));
   });
   await t('un collaboratore non ha il report incassi',async()=>{
     const v=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('fatturare');

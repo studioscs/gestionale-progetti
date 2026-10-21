@@ -817,6 +817,24 @@ con quante posizioni e quanto vale, e tutto esce nel report. Quando la
 fattura viene incassata la storia dei solleciti resta registrata. Serve la
 **migrazione 035** (poi la 018).
 
+**Scrivere il sollecito.** Nella finestra dei solleciti, **✉️ Scrivi il
+sollecito** prepara l'email:
+
+- **A**: l'email del committente (referente amministrativo, altrimenti la
+  PEC); **Cc**: il responsabile della commessa;
+- **oggetto**: `codice commessa_NOME CLIENTE_Sollecito Pagamento` (es.
+  `2026_33_VIVIANA ZOPPI_Sollecito Pagamento`);
+- **testo**: quello dell'amministrazione («La informiamo che da un nostro
+  controllo risulta ancora non saldata la Parcella in allegato e già inviata
+  con mail del …»), con la data della proforma o della fattura; per una
+  fattura emessa dice «la Fattura n. …» e «le modalità indicate nella
+  fattura». Tutto si può correggere prima di inviare;
+- **allegato**: la proforma in PDF, oppure la **copia di cortesia** della
+  fattura (l'originale resta l'XML passato dallo SdI).
+
+Si invia come per i preventivi (bozza con allegato, condividi, solo testo).
+La casella *Segna come 1° (o 2°) sollecito* registra da sola la data di oggi.
+
 ## Enti pubblici: la scissione dei pagamenti
 
 Per gli enti pubblici vale la **scissione dei pagamenti** (art. 17-ter DPR

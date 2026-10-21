@@ -624,6 +624,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn btn-xs" data-notaoggi="mso-note" style="margin-top:6px">&#43; Nota con la data di oggi</button></div>
     </div>
     <div class="mf">
+      <span class="left"><button class="btn" id="mso-mail" title="Email al committente, in copia al responsabile della commessa, con il PDF allegato">&#9993;&#65039; Scrivi il sollecito</button></span>
       <button class="btn" data-close="m-soll">Annulla</button>
       <button class="btn btn-p" id="mso-save">Salva</button>
     </div>
@@ -776,11 +777,12 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mm-t">Invia il preventivo</h3><button class="mx" data-close="m-mail">&#10005;</button></div>
     <div class="mb">
       <div class="fg"><label class="fl">A</label><input class="fc" id="mm-a" type="email" placeholder="email o PEC del committente"></div>
+      <div class="fg" id="mm-cc-box"><label class="fl">Cc — per conoscenza</label><input class="fc" id="mm-cc" placeholder="facoltativo; più indirizzi separati da virgola"></div>
       <div class="fg"><label class="fl">Oggetto</label><input class="fc" id="mm-ogg"></div>
       <div class="fg"><label class="fl">Testo</label><textarea class="fc" id="mm-testo" rows="12"></textarea>
         <div class="hint">Allegato: <b id="mm-allegato"></b>. Il testo si può correggere qui prima di inviare.</div></div>
       <label class="row" id="mm-inviato-box" style="gap:6px;font-size:13px;margin-bottom:12px">
-        <input type="checkbox" id="mm-inviato"> Segna il preventivo come «Inviato»</label>
+        <input type="checkbox" id="mm-inviato"> <span id="mm-inviato-lbl">Segna il preventivo come «Inviato»</span></label>
       <div class="ibox" style="font-size:12px;line-height:1.5">
         <b>Bozza con allegato</b>: scarica una email già pronta (destinatario, oggetto, testo e PDF allegato).
         Aprila con un doppio clic: Outlook la mostra pronta da inviare.<br>
@@ -1510,7 +1512,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.21.2';
+const VERSIONE = '2026.10.21.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -6369,6 +6371,7 @@ function emlBozza(m) {
   const h = [
     'X-Unsent: 1',
     m.a ? 'To: ' + m.a : null,
+    m.cc ? 'Cc: ' + m.cc : null,
     'Subject: =?UTF-8?B?' + b64Utf8(m.oggetto || '') + '?=',
     'MIME-Version: 1.0',
     'Content-Type: multipart/mixed; boundary="' + conf + '"'
@@ -6411,17 +6414,24 @@ function condivisioneFile() {
   } catch (e) { return false; }
 }
 
-let MAILPV = null;
+/* La stessa finestra manda il preventivo e il sollecito di pagamento:
+   MAIL dice quale dei due. */
+let MAIL = null;
 function apriInvioPreventivo(id) {
   const x = byId(S.preventivi, id); if (!x) return;
-  MAILPV = x.id;
+  MAIL = { tipo: 'prev', id: x.id };
   el('mm-t').textContent = 'Invia il preventivo ' + numeroPreventivo(x);
   el('mm-a').value = x.cliente_pec || '';
+  el('mm-cc').value = '';
+  el('mm-inviato-lbl').textContent = 'Segna il preventivo come «Inviato»';
   el('mm-ogg').value = oggettoMailPreventivo(x);
   el('mm-testo').value = TESTO_MAIL_PREVENTIVO;
   el('mm-inviato').checked = x.stato === 'bozza';
   el('mm-inviato-box').style.display = x.stato === 'bozza' ? '' : 'none';
   el('mm-allegato').textContent = nomeFilePdf('Preventivo', numeroPreventivo(x));
+  mostraInvio();
+}
+function mostraInvio() {
   /* Su iPhone, iPad e Mac la strada giusta e' il pannello di condivisione:
      Mail di Apple apre i file .eml come posta ricevuta, non come bozza. Su
      Windows con Outlook vale il contrario. Il pulsante principale e' quello. */
@@ -6432,19 +6442,36 @@ function apriInvioPreventivo(id) {
   el('mm-eml').className   = 'btn' + (share && apple ? '' : ' btn-p');
   openM('m-mail');
 }
-async function dopoInvio(x) {
-  if (el('mm-inviato').checked && x.stato === 'bozza') {
-    const { error } = await SB.from('preventivi').update({ stato: 'inviato' }).eq('id', x.id);
-    if (error) sbErr(error, 'stato del preventivo');
+async function dopoInvio() {
+  if (MAIL.tipo === 'prev') {
+    const x = byId(S.preventivi, MAIL.id);
+    if (x && el('mm-inviato').checked && x.stato === 'bozza') {
+      const { error } = await SB.from('preventivi').update({ stato: 'inviato' }).eq('id', x.id);
+      if (error) sbErr(error, 'stato del preventivo');
+    }
+  } else if (MAIL.tipo === 'soll' && el('mm-inviato').checked && MAIL.passo) {
+    /* il sollecito appena mandato si segna da solo, con la data di oggi */
+    const campo = 'sollecito_' + MAIL.passo;
+    const { error } = await SB.from('commessa_fatture').update({ [campo]: todayISO() }).eq('id', MAIL.id);
+    if (error) sbErr(error, 'sollecito');
+    else toast('Segnato il ' + MAIL.passo + '° sollecito di oggi', 'success');
   }
   closeM('m-mail'); await loadAll(true); render();
 }
-async function invioPreventivo(modo) {
-  const x = byId(S.preventivi, MAILPV); if (!x) return;
-  const a = el('mm-a').value.trim(), oggetto = el('mm-ogg').value.trim(), testo = el('mm-testo').value;
-  const nome = nomeFilePdf('Preventivo', numeroPreventivo(x));
+/* Il documento da allegare e il nome del file */
+function allegatoMail() {
+  if (MAIL.tipo === 'soll') { const f = byId(S.fatture, MAIL.id); return f ? docSollecito(f) : null; }
+  const x = byId(S.preventivi, MAIL.id);
+  return x ? { doc: docPreventivo(x), nome: nomeFilePdf('Preventivo', numeroPreventivo(x)) } : null;
+}
+async function invioMail(modo) {
+  if (!MAIL) return;
+  const all = allegatoMail(); if (!all) return;
+  const a = el('mm-a').value.trim(), cc = el('mm-cc').value.trim();
+  const oggetto = el('mm-ogg').value.trim(), testo = el('mm-testo').value;
+  const nome = all.nome;
   let blob;
-  try { blob = await pdfBlob(docPreventivo(x)); }
+  try { blob = await pdfBlob(all.doc); }
   catch (e) { return toast('Non riesco a preparare il PDF: controlla la connessione e riprova.', 'error'); }
 
   if (modo === 'share') {
@@ -6455,18 +6482,81 @@ async function invioPreventivo(modo) {
       if (e && e.name === 'AbortError') return;     /* chiuso il pannello: niente di fatto */
       return toast('La condivisione non è riuscita: usa «Bozza con allegato».', 'error');
     }
-    toast('Scegli Mail o Outlook: il PDF è già allegato. Il destinatario va scelto lì.', 'success');
+    toast('Scegli Mail o Outlook: il PDF è già allegato. Destinatario' + (cc ? ' e copia vanno scelti' : ' va scelto') + ' lì.', 'success');
   } else if (modo === 'eml') {
-    const eml = emlBozza({ a, oggetto, testo, nomeFile: nome, pdfBase64: await blobBase64(blob) });
+    const eml = emlBozza({ a, cc, oggetto, testo, nomeFile: nome, pdfBase64: await blobBase64(blob) });
     scaricaBlob(nome.replace(/\.pdf$/, '.eml'), new Blob([eml], { type: 'message/rfc822' }));
     toast('Bozza scaricata: aprila con un doppio clic, è pronta da inviare con il PDF allegato.', 'success');
   } else {
     scaricaBlob(nome, blob);
     window.location.href = 'mailto:' + encodeURIComponent(a).replace(/%40/g, '@')
-      + '?subject=' + encodeURIComponent(oggetto) + '&body=' + encodeURIComponent(testo);
+      + '?subject=' + encodeURIComponent(oggetto)
+      + (cc ? '&cc=' + encodeURIComponent(cc).replace(/%40/g, '@') : '')
+      + '&body=' + encodeURIComponent(testo);
     toast('Si apre la posta con il testo: trascina dentro il PDF appena scaricato.', 'success');
   }
-  await dopoInvio(x);
+  await dopoInvio();
+}
+
+/* ---------------------------------------------------------------------------
+   IL SOLLECITO PER EMAIL
+   Oggetto e testo sono quelli che l'amministrazione gia' usa. Va al
+   committente, per conoscenza al responsabile della commessa, con in
+   allegato la parcella (la proforma) o la copia di cortesia della fattura.
+   --------------------------------------------------------------------------- */
+const oggettoSollecito = f => { const p = byId(S.projects, f.project_id) || {};
+  return [p.codice, String(intestatarioDi(f) || '').toUpperCase(), 'Sollecito Pagamento'].filter(Boolean).join('_'); };
+function testoSollecito(f) {
+  const fatt = f.stato === 'emessa';
+  const quando = fatt ? f.data_fattura : f.proforma_data;
+  const cosa = fatt ? 'la Fattura n. ' + (f.numero_fattura || '') + ' in allegato' : 'la Parcella in allegato';
+  return 'Buongiorno,\n'
+    + 'La informiamo che da un nostro controllo risulta ancora non saldata ' + cosa
+    + ' e già inviata con mail del ' + (quando ? fdate(quando) : '__/__/____') + '.\n\n'
+    + 'Vi preghiamo quindi di provvedere al più presto al regolamento della posizione. '
+    + 'Nel caso abbiate già provveduto al pagamento, vi preghiamo di ignorare questa richiesta.\n'
+    + 'Il pagamento può essere effettuato con le modalità indicate nella ' + (fatt ? 'fattura' : 'proforma') + '.\n\n'
+    + 'La preghiamo di trasmettere una copia contabile, in risposta alla presente.\n\n'
+    + 'Distinti saluti\n'
+    + 'L’Amministrazione';
+}
+/* A chi: l'email del committente (quella del referente amministrativo, o la
+   PEC); in copia il responsabile della commessa. */
+function destinatariSollecito(f) {
+  const p = byId(S.projects, f.project_id) || {};
+  const c = p.cliente_id ? byId(S.clienti, p.cliente_id) || {} : {};
+  const a = p.referente_email || c.referente_email || p.cliente_pec || c.pec || '';
+  const resp = p.owner_id ? byId(S.profs, p.owner_id) : null;
+  return { a, cc: (resp && resp.email) || '', resp };
+}
+/* Il PDF allegato: la proforma com'e' stata mandata, oppure la copia di
+   cortesia della fattura (l'originale e' l'XML passato dallo SdI). */
+function docSollecito(f) {
+  const d = datiFattura(f);
+  const doc = docProforma(d);
+  if (f.stato === 'emessa') Object.assign(doc, { tipo: 'Fattura - copia di cortesia', numero: f.numero_fattura,
+    data: f.data_fattura || doc.data,
+    /* la scadenza corre dalla data della fattura, non da oggi */
+    scadenza: f.data_fattura ? iso(addD(pd(f.data_fattura), Number(d.giorni) || 30)) : doc.scadenza,
+    avviso: 'Copia di cortesia priva di valore fiscale: l’originale è la fattura elettronica trasmessa tramite il Sistema di Interscambio.' });
+  return { doc, nome: nomeFilePdf(f.stato === 'emessa' ? 'Fattura' : 'Proforma', f.stato === 'emessa' ? f.numero_fattura : f.proforma_numero) };
+}
+function apriInvioSollecito(fid) {
+  const f = byId(S.fatture, fid); if (!f || !sollecitabile(f)) return;
+  const passo = !f.sollecito_1 ? 1 : !f.sollecito_2 ? 2 : null;
+  const dest = destinatariSollecito(f);
+  MAIL = { tipo: 'soll', id: f.id, passo };
+  el('mm-t').textContent = 'Sollecito di pagamento — ' + intestatarioDi(f);
+  el('mm-a').value = dest.a; el('mm-cc').value = dest.cc;
+  el('mm-ogg').value = oggettoSollecito(f);
+  el('mm-testo').value = testoSollecito(f);
+  el('mm-inviato-lbl').textContent = passo ? 'Segna come ' + passo + '° sollecito, con la data di oggi' : '';
+  el('mm-inviato').checked = !!passo;
+  el('mm-inviato-box').style.display = passo ? '' : 'none';
+  el('mm-allegato').textContent = docSollecito(f).nome;
+  mostraInvio();
+  if (!dest.a) toast('Il committente non ha un’email: scrivila nel campo «A».', 'warning');
+  else if (!dest.cc) toast('La commessa non ha un responsabile con email: la copia va indicata a mano.', 'warning');
 }
 async function eliminaPreventivo() {
   if (!PV || !PV.id) return;
@@ -12677,6 +12767,7 @@ document.addEventListener('DOMContentLoaded', () => {
     apriStampa(schedaCliente(c), nomeFilePdf('Scheda-cliente', c.denominazione)); };
   el('mno-save').onclick = salvaNoteCommessa;
   el('mso-save').onclick = salvaSolleciti;
+  el('mso-mail').onclick = () => { const id = SOLL; closeM('m-soll'); apriInvioSollecito(id); };
   ['mso-1', 'mso-2', 'mso-3'].forEach(id => el(id).addEventListener('input', aggiornaPassiSolleciti));
   el('m-soll').addEventListener('click', e => { const b = e.target.closest('[data-sollinoggi]'); if (!b || b.disabled) return;
     el(b.dataset.sollinoggi).value = todayISO(); aggiornaPassiSolleciti(); });
@@ -12821,9 +12912,9 @@ document.addEventListener('DOMContentLoaded', () => {
   el('pv-comm').onclick = async () => { const x = await salvaPreventivo(true); if (!x) return;
     closeM('m-prev'); commessaDaPreventivo(x.id); };
   el('pv-copia').onclick = () => { const id = PV && PV.id; closeM('m-prev'); if (id) duplicaPreventivo(id); };
-  el('mm-share').onclick  = () => invioPreventivo('share');
-  el('mm-eml').onclick    = () => invioPreventivo('eml');
-  el('mm-mailto').onclick = () => invioPreventivo('mailto');
+  el('mm-share').onclick  = () => invioMail('share');
+  el('mm-eml').onclick    = () => invioMail('eml');
+  el('mm-mailto').onclick = () => invioMail('mailto');
   el('rev-ant').onclick   = anteprimaXml;
   el('rev-reset').onclick = () => {
     const f = byId(S.fatture, REV && REV.fattId); if (!f) return;
