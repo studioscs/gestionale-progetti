@@ -76,17 +76,17 @@ drop policy if exists "vis_delete_commessa_spese" on public.commessa_spese;
 
 create policy "vis_read_commessa_spese" on public.commessa_spese
   for select to authenticated
-  using (project_id in (select public.commesse_visibili()));
+  using (project_id in (select private.commesse_visibili()));
 create policy "vis_insert_commessa_spese" on public.commessa_spese
   for insert to authenticated
-  with check (public.is_staff() and project_id in (select public.commesse_visibili()));
+  with check (private.is_staff() and project_id in (select private.commesse_visibili()));
 create policy "vis_update_commessa_spese" on public.commessa_spese
   for update to authenticated
-  using (public.is_staff() and project_id in (select public.commesse_visibili()))
-  with check (public.is_staff());
+  using (private.is_staff() and project_id in (select private.commesse_visibili()))
+  with check (private.is_staff());
 create policy "vis_delete_commessa_spese" on public.commessa_spese
   for delete to authenticated
-  using (public.is_staff() and project_id in (select public.commesse_visibili()));
+  using (private.is_staff() and project_id in (select private.commesse_visibili()));
 
 -- =============================================================================
 -- FINE MIGRAZIONE 027

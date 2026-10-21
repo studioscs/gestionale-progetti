@@ -60,9 +60,9 @@ begin
     execute format('drop policy if exists "rls_delete_%1$s" on public.%1$I', t);
 
     execute format('create policy "rls_read_%1$s"   on public.%1$I for select to authenticated using (true)', t);
-    execute format('create policy "rls_insert_%1$s" on public.%1$I for insert to authenticated with check (public.is_staff())', t);
-    execute format('create policy "rls_update_%1$s" on public.%1$I for update to authenticated using (public.is_staff()) with check (public.is_staff())', t);
-    execute format('create policy "rls_delete_%1$s" on public.%1$I for delete to authenticated using (public.is_admin())', t);
+    execute format('create policy "rls_insert_%1$s" on public.%1$I for insert to authenticated with check (private.is_staff())', t);
+    execute format('create policy "rls_update_%1$s" on public.%1$I for update to authenticated using (private.is_staff()) with check (private.is_staff())', t);
+    execute format('create policy "rls_delete_%1$s" on public.%1$I for delete to authenticated using (private.is_admin())', t);
 
     raise notice 'RLS attivata su %', t;
   end loop;
@@ -82,13 +82,13 @@ drop policy if exists "rls_delete_profiles" on public.profiles;
 create policy "rls_read_profiles"   on public.profiles
   for select to authenticated using (true);
 create policy "rls_insert_profiles" on public.profiles
-  for insert to authenticated with check (id = auth.uid() or public.is_admin());
+  for insert to authenticated with check (id = auth.uid() or private.is_admin());
 create policy "rls_update_profiles" on public.profiles
   for update to authenticated
-  using (id = auth.uid() or public.is_admin())
-  with check (id = auth.uid() or public.is_admin());
+  using (id = auth.uid() or private.is_admin())
+  with check (id = auth.uid() or private.is_admin());
 create policy "rls_delete_profiles" on public.profiles
-  for delete to authenticated using (public.is_admin());
+  for delete to authenticated using (private.is_admin());
 
 
 -- -----------------------------------------------------------------------------
@@ -117,9 +117,9 @@ begin
     create policy "commesse_read" on storage.objects
       for select to authenticated using (bucket_id = 'commesse');
     create policy "commesse_write" on storage.objects
-      for insert to authenticated with check (bucket_id = 'commesse' and public.is_staff());
+      for insert to authenticated with check (bucket_id = 'commesse' and private.is_staff());
     create policy "commesse_delete" on storage.objects
-      for delete to authenticated using (bucket_id = 'commesse' and public.is_admin());
+      for delete to authenticated using (bucket_id = 'commesse' and private.is_admin());
 
     raise notice 'Policy dello storage aggiornate.';
   end if;

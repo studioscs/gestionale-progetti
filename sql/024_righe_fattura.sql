@@ -114,29 +114,29 @@ create policy "vis_read_fattura_righe" on public.commessa_fattura_righe
   for select to authenticated
   using (exists (select 1 from public.commessa_fatture f
                  where f.id = commessa_fattura_righe.fattura_id
-                   and f.project_id in (select public.commesse_visibili())));
+                   and f.project_id in (select private.commesse_visibili())));
 
 create policy "vis_insert_fattura_righe" on public.commessa_fattura_righe
   for insert to authenticated
-  with check (public.is_staff()
+  with check (private.is_staff()
               and exists (select 1 from public.commessa_fatture f
                           where f.id = commessa_fattura_righe.fattura_id
-                            and f.project_id in (select public.commesse_visibili())));
+                            and f.project_id in (select private.commesse_visibili())));
 
 create policy "vis_update_fattura_righe" on public.commessa_fattura_righe
   for update to authenticated
-  using (public.is_staff()
+  using (private.is_staff()
          and exists (select 1 from public.commessa_fatture f
                      where f.id = commessa_fattura_righe.fattura_id
-                       and f.project_id in (select public.commesse_visibili())))
-  with check (public.is_staff());
+                       and f.project_id in (select private.commesse_visibili())))
+  with check (private.is_staff());
 
 create policy "vis_delete_fattura_righe" on public.commessa_fattura_righe
   for delete to authenticated
-  using (public.is_staff()
+  using (private.is_staff()
          and exists (select 1 from public.commessa_fatture f
                      where f.id = commessa_fattura_righe.fattura_id
-                       and f.project_id in (select public.commesse_visibili())));
+                       and f.project_id in (select private.commesse_visibili())));
 
 -- =============================================================================
 -- FINE MIGRAZIONE 024

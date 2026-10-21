@@ -58,11 +58,11 @@ drop policy if exists "costi_insert_admin" on public.profili_costi;
 drop policy if exists "costi_update_admin" on public.profili_costi;
 drop policy if exists "costi_delete_admin" on public.profili_costi;
 
-create policy "costi_read_admin"   on public.profili_costi for select to authenticated using (public.is_admin());
-create policy "costi_insert_admin" on public.profili_costi for insert to authenticated with check (public.is_admin());
+create policy "costi_read_admin"   on public.profili_costi for select to authenticated using (private.is_admin());
+create policy "costi_insert_admin" on public.profili_costi for insert to authenticated with check (private.is_admin());
 create policy "costi_update_admin" on public.profili_costi for update to authenticated
-  using (public.is_admin()) with check (public.is_admin());
-create policy "costi_delete_admin" on public.profili_costi for delete to authenticated using (public.is_admin());
+  using (private.is_admin()) with check (private.is_admin());
+create policy "costi_delete_admin" on public.profili_costi for delete to authenticated using (private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- CHIUSURA AUTOMATICA DEL PERIODO PRECEDENTE

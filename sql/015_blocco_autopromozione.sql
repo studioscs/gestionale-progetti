@@ -8,7 +8,7 @@
 -- La politica di aggiornamento di "profiles" consente a ciascuno di modificare
 -- la propria riga:
 --
---   using (id = auth.uid() or public.is_admin())
+--   using (id = auth.uid() or private.is_admin())
 --
 -- Serve, perche' ognuno deve poter correggere il proprio nome. Ma l'RLS decide
 -- QUALI RIGHE si possono toccare, non QUALI COLONNE: un collaboratore poteva
@@ -30,7 +30,7 @@ create or replace function public.blocca_autopromozione()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   -- L'amministratore puo' tutto: e' il suo mestiere.
-  if public.is_admin() then
+  if private.is_admin() then
     return new;
   end if;
 

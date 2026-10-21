@@ -54,6 +54,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 33. [`sql/034_note_commessa.sql`](sql/034_note_commessa.sql) — note della commessa e note sui contratti
 34. [`sql/035_solleciti.sql`](sql/035_solleciti.sql) — solleciti di pagamento e messa in mora con l'avvocato
 35. [`sql/036_viste_sicure.sql`](sql/036_viste_sicure.sql) — **sicurezza: le viste rispettano le regole di accesso, niente si legge senza login** (applicata il 21/10/2026)
+36. [`sql/037_funzioni_private.sql`](sql/037_funzioni_private.sql) — **sicurezza: le funzioni del database non si chiamano da fuori** (applicata il 21/10/2026)
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -852,6 +853,18 @@ l'esecuzione delle funzioni. Le migrazioni 001–008 sono state corrette allo
 stesso modo, e il controllo automatico (`test/audit.js`) ora rifiuta qualunque
 vista senza `security_invoker = true`. Se una migrazione futura aggiunge
 funzioni, rieseguire la 036 le richiude ai visitatori anonimi.
+
+**Migrazione 037 (applicata anch'essa).** Le funzioni che decidono chi vede
+che cosa (`is_admin`, `is_staff`, `vede_tutte_commesse`, `commesse_visibili`,
+`vede_commessa`, `current_role_scs`) stanno ora nello schema **`private`**,
+che l'API di Supabase non pubblica: le regole di accesso le usano come prima,
+ma nessuno le può chiamare da fuori. Le funzioni dei trigger e i ricalcoli non
+li esegue più nessuno direttamente (i trigger scattano comunque).
+`assegna_progressivo`, l'unica che l'app chiama, gira ora con i permessi di
+chi la chiama e numera solo le fatture che quella persona può già modificare.
+Tutte le funzioni hanno lo schema di ricerca fissato. Le migrazioni precedenti
+sono state aggiornate (`private.is_admin()` e così via): **dalla 037 in poi
+una migrazione nuova deve usare `private.` per queste funzioni.**
 
 ## Enti pubblici: la scissione dei pagamenti
 

@@ -49,20 +49,31 @@ create sequence if not exists public.seq_progressivo_invio start with 1000;
 -- caso normale, perche' l'XML si rigenera dopo una correzione.
 -- -----------------------------------------------------------------------------
 create or replace function public.assegna_progressivo(fattura uuid)
-returns integer language plpgsql security definer set search_path = public as $$
+returns integer language plpgsql security invoker set search_path = public as $$
 declare n integer;
 begin
+  -- Gira con i permessi di chi la chiama (migrazione 037): numera solo una
+  -- fattura che quella persona puo' gia' leggere e modificare. Prima girava con
+  -- i permessi del proprietario e chiunque avesse fatto login poteva numerare
+  -- qualunque fattura di cui conoscesse l'identificativo.
   select progressivo_invio into n from public.commessa_fatture where id = fattura;
+  if not found then
+    raise exception 'Fattura non trovata o non accessibile' using errcode = '42501';
+  end if;
   if n is not null then
     return n;
   end if;
 
   n := nextval('public.seq_progressivo_invio');
   update public.commessa_fatture set progressivo_invio = n where id = fattura;
+  if not found then
+    raise exception 'Non hai i permessi per numerare questa fattura' using errcode = '42501';
+  end if;
   return n;
 end; $$;
 
 revoke all on function public.assegna_progressivo(uuid) from public;
+grant usage on sequence public.seq_progressivo_invio to authenticated;
 grant execute on function public.assegna_progressivo(uuid) to authenticated;
 
 comment on function public.assegna_progressivo(uuid) is

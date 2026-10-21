@@ -90,10 +90,10 @@ drop policy if exists "update_staff_clienti" on public.clienti;
 drop policy if exists "delete_admin_clienti" on public.clienti;
 
 create policy "read_all_clienti"    on public.clienti for select to authenticated using (true);
-create policy "insert_staff_clienti" on public.clienti for insert to authenticated with check (public.is_staff());
+create policy "insert_staff_clienti" on public.clienti for insert to authenticated with check (private.is_staff());
 create policy "update_staff_clienti" on public.clienti for update to authenticated
-  using (public.is_staff()) with check (public.is_staff());
-create policy "delete_admin_clienti" on public.clienti for delete to authenticated using (public.is_admin());
+  using (private.is_staff()) with check (private.is_staff());
+create policy "delete_admin_clienti" on public.clienti for delete to authenticated using (private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- POPOLAMENTO INIZIALE dai clienti gia' presenti nelle commesse

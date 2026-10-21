@@ -69,10 +69,10 @@ drop policy if exists "update_staff_enti_pa" on public.enti_pa;
 drop policy if exists "delete_admin_enti_pa" on public.enti_pa;
 
 create policy "read_all_enti_pa"     on public.enti_pa for select to authenticated using (true);
-create policy "insert_staff_enti_pa" on public.enti_pa for insert to authenticated with check (public.is_staff());
+create policy "insert_staff_enti_pa" on public.enti_pa for insert to authenticated with check (private.is_staff());
 create policy "update_staff_enti_pa" on public.enti_pa for update to authenticated
-  using (public.is_staff()) with check (public.is_staff());
-create policy "delete_admin_enti_pa" on public.enti_pa for delete to authenticated using (public.is_admin());
+  using (private.is_staff()) with check (private.is_staff());
+create policy "delete_admin_enti_pa" on public.enti_pa for delete to authenticated using (private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- 2. LA COMMESSA SA SE E' PUBBLICA

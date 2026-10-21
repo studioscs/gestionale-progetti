@@ -127,13 +127,13 @@ begin
     execute format('drop policy if exists "amm_update_%1$s" on public.%1$I', t);
     execute format('drop policy if exists "amm_delete_%1$s" on public.%1$I', t);
     execute format('create policy "amm_read_%1$s" on public.%1$I for select to authenticated
-                    using (public.vede_tutte_commesse())', t);
+                    using (private.vede_tutte_commesse())', t);
     execute format('create policy "amm_insert_%1$s" on public.%1$I for insert to authenticated
-                    with check (public.vede_tutte_commesse())', t);
+                    with check (private.vede_tutte_commesse())', t);
     execute format('create policy "amm_update_%1$s" on public.%1$I for update to authenticated
-                    using (public.vede_tutte_commesse()) with check (public.vede_tutte_commesse())', t);
+                    using (private.vede_tutte_commesse()) with check (private.vede_tutte_commesse())', t);
     execute format('create policy "amm_delete_%1$s" on public.%1$I for delete to authenticated
-                    using (public.vede_tutte_commesse())', t);
+                    using (private.vede_tutte_commesse())', t);
   end loop;
 end $$;
 

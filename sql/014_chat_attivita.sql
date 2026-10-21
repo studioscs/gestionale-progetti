@@ -69,11 +69,11 @@ drop policy if exists "delete_own_msg"  on public.task_messaggi;
 
 create policy "read_all_msg"    on public.task_messaggi for select to authenticated using (true);
 create policy "insert_staff_msg" on public.task_messaggi for insert to authenticated
-  with check (public.is_staff() and created_by = auth.uid());
+  with check (private.is_staff() and created_by = auth.uid());
 create policy "update_own_msg"  on public.task_messaggi for update to authenticated
   using (created_by = auth.uid()) with check (created_by = auth.uid());
 create policy "delete_own_msg"  on public.task_messaggi for delete to authenticated
-  using (created_by = auth.uid() or public.is_admin());
+  using (created_by = auth.uid() or private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- NOTIFICA A CHI SEGUE L'ATTIVITA'

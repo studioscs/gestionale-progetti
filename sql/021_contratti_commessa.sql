@@ -121,17 +121,17 @@ drop policy if exists "vis_delete_commessa_contratti" on public.commessa_contrat
 
 create policy "vis_read_commessa_contratti" on public.commessa_contratti
   for select to authenticated
-  using (project_id in (select public.commesse_visibili()));
+  using (project_id in (select private.commesse_visibili()));
 create policy "vis_insert_commessa_contratti" on public.commessa_contratti
   for insert to authenticated
-  with check (public.is_staff() and project_id in (select public.commesse_visibili()));
+  with check (private.is_staff() and project_id in (select private.commesse_visibili()));
 create policy "vis_update_commessa_contratti" on public.commessa_contratti
   for update to authenticated
-  using (public.is_staff() and project_id in (select public.commesse_visibili()))
-  with check (public.is_staff());
+  using (private.is_staff() and project_id in (select private.commesse_visibili()))
+  with check (private.is_staff());
 create policy "vis_delete_commessa_contratti" on public.commessa_contratti
   for delete to authenticated
-  using (public.is_admin());
+  using (private.is_admin());
 
 -- =============================================================================
 -- FINE MIGRAZIONE 021

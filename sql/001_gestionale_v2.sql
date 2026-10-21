@@ -11,15 +11,33 @@
 -- -----------------------------------------------------------------------------
 -- 0. HELPER DI RUOLO (usati dalle policy RLS)
 -- -----------------------------------------------------------------------------
-create or replace function public.is_admin()
+-- Stanno nello schema "private", che l'API di Supabase non pubblica: le regole
+-- di accesso le usano, ma nessuno le puo' chiamare da fuori come /rpc/...
+-- (migrazione 037). Chi ha fatto login deve poterle eseguire, perche' le
+-- regole girano con i suoi permessi.
+create schema if not exists private;
+revoke all on schema private from public;
+grant usage on schema private to authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant usage on schema private to service_role';
+  end if;
+end $$;
+
+create or replace function private.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin');
 $$;
 
-create or replace function public.is_staff()
+create or replace function private.is_staff()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin','collaboratore'));
 $$;
+
+revoke all on function private.is_admin() from public;
+revoke all on function private.is_staff() from public;
+grant execute on function private.is_admin() to authenticated;
+grant execute on function private.is_staff() to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 1. PROFILES - email visibile allo studio + flag attivo
@@ -202,7 +220,7 @@ create index if not exists idx_files_project        on public.files(project_id);
 -- 9. TRIGGER updated_at + audit di completamento task
 -- -----------------------------------------------------------------------------
 create or replace function public.touch_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at = now(); return new; end; $$;
 
 do $$
@@ -246,7 +264,7 @@ create trigger trg_stamp_task_completion
 
 -- Calcolo automatico della scadenza di legge di una pratica
 create or replace function public.calc_scadenza_pratica()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.data_invio is not null and new.termine_giorni is not null then
     new.data_scadenza = (new.data_invio + (new.termine_giorni || ' days')::interval)::date;
@@ -277,9 +295,9 @@ begin
     execute format('drop policy if exists "delete_admin_%1$s" on public.%1$s', t);
 
     execute format('create policy "read_all_%1$s"    on public.%1$s for select to authenticated using (true)', t);
-    execute format('create policy "insert_staff_%1$s" on public.%1$s for insert to authenticated with check (public.is_staff())', t);
-    execute format('create policy "update_staff_%1$s" on public.%1$s for update to authenticated using (public.is_staff()) with check (public.is_staff())', t);
-    execute format('create policy "delete_admin_%1$s" on public.%1$s for delete to authenticated using (public.is_admin())', t);
+    execute format('create policy "insert_staff_%1$s" on public.%1$s for insert to authenticated with check (private.is_staff())', t);
+    execute format('create policy "update_staff_%1$s" on public.%1$s for update to authenticated using (private.is_staff()) with check (private.is_staff())', t);
+    execute format('create policy "delete_admin_%1$s" on public.%1$s for delete to authenticated using (private.is_admin())', t);
   end loop;
 end $$;
 
@@ -290,9 +308,9 @@ drop policy if exists "notif_update_own" on public.notifiche;
 drop policy if exists "notif_delete_own" on public.notifiche;
 
 create policy "notif_read_own"   on public.notifiche for select to authenticated using (user_id = auth.uid());
-create policy "notif_insert"     on public.notifiche for insert to authenticated with check (public.is_staff());
+create policy "notif_insert"     on public.notifiche for insert to authenticated with check (private.is_staff());
 create policy "notif_update_own" on public.notifiche for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "notif_delete_own" on public.notifiche for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+create policy "notif_delete_own" on public.notifiche for delete to authenticated using (user_id = auth.uid() or private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- 11. VISTA DI RIEPILOGO (avanzamento per commessa, calcolato dal DB)

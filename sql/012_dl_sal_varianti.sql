@@ -119,9 +119,9 @@ begin
     execute format('drop policy if exists "delete_admin_%1$s" on public.%1$I', t);
 
     execute format('create policy "read_all_%1$s" on public.%1$I for select to authenticated using (true)', t);
-    execute format('create policy "insert_staff_%1$s" on public.%1$I for insert to authenticated with check (public.is_staff())', t);
-    execute format('create policy "update_staff_%1$s" on public.%1$I for update to authenticated using (public.is_staff()) with check (public.is_staff())', t);
-    execute format('create policy "delete_admin_%1$s" on public.%1$I for delete to authenticated using (public.is_admin())', t);
+    execute format('create policy "insert_staff_%1$s" on public.%1$I for insert to authenticated with check (private.is_staff())', t);
+    execute format('create policy "update_staff_%1$s" on public.%1$I for update to authenticated using (private.is_staff()) with check (private.is_staff())', t);
+    execute format('create policy "delete_admin_%1$s" on public.%1$I for delete to authenticated using (private.is_admin())', t);
   end loop;
 end $$;
 

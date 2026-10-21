@@ -78,11 +78,11 @@ drop policy if exists "delete_admin_commessa_fatture" on public.commessa_fatture
 create policy "read_all_commessa_fatture"    on public.commessa_fatture
   for select to authenticated using (true);
 create policy "insert_staff_commessa_fatture" on public.commessa_fatture
-  for insert to authenticated with check (public.is_staff());
+  for insert to authenticated with check (private.is_staff());
 create policy "update_staff_commessa_fatture" on public.commessa_fatture
-  for update to authenticated using (public.is_staff()) with check (public.is_staff());
+  for update to authenticated using (private.is_staff()) with check (private.is_staff());
 create policy "delete_admin_commessa_fatture" on public.commessa_fatture
-  for delete to authenticated using (public.is_admin());
+  for delete to authenticated using (private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- 4. MATURAZIONE AUTOMATICA

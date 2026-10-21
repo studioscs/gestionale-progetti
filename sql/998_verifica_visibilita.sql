@@ -102,7 +102,7 @@ select title from public.tasks where title like 'PROVA%' order by title;
 \echo '-- la commessa altrui non esiste, per lui: deve dare 0'
 select count(*) as righe_commessa_altrui from public.projects
  where id = 'cccccccc-0000-0000-0000-000000000002';
-select public.vede_commessa('cccccccc-0000-0000-0000-000000000002') as vede_commessa_altrui;
+select private.vede_commessa('cccccccc-0000-0000-0000-000000000002') as vede_commessa_altrui;
 
 \echo '-- e non la puo modificare: UPDATE 0'
 update public.projects set amount = 1 where id = 'cccccccc-0000-0000-0000-000000000002';

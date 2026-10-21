@@ -25,15 +25,15 @@ drop policy if exists "delete_admin_pratica_eventi" on public.pratica_eventi;
 drop policy if exists "delete_own_pratica_eventi"   on public.pratica_eventi;
 create policy "delete_own_pratica_eventi" on public.pratica_eventi
   for delete to authenticated
-  using (created_by = auth.uid() or public.is_admin());
+  using (created_by = auth.uid() or private.is_admin());
 
 -- Un messaggio si puo' correggere solo se e' tuo
 drop policy if exists "update_staff_pratica_eventi" on public.pratica_eventi;
 drop policy if exists "update_own_pratica_eventi"   on public.pratica_eventi;
 create policy "update_own_pratica_eventi" on public.pratica_eventi
   for update to authenticated
-  using (created_by = auth.uid() or public.is_admin())
-  with check (created_by = auth.uid() or public.is_admin());
+  using (created_by = auth.uid() or private.is_admin())
+  with check (created_by = auth.uid() or private.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- 2. NOTIFICHE - riferimento diretto alla pratica

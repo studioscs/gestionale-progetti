@@ -27,14 +27,14 @@ drop policy if exists "delete_staff_commessa_pratiche" on public.commessa_pratic
 
 create policy "delete_staff_commessa_pratiche" on public.commessa_pratiche
   for delete to authenticated
-  using (public.is_staff());
+  using (private.is_staff());
 
 -- =============================================================================
 -- PER TORNARE INDIETRO (solo admin possono eliminare):
 --
 --   drop policy if exists "delete_staff_commessa_pratiche" on public.commessa_pratiche;
 --   create policy "delete_admin_commessa_pratiche" on public.commessa_pratiche
---     for delete to authenticated using (public.is_admin());
+--     for delete to authenticated using (private.is_admin());
 --
 -- e rimetti eliminaPratica: 'admin' in index.html.
 -- =============================================================================

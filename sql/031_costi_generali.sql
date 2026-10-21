@@ -78,14 +78,14 @@ drop policy if exists "amm_update_costi_generali" on public.costi_generali;
 drop policy if exists "amm_delete_costi_generali" on public.costi_generali;
 
 create policy "amm_read_costi_generali" on public.costi_generali
-  for select to authenticated using (public.vede_tutte_commesse());
+  for select to authenticated using (private.vede_tutte_commesse());
 create policy "amm_insert_costi_generali" on public.costi_generali
-  for insert to authenticated with check (public.vede_tutte_commesse());
+  for insert to authenticated with check (private.vede_tutte_commesse());
 create policy "amm_update_costi_generali" on public.costi_generali
-  for update to authenticated using (public.vede_tutte_commesse())
-  with check (public.vede_tutte_commesse());
+  for update to authenticated using (private.vede_tutte_commesse())
+  with check (private.vede_tutte_commesse());
 create policy "amm_delete_costi_generali" on public.costi_generali
-  for delete to authenticated using (public.vede_tutte_commesse());
+  for delete to authenticated using (private.vede_tutte_commesse());
 
 -- =============================================================================
 -- FINE MIGRAZIONE 031

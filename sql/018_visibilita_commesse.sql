@@ -39,7 +39,7 @@ alter table public.profiles add column if not exists vede_tutto boolean not null
 comment on column public.profiles.vede_tutto is
   'Vede tutte le commesse anche senza lavorarci. Per chi tiene l''amministrazione. Lo imposta un amministratore.';
 
-create or replace function public.vede_tutte_commesse()
+create or replace function private.vede_tutte_commesse()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.profiles p
@@ -60,11 +60,11 @@ $$;
 -- projects interrogherebbe tasks, la cui politica interroga projects, e si
 -- girerebbe in tondo.
 -- -----------------------------------------------------------------------------
-create or replace function public.commesse_visibili()
+create or replace function private.commesse_visibili()
 returns setof uuid language sql stable security definer set search_path = public as $$
   select p.id
   from public.projects p
-  where public.vede_tutte_commesse()
+  where private.vede_tutte_commesse()
      or p.owner_id   = auth.uid()
      or p.created_by = auth.uid()
      or exists (select 1 from public.tasks t
@@ -79,17 +79,17 @@ returns setof uuid language sql stable security definer set search_path = public
 $$;
 
 -- Comoda per le verifiche a mano e per un singolo controllo mirato
-create or replace function public.vede_commessa(p uuid)
+create or replace function private.vede_commessa(p uuid)
 returns boolean language sql stable security definer set search_path = public as $$
-  select p in (select public.commesse_visibili());
+  select p in (select private.commesse_visibili());
 $$;
 
-revoke all on function public.commesse_visibili()   from public;
-revoke all on function public.vede_commessa(uuid)   from public;
-revoke all on function public.vede_tutte_commesse() from public;
-grant execute on function public.commesse_visibili()   to authenticated;
-grant execute on function public.vede_commessa(uuid)   to authenticated;
-grant execute on function public.vede_tutte_commesse() to authenticated;
+revoke all on function private.commesse_visibili()   from public;
+revoke all on function private.vede_commessa(uuid)   from public;
+revoke all on function private.vede_tutte_commesse() from public;
+grant execute on function private.commesse_visibili()   to authenticated;
+grant execute on function private.vede_commessa(uuid)   to authenticated;
+grant execute on function private.vede_tutte_commesse() to authenticated;
 
 -- Indici a servizio della funzione: senza, ogni aggancio e' una scansione
 create index if not exists idx_tasks_assignee    on public.tasks(assignee_id)      where assignee_id is not null;
@@ -116,7 +116,7 @@ create index if not exists idx_projects_creatore on public.projects(created_by) 
 -- comunque sia ridotto il database.
 -- -----------------------------------------------------------------------------
 create or replace function public.togli_politiche(tab text, comando "char")
-returns void language plpgsql as $$
+returns void language plpgsql set search_path = public as $$
 declare r record;
 begin
   for r in
@@ -175,19 +175,19 @@ end $$;
 --
 select public.togli_politiche('projects', 'r');
 create policy "vis_read_projects" on public.projects for select to authenticated
-  using (public.vede_tutte_commesse()
+  using (private.vede_tutte_commesse()
          or created_by = auth.uid()
          or owner_id   = auth.uid()
-         or id in (select public.commesse_visibili()));
+         or id in (select private.commesse_visibili()));
 
 select public.togli_politiche('projects', 'w');
 create policy "vis_update_projects" on public.projects for update to authenticated
-  using (public.is_staff() and id in (select public.commesse_visibili()))
-  with check (public.is_staff());
+  using (private.is_staff() and id in (select private.commesse_visibili()))
+  with check (private.is_staff());
 
 select public.togli_politiche('projects', 'd');
 create policy "vis_delete_projects" on public.projects for delete to authenticated
-  using (public.is_admin());
+  using (private.is_admin());
 
 -- --- TUTTO QUELLO CHE STA APPESO ALLA COMMESSA ---------------------------
 do $$
@@ -205,18 +205,18 @@ begin
 
     perform public.togli_politiche(t, 'r');
     execute format('create policy "vis_read_%1$s" on public.%1$I for select to authenticated
-                    using (project_id in (select public.commesse_visibili()))', t);
+                    using (project_id in (select private.commesse_visibili()))', t);
 
     perform public.togli_politiche(t, 'a');
     execute format('create policy "vis_insert_%1$s" on public.%1$I for insert to authenticated
-                    with check (public.is_staff()
-                                and project_id in (select public.commesse_visibili()))', t);
+                    with check (private.is_staff()
+                                and project_id in (select private.commesse_visibili()))', t);
 
     perform public.togli_politiche(t, 'w');
     execute format('create policy "vis_update_%1$s" on public.%1$I for update to authenticated
-                    using (public.is_staff()
-                           and project_id in (select public.commesse_visibili()))
-                    with check (public.is_staff())', t);
+                    using (private.is_staff()
+                           and project_id in (select private.commesse_visibili()))
+                    with check (private.is_staff())', t);
 
     raise notice 'Visibilita'' per commessa attivata su %', t;
   end loop;
@@ -233,13 +233,13 @@ select public.togli_politiche('pratica_eventi', 'r');
 create policy "vis_read_pratica_eventi" on public.pratica_eventi for select to authenticated
   using (exists (select 1 from public.commessa_pratiche c
                  where c.id = pratica_eventi.pratica_id
-                   and c.project_id in (select public.commesse_visibili())));
+                   and c.project_id in (select private.commesse_visibili())));
 
 select public.togli_politiche('task_messaggi', 'r');
 create policy "vis_read_msg" on public.task_messaggi for select to authenticated
   using (exists (select 1 from public.tasks t
                  where t.id = task_messaggi.task_id
-                   and t.project_id in (select public.commesse_visibili())));
+                   and t.project_id in (select private.commesse_visibili())));
 
 -- -----------------------------------------------------------------------------
 -- 5. L'ANAGRAFICA DEI CLIENTI
@@ -251,11 +251,11 @@ create policy "vis_read_msg" on public.task_messaggi for select to authenticated
 -- -----------------------------------------------------------------------------
 select public.togli_politiche('clienti', 'r');
 create policy "vis_read_clienti" on public.clienti for select to authenticated
-  using (public.vede_tutte_commesse()
+  using (private.vede_tutte_commesse()
          or created_by = auth.uid()
          or exists (select 1 from public.projects p
                     where p.cliente_id = clienti.id
-                      and p.id in (select public.commesse_visibili())));
+                      and p.id in (select private.commesse_visibili())));
 
 -- -----------------------------------------------------------------------------
 -- 6. LE TABELLE DEL VECCHIO GESTIONALE
@@ -274,7 +274,7 @@ begin
     end if;
     perform public.togli_politiche(t, 'r');
     execute format('create policy "vis_read_%1$s" on public.%1$I for select to authenticated
-                    using (public.is_staff())', t);
+                    using (private.is_staff())', t);
     raise notice 'Lettura di % riservata allo staff (tabella del vecchio gestionale).', t;
   end loop;
 end $$;
@@ -353,7 +353,7 @@ order by (case when count(p.polname) = 1
 --
 -- VERIFICA (da eseguire come collaboratore, dopo aver impostato l'utente):
 --   select count(*) from projects;            -- solo le sue
---   select public.vede_commessa('<id di una commessa altrui>');   -- false
+--   select private.vede_commessa('<id di una commessa altrui>');   -- false
 --   select count(*) from tasks;               -- solo quelle delle sue commesse
 --
 -- Per l'amministrazione, che deve fatturare tutto:
