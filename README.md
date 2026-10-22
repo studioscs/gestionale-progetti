@@ -698,6 +698,14 @@ pratica elenca le sue attività.
 
 ## Il cliente è uno solo, dappertutto
 
+**Come si scrive il nome.** Sotto il campo del nome (preventivo, scheda
+Clienti, nuova commessa) c'è la regola: **persona fisica: prima il COGNOME,
+poi il NOME** (es. CLEMENTONI STEFANO); **società, condominio o ente**: la
+denominazione completa con la forma societaria (VENTINOVE SRL, CONDOMINIO VIA
+ROMA 12, COMUNE DI JESI). Se comunque qualcuno scrive il nome al contrario,
+nel preventivo il cliente esistente viene riconosciuto lo stesso (VIVIANA
+ZOPPI = ZOPPI VIVIANA) e non se ne crea un secondo.
+
 I dati del committente (denominazione, P.IVA, C.F., SDI, PEC, indirizzo,
 **referente amministrativo e operativo**) si modificano in un posto e arrivano
 ovunque: da *Clienti* a tutte le commesse del cliente e ai suoi preventivi in

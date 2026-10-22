@@ -545,7 +545,8 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mh"><h3 id="mcl-t">Cliente</h3><button class="mx" data-close="m-cli">&#10005;</button></div>
     <div class="mb">
       <div class="fg2">
-        <div class="fg"><label class="fl">Denominazione *</label><input class="fc" id="cl-den" placeholder="Ragione sociale oppure nome e cognome"></div>
+        <div class="fg"><label class="fl">Denominazione *</label><input class="fc" id="cl-den" placeholder="ROSSI MARIO oppure VENTINOVE SRL">
+          <div class="hint nota-nome"></div></div>
         <div class="fg"><label class="fl">Tipo</label>
           <select class="fc" id="cl-tipo"><option value="societa">Societ&agrave; / ente</option><option value="persona">Persona fisica</option></select>
         </div>
@@ -1533,7 +1534,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.3';
+const VERSIONE = '2026.10.22.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -6037,7 +6038,9 @@ function disegnaPrev() {
         + S.clienti.filter(c => c.attivo !== false).map(c => '<option value="' + c.id + '"'
             + (c.id === d.cliente_id ? ' selected' : '') + '>' + esc(c.denominazione) + '</option>').join('')
       + '</select></div>'
-      + '<div class="fg2">' + campo('Nome o ragione sociale *', 'cliente_nome') + campo('Indirizzo', 'cliente_indirizzo') + '</div>'
+      + '<div class="fg2">' + campo('Nome o ragione sociale *', 'cliente_nome', 'text', 'ROSSI MARIO oppure VENTINOVE SRL')
+          .replace(/<\/div>$/, '<div class="hint">' + NOTA_NOME_CLIENTE + '</div></div>')
+        + campo('Indirizzo', 'cliente_indirizzo') + '</div>'
       + '<div class="fg3">' + campo('CAP', 'cliente_cap') + campo('Comune', 'cliente_comune') + campo('Provincia', 'cliente_prov') + '</div>'
       + '<div class="fg2">' + campo('Codice fiscale', 'cliente_cf') + campo('Partita IVA', 'cliente_piva') + '</div>'
       + '<div class="fg2">' + campo('PEC o mail', 'cliente_pec') + campo('Telefono', 'cliente_tel') + '</div>'
@@ -6206,13 +6209,23 @@ const datiMancantiPreventivo = pv => datiMancantiCliente({
    riscriverlo. Se esiste gia' (stesso nome, codice fiscale o partita IVA) si
    aggancia a quello, e i dati che in anagrafica mancavano si completano con
    quelli del preventivo; quelli gia' scritti non si toccano. */
+/* Come si scrive il nome del cliente, uguale dappertutto: con la persona
+   fisica non si sapeva mai se mettere prima il nome o il cognome, e lo stesso
+   cliente finiva in anagrafica due volte, una per verso. */
+const NOTA_NOME_CLIENTE = '<b>Persona fisica</b>: prima il COGNOME, poi il NOME (es. <b>CLEMENTONI STEFANO</b>). '
+  + '<b>Società, condominio o ente</b>: la denominazione completa, con la forma societaria (es. <b>VENTINOVE SRL</b>, '
+  + '<b>CONDOMINIO VIA ROMA 12</b>, <b>COMUNE DI JESI</b>).';
+/* Stesso nome anche con le parole in un altro ordine: ZOPPI VIVIANA e
+   VIVIANA ZOPPI sono la stessa persona, non due clienti */
+const stessoNome = (a, b) => { const x = normNome(a), y = normNome(b);
+  return !!x && (x === y || x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ')); };
 const normNome = t => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
 function clienteDelPreventivo(pv) {
   if (pv.cliente_id) return byId(S.clienti, pv.cliente_id);
   const cf = String(pv.cliente_cf || '').trim().toUpperCase(), pi = String(pv.cliente_piva || '').replace(/\s/g, '');
   return S.clienti.find(c => (cf && String(c.cf || '').toUpperCase() === cf)
       || (pi && String(c.piva || '').replace(/\s/g, '') === pi)
-      || normNome(c.denominazione) === normNome(pv.cliente_nome)) || null;
+      || stessoNome(c.denominazione, pv.cliente_nome)) || null;
 }
 async function clienteDaPreventivo(pv) {
   const pec = String(pv.cliente_pec || '').trim();
@@ -9091,6 +9104,7 @@ function openCliente(id, presetNome) {
   el('cl-sez1').innerHTML = sez('Referente amministrativo', 'riceve la copia della fattura');
   el('cl-sez2').innerHTML = sez('Referente operativo', 'comunicazioni tecniche e di cantiere');
   el('cl-sez3').innerHTML = sez('Note', 'restano nella scheda e escono nella stampa');
+  qsa('#m-cli .nota-nome').forEach(x => { x.innerHTML = NOTA_NOME_CLIENTE; });
   el('cl-del').style.display = (id && isAd()) ? 'inline-flex' : 'none';
 
   const comm = id ? commesseDi(id) : [];
@@ -11491,7 +11505,8 @@ function drawWizard() {
           : 'Scegliendo un cliente già presente, tutti i suoi dati vengono compilati da soli. '
             + 'Se è nuovo, compila la scheda qui sotto: al salvataggio entra in anagrafica, completa.') + '</div></div>'
       + '<div class="fg2">'
-      + fld('Denominazione / nome e cognome *', 'w-cli', d.client, 'Ragione sociale oppure nome e cognome')
+      + fld('Denominazione / cognome e nome *', 'w-cli', d.client, 'ROSSI MARIO oppure VENTINOVE SRL')
+          .replace(/<\/div>$/, '<div class="hint">' + NOTA_NOME_CLIENTE + '</div></div>')
       + '<div class="fg"><label class="fl">Tipo</label><select class="fc" id="w-ctipo">'
         + '<option value="societa"' + (tipoCli === 'societa' ? ' selected' : '') + '>Società / ente</option>'
         + '<option value="persona"' + (tipoCli === 'persona' ? ' selected' : '') + '>Persona fisica</option></select></div>'

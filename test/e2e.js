@@ -3855,6 +3855,25 @@ function launchOpts(){
     must(x&&x.cliente_id===id,'il preventivo non è stato salvato col cliente scelto');
     must(await p.evaluate(()=>__DB.clienti.filter(c=>c.denominazione==='Bianchi Costruzioni Srl').length)===1,'cliente duplicato');
   });
+  await t('dove si scrive il cliente c è la nota: persona fisica COGNOME NOME',async()=>{
+    await p.evaluate(()=>{ go('preventivi'); nuovoPreventivo('strutture'); }); await p.waitForSelector('#m-prev.show',{timeout:4000});
+    must(/prima il COGNOME, poi il NOME/.test(await p.textContent('#pv-body')),'manca la nota nel preventivo');
+    await p.evaluate(()=>{ closeM('m-prev'); openCliente(null); }); await p.waitForSelector('#m-cli.show',{timeout:3000});
+    must(/prima il COGNOME, poi il NOME/.test(await p.textContent('#m-cli')),'manca la nota nella scheda cliente');
+    await p.evaluate(()=>{ closeM('m-cli'); openNewProj(); }); await p.waitForSelector('#m-proj.show',{timeout:3000});
+    must(/prima il COGNOME, poi il NOME/.test(await p.textContent('#mp-body')),'manca la nota nella nuova commessa');
+    await p.evaluate(()=>closeM('m-proj'));
+  });
+  await t('VIVIANA ZOPPI e ZOPPI VIVIANA sono lo stesso cliente',async()=>{
+    const g=await p.evaluate(async()=>{ await SB.from('clienti').insert({denominazione:'ZOPPI VIVIANA',cf:'ZPPVVN80A41H211X'}); await loadAll(true);
+      const n0=__DB.clienti.length;
+      go('preventivi'); nuovoPreventivo('strutture'); PV.cliente_nome='Viviana Zoppi'; infoClientePrev();
+      const info=el('pv-cli-info').textContent; closeM('m-prev');
+      return {info,ok:stessoNome('ZOPPI VIVIANA','viviana  zoppi'),no:stessoNome('ZOPPI VIVIANA','ZOPPI MARIO'),
+        trov:(clienteDelPreventivo({cliente_nome:'VIVIANA ZOPPI'})||{}).denominazione,n0}; });
+    must(g.ok&&!g.no,'confronto dei nomi sbagliato');
+    must(g.trov==='ZOPPI VIVIANA'&&/In anagrafica: ZOPPI VIVIANA/.test(g.info),'non riconosce il cliente esistente: '+g.info);
+  });
   await t('si duplica un preventivo: numero nuovo, stesse voci, originale intatto',async()=>{
     const orig=await p.evaluate(()=>{ const x=__DB.preventivi.find(y=>y.cliente_nome==='Bianchi Costruzioni Srl');
       return {id:x.id,prog:x.progressivo,voci:JSON.stringify(x.voci),stato:x.stato,n:__DB.preventivi.length}; });
