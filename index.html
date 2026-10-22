@@ -463,7 +463,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Il mio lavoro</span>
       <button class="sn on" data-page="oggi"><span class="snic">&#9788;</span>Oggi<span class="snb" id="b-oggi">0</span></button>
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
-      <button class="sn" data-page="firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
+      <button class="sn" data-page="firme" id="sn-firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
       <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Da fatturare<span class="snb" id="b-fatt">0</span></button>
       <button class="sn" data-page="preventivi" id="sn-prev"><span class="snic">&#128221;</span>Preventivi</button>
     </div>
@@ -1534,7 +1534,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.5';
+const VERSIONE = '2026.10.22.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3839,8 +3839,9 @@ function updBadges() {
 
   const nf = firmeAperte().length;
   el('b-firme').textContent = nf;
-  el('b-firme').classList.toggle('alert', S.tasks.some(t =>
-    firmaDaRaccogliere(t) && scadenzaViva(t) && isLate(t.due_date)));
+  el('b-firme').classList.toggle('alert', firmeMie().some(t => scadenzaViva(t) && isLate(t.due_date)));
+  /* la sezione la vede solo chi segue almeno una commessa */
+  el('sn-firme').style.display = commesseCheSeguo().size ? '' : 'none';
 
   const pr = S.pratiche.filter(praticaOpen).length;
   el('b-prat').textContent = pr;
@@ -8716,31 +8717,65 @@ function mostraContenuto(id) {
    nei percorsi; quelle delle commesse gia' create non si mostrano. */
 const FIRME_INCARICO = /^(preventivo,\s*incarico|lettera d.incarico)/i;
 const firmaDaRaccogliere = t => t.categoria === 'firma_cliente' && !FIRME_INCARICO.test(String(t.title || '').trim());
+/* LE FIRME LE RACCOGLIE CHI SEGUE LA COMMESSA
+   E' un promemoria operativo: serve a chi incontra il committente. Chi lavora
+   alla commessa e' il responsabile, chi vi ha attivita' assegnate o ne e'
+   responsabile, chi e' responsabile di una fase o di una pratica, chi vi ha
+   registrato ore. NON basta averla creata: l'amministrazione crea le commesse
+   dai preventivi, ma le firme non le raccoglie lei, e trovarsele davanti
+   confondeva. Chi non segue nessuna commessa non vede la sezione. */
+function commesseCheSeguo(uid) {
+  uid = uid || (S.me && S.me.id);
+  const ids = new Set();
+  if (!uid) return ids;
+  S.projects.forEach(p => { if (p.owner_id === uid && !p.archiviato) ids.add(p.id); });
+  S.tasks.forEach(t => { if (t.assignee_id === uid || t.responsabile_id === uid) ids.add(t.project_id); });
+  (S.fasi || []).forEach(f => { if (f.responsabile_id === uid) ids.add(f.project_id); });
+  (S.pratiche || []).forEach(x => { if (x.responsabile_id === uid) ids.add(x.project_id); });
+  (S.time || []).forEach(e => { if (e.operator_id === uid && !eEsterna(e)) ids.add(e.project_id); });
+  S.projects.forEach(p => { if (p.archiviato) ids.delete(p.id); });
+  return ids;
+}
+/* Le firme che riguardano me; con "tutte" (solo amministratori) quelle di tutte le commesse */
+function firmeMie(tutte) {
+  if (tutte && isAd()) return S.tasks.filter(firmaDaRaccogliere);
+  const mie = commesseCheSeguo();
+  return S.tasks.filter(t => firmaDaRaccogliere(t) && (mie.has(t.project_id)
+    || (S.me && (t.assignee_id === S.me.id || t.responsabile_id === S.me.id))));
+}
 function firmeAperte() {
   /* Stessa regola dello scadenzario: chiusa la fase, quello che conteneva non
      e' piu' in attesa di firma. */
-  return S.tasks.filter(t => firmaDaRaccogliere(t) && daFare(t));
+  return firmeMie().filter(daFare);
 }
 
 function rFirme() {
-  el('crumb').textContent = 'Procure, documenti e assensi che aspettano la firma del committente. L’incarico si firma con il preventivo.';
+  el('crumb').textContent = 'Le firme da raccogliere nelle commesse che segui: procure, documenti, assensi. L’incarico si firma con il preventivo.';
   const solo = S.fmProj || '';
+  const mie = commesseCheSeguo(), tutte = !!(S.fmTutte && isAd());
   el('top-act').innerHTML =
-      '<select class="sel" id="fm-p"><option value="">Tutte le commesse</option>'
-    + S.projects.filter(p => !p.archiviato).map(p => '<option value="' + p.id + '"'
+      '<select class="sel" id="fm-p"><option value="">' + (tutte ? 'Tutte le commesse' : 'Tutte le mie commesse') + '</option>'
+    + S.projects.filter(p => !p.archiviato && (tutte || mie.has(p.id))).map(p => '<option value="' + p.id + '"'
         + (solo === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
     + '<label class="row" style="font-size:12px;color:var(--mut);gap:5px">'
-    + '<input type="checkbox" id="fm-all"' + (S.fmAll ? ' checked' : '') + '> mostra anche le firme già raccolte</label>';
+    + '<input type="checkbox" id="fm-all"' + (S.fmAll ? ' checked' : '') + '> mostra anche le firme già raccolte</label>'
+    + (isAd() ? ' <label class="row" style="font-size:12px;color:var(--mut);gap:5px" title="Solo per gli amministratori: '
+        + 'anche le commesse che non segui">'
+        + '<input type="checkbox" id="fm-tutte"' + (S.fmTutte ? ' checked' : '') + '> tutte le commesse</label>' : '');
   el('fm-p').onchange  = e => { S.fmProj = e.target.value; render(); };
+  if (el('fm-tutte')) el('fm-tutte').onchange = e => { S.fmTutte = e.target.checked; render(); };
   el('fm-all').onchange = e => { S.fmAll = e.target.checked; render(); };
 
-  let list = S.tasks.filter(firmaDaRaccogliere);
+  let list = firmeMie(tutte);
   if (!S.fmAll) list = list.filter(isOpen);
   if (solo) list = list.filter(t => t.project_id === solo);
 
   if (!list.length) {
     el('page').innerHTML = '<div class="card"><div class="empty"><i>✍️</i>'
-      + '<p>Nessun documento in attesa di firma.</p>'
+      + (!mie.size && !tutte
+          ? '<p>Non segui nessuna commessa: qui compaiono solo le firme delle commesse di cui sei responsabile '
+            + 'o in cui hai attività, fasi, pratiche o ore.</p>'
+          : '<p>Nessun documento in attesa di firma' + (tutte ? '.' : ' nelle commesse che segui.') + '</p>')
       + '<p style="font-size:12px;margin-top:6px">Qui compaiono le <b>procure speciali</b> (una per ogni pratica '
       + 'telematica aperta), i documenti degli aventi titolo, gli assensi dei comproprietari o del condominio e '
       + 'le altre firme che servono durante il lavoro. L’incarico non è qui: è il preventivo accettato, che '

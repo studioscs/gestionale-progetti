@@ -781,7 +781,7 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
   inserisce due volte, e il pulsante sparisce una volta inserito.
 
-## Firme del cliente: senza l'incarico
+## Firme del cliente: senza l'incarico, solo per chi segue la commessa
 
 L'incarico si firma con il **preventivo accettato**, che diventa commessa e
 contratto dalla sezione *Preventivi*: la sezione *Firme del cliente* non lo
@@ -791,6 +791,15 @@ compaiono più fra le firme da raccogliere né nel contatore (restano nella
 checklist della commessa, dove si possono spuntare o eliminare). Nel percorso
 della sanatoria resta solo l'*informativa scritta sugli esiti possibili*, che
 è un documento a sé.
+
+**Chi la vede: solo chi segue la commessa.** Le firme le raccoglie chi
+incontra il committente, non l'amministrazione. Nella sezione (e nel suo
+contatore) compaiono solo le commesse che segui: ne sei il responsabile,
+oppure vi hai attività assegnate o di cui sei responsabile, una fase o una
+pratica a tuo nome, ore registrate. Aver solo creato la commessa (per esempio
+dal preventivo) non basta. Chi non segue nessuna commessa non vede la voce
+nel menu. Un amministratore può comunque spuntare **tutte le commesse** per
+avere il quadro completo.
 
 La sezione resta per quello che il preventivo non copre: le **procure
 speciali** (una per ogni pratica telematica, art. 1392 c.c.), i documenti

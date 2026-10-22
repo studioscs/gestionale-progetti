@@ -727,6 +727,15 @@ function launchOpts(){
     });
     must(ok,'ordine delle fasi sbagliato');
   });
+  await t('chi non segue nessuna commessa non vede la sezione Firme',async()=>{
+    const g=await p.evaluate(()=>{ render(); return {vis:el('sn-firme').style.display,mie:commesseCheSeguo().size,b:firmeAperte().length}; });
+    must(g.mie===0&&g.vis==='none'&&g.b===0,'amministrazione che non segue commesse: '+JSON.stringify(g));
+  });
+  await t('il responsabile della commessa vede la sezione Firme',async()=>{
+    await p.evaluate(async()=>{ const pr=S.projects.find(x=>/Palazzo Bianchi/.test(x.name));
+      await SB.from('projects').update({owner_id:S.me.id}).eq('id',pr.id); await loadAll(true); render(); });
+    must(await p.isVisible('.sn[data-page="firme"]'),'il responsabile non vede la sezione');
+  });
   await t('pagina Firme cliente elenca i documenti',async()=>{
     await p.click('.sn[data-page="firme"]'); await p.waitForTimeout(600);
     must(await p.locator('#page .card').count()>0,'pagina vuota');
@@ -740,7 +749,7 @@ function launchOpts(){
   await t('filtro per commessa nella pagina firme',async()=>{
     await p.selectOption('#fm-p',{index:1}); await p.waitForTimeout(400);
     const pid=await p.inputValue('#fm-p');
-    const atteso=await p.evaluate(v=>S.tasks.filter(t=>t.categoria==='firma_cliente'&&t.status!=='completato'&&t.project_id===v).length,pid);
+    const atteso=await p.evaluate(v=>S.tasks.filter(t=>firmaDaRaccogliere(t)&&t.status!=='completato'&&t.project_id===v).length,pid);
     must(await p.locator('#page .it').count()===atteso,'filtro incoerente');
     await p.selectOption('#fm-p',''); await p.waitForTimeout(300);
   });
@@ -756,8 +765,22 @@ function launchOpts(){
   });
   await t('badge laterale conta le firme mancanti',async()=>{
     const b=parseInt(await p.textContent('#b-firme'),10);
-    const atteso=await p.evaluate(()=>S.tasks.filter(t=>t.categoria==='firma_cliente'&&t.status!=='completato').length);
-    must(b===atteso,'badge '+b+' contro '+atteso);
+    const g=await p.evaluate(()=>{ const mie=S.projects.filter(x=>x.owner_id===S.me.id).map(x=>x.id);
+      return {atteso:S.tasks.filter(t=>firmaDaRaccogliere(t)&&daFare(t)&&mie.indexOf(t.project_id)>=0).length,
+        tutte:S.tasks.filter(t=>firmaDaRaccogliere(t)&&daFare(t)).length}; });
+    must(b===g.atteso,'badge '+b+' contro '+g.atteso+' delle commesse che seguo');
+    must(g.tutte>g.atteso,'la prova non distingue: tutte '+g.tutte+', mie '+g.atteso);
+  });
+  await t('solo le mie commesse; l amministratore può vederle tutte',async()=>{
+    await p.click('.sn[data-page="firme"]'); await p.waitForTimeout(400);
+    const g=await p.evaluate(()=>{ const prog=new Set([...document.querySelectorAll('#page .card-t[data-proj]')].map(x=>x.dataset.proj));
+      const opz=document.querySelectorAll('#fm-p option').length-1; return {prog:[...prog],opz}; });
+    const mie=await p.evaluate(()=>[...commesseCheSeguo()]);
+    must(g.prog.every(x=>mie.indexOf(x)>=0)&&g.opz===mie.length,'compaiono commesse che non seguo: '+JSON.stringify(g));
+    await p.check('#fm-tutte'); await p.waitForTimeout(400);
+    const n=await p.evaluate(()=>new Set([...document.querySelectorAll('#page .card-t[data-proj]')].map(x=>x.dataset.proj)).size);
+    must(n>g.prog.length,'con «tutte le commesse» non compaiono le altre');
+    await p.uncheck('#fm-tutte'); await p.waitForTimeout(300);
   });
   await t('stampa distinta apre la finestra',async()=>{
     const [nw]=await Promise.all([ p.context().waitForEvent('page',{timeout:6000}),
@@ -4013,7 +4036,7 @@ function launchOpts(){
   });
   await t('in Firme del cliente restano procure e documenti, non l incarico delle commesse già create',async()=>{
     const g=await p.evaluate(async()=>{
-      const {data:pr}=await SB.from('projects').insert({codice:'FIR_1',name:'Firme prova',status:'attivo'}).select().single();
+      const {data:pr}=await SB.from('projects').insert({codice:'FIR_1',name:'Firme prova',status:'attivo',owner_id:S.me.id}).select().single();
       await SB.from('tasks').insert({project_id:pr.id,title:'Preventivo, incarico e privacy',status:'da_fare',categoria:'firma_cliente',sort_order:1,is_milestone:false,opzionale:false});
       await SB.from('tasks').insert({project_id:pr.id,title:'Lettera d’incarico',status:'da_fare',categoria:'firma_cliente',sort_order:2,is_milestone:false,opzionale:false});
       await SB.from('tasks').insert({project_id:pr.id,title:'Procura speciale - SCIA',status:'da_fare',categoria:'firma_cliente',sort_order:3,is_milestone:false,opzionale:false});

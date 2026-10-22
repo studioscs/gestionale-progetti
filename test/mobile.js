@@ -79,7 +79,7 @@ const SCHERMI=[
         const g=await p.evaluate(()=>{
           const s=document.getElementById('side');
           s.scrollTop=s.scrollHeight;
-          const voci=[...document.querySelectorAll('.sn')];
+          const voci=[...document.querySelectorAll('.sn')].filter(v=>v.offsetParent!==null); /* le voci nascoste (es. Firme per chi non segue commesse) non contano */
           const u=voci[voci.length-1].getBoundingClientRect();
           const alte=voci.filter(v=>v.getBoundingClientRect().height>=44).length;
           return {aperto:s.classList.contains('aperto'), velo:!document.getElementById('sidevelo').hidden,
