@@ -3946,6 +3946,12 @@ function launchOpts(){
     must(r.pr,'il preventivo non è collegato alla commessa');
     must(r.stato==='accettato','il preventivo non risulta accettato: '+r.stato);
     must(r.pr.cli===PVC.cli&&Math.abs(r.pr.amount-PVC.imp)<0.01,'commessa: '+JSON.stringify(r.pr));
+    const at=await p.evaluate(id=>{ const x=__DB.preventivi.find(y=>y.id===id);
+      return __DB.commessa_contratti.filter(c=>c.project_id===x.project_id); },PVC.id);
+    must(at.length===1,'atti nel contratto: '+at.length);
+    must(at[0].tipo==='incarico'&&at[0].numero===1&&at[0].stato==='accettato'&&Math.abs(Number(at[0].importo)-PVC.imp)<0.01,'incarico: '+JSON.stringify(at[0]));
+    must(at[0].preventivo_id===PVC.id&&at[0].riferimento.indexOf('Preventivo n. '+PVC.num+' del ')===0,'riferimento al preventivo: '+at[0].riferimento);
+    must(/^A\. .* — /.test(at[0].note||''),'voci del preventivo non riportate nelle note: '+at[0].note);
   });
   await t('il preventivo collegato porta alla sua commessa',async()=>{
     await p.evaluate(()=>{ document.querySelectorAll('.ov.show').forEach(m=>m.classList.remove('show')); go('preventivi'); });
@@ -3965,6 +3971,60 @@ function launchOpts(){
     await p.click('#pv-save'); await p.waitForTimeout(900);
     must(await p.evaluate(pid=>__DB.preventivi.some(x=>x.project_id===pid&&x.cliente_nome==='Anna Rossi'),pid),'preventivo non collegato alla commessa');
     await p.evaluate(()=>closeM('m-prev'));
+  });
+
+  /* ---------------- ADDENDUM: PREVENTIVO COME INTEGRAZIONE DEL CONTRATTO ---------------- */
+  let ADX=null;
+  await t('un preventivo accettato diventa l addendum di una commessa senza atti: l importo scritto resta',async()=>{
+    ADX=await p.evaluate(async()=>{
+      const {data:pr}=await SB.from('projects').insert({codice:'AD_1',name:'Ampliamento Verdi',client:'Verdi Giuseppe',status:'attivo',amount:10000,start_date:'2026-03-01'}).select().single();
+      const {data:pv}=await SB.from('preventivi').insert({anno:2026,progressivo:901,data:'2026-10-01',stato:'accettato',modello:'strutture',
+        cliente_nome:'Verdi Giuseppe',immobile:'VIA ROMA 3 A OSIMO',voci:[{descrizione:'Variante strutturale',importo:1500,quantita:1},{descrizione:'Relazione aggiuntiva',importo:500,quantita:1}],articoli:[]}).select().single();
+      await loadAll(true); go('preventivi'); return {pid:pr.id,pv:pv.id}; });
+    await p.waitForTimeout(300);
+    must(await p.locator('.pv-desk [data-prevadd="'+ADX.pv+'"]').count()===1,'manca il pulsante Addendum');
+    await p.click('.pv-desk [data-prevadd="'+ADX.pv+'"]'); await p.waitForSelector('#m-addendum.show',{timeout:3000});
+    must(await p.inputValue('#add-pid')===ADX.pid,'la commessa del committente non è proposta');
+    const pr=await p.textContent('#add-prev');
+    must(/incarico originario \(n\. 1\)/.test(pr)&&/integrazione n\. 2/.test(pr)&&/12\.000,00/.test(pr),'anteprima: '+pr);
+    await p.click('#add-go'); await p.waitForTimeout(1200);
+    const g=await p.evaluate(x=>{ const at=__DB.commessa_contratti.filter(c=>c.project_id===x.pid).sort((a,b)=>a.numero-b.numero);
+      const pr=__DB.projects.find(y=>y.id===x.pid), pv=__DB.preventivi.find(y=>y.id===x.pv);
+      const sc=__DB.commessa_fatture.filter(f=>f.project_id===x.pid);
+      return {at:at.map(c=>({n:c.numero,t:c.tipo,i:Number(c.importo),pv:c.preventivo_id})),amount:Number(pr.amount),
+        pv:{pid:pv.project_id,st:pv.stato},sc:sc.map(f=>({i:Number(f.imponibile),c:f.contratto_id})),page:S.page,tab:S.tab}; },ADX);
+    must(g.at.length===2&&g.at[0].t==='incarico'&&g.at[0].i===10000&&g.at[1].t==='integrazione'&&g.at[1].n===2&&g.at[1].i===2000&&g.at[1].pv===ADX.pv,
+      'atti: '+JSON.stringify(g.at));
+    must(g.amount===12000,'importo della commessa: '+g.amount);
+    must(g.pv.pid===ADX.pid&&g.pv.st==='accettato','preventivo non collegato: '+JSON.stringify(g.pv));
+    must(g.sc.length===1&&g.sc[0].i===2000&&g.sc[0].c,'scaglione dell addendum: '+JSON.stringify(g.sc));
+    must(g.page==='project'&&g.tab==='fatture','non apre il contratto della commessa');
+    must(/Preventivo n\. 901\/26/.test(await p.textContent('#page')),'l atto non mostra il preventivo da cui nasce');
+  });
+  await t('un secondo addendum diventa l integrazione successiva, e non si inserisce due volte',async()=>{
+    const pv2=await p.evaluate(async()=>{ const {data}=await SB.from('preventivi').insert({anno:2026,progressivo:902,data:'2026-10-10',stato:'inviato',modello:'perizie',
+      cliente_nome:'Verdi Giuseppe',voci:[{descrizione:'Perizia',importo:700,quantita:1}],articoli:[]}).select().single(); await loadAll(true); go('preventivi'); return data.id; });
+    await p.waitForTimeout(300);
+    await p.click('.pv-desk [data-prevadd="'+pv2+'"]'); await p.waitForSelector('#m-addendum.show',{timeout:3000});
+    must(/integrazione n\. 3/.test(await p.textContent('#add-prev'))&&/12\.700,00/.test(await p.textContent('#add-prev')),'anteprima: '+(await p.textContent('#add-prev')));
+    await p.uncheck('#add-scag'); await p.click('#add-go'); await p.waitForTimeout(1200);
+    const g=await p.evaluate(x=>({n:__DB.commessa_contratti.filter(c=>c.project_id===x.pid).length,
+      am:Number(__DB.projects.find(y=>y.id===x.pid).amount),sc:__DB.commessa_fatture.filter(f=>f.project_id===x.pid).length,
+      st:__DB.preventivi.find(y=>y.progressivo===902).stato}),ADX);
+    must(g.n===3&&g.am===12700&&g.sc===1&&g.st==='accettato','dopo il secondo addendum: '+JSON.stringify(g));
+    const ancora=await p.evaluate(async id=>{ const r=await attoDaPreventivo(byId(S.preventivi,id),S.projects.find(x=>x.name==='Ampliamento Verdi').id,{});
+      return {r:!!r,n:__DB.commessa_contratti.filter(c=>c.preventivo_id===id).length}; },pv2);
+    must(!ancora.r&&ancora.n===1,'lo stesso preventivo inserito due volte');
+    await p.evaluate(()=>go('preventivi')); await p.waitForTimeout(300);
+    must(await p.locator('.pv-desk [data-prevadd="'+pv2+'"]').count()===0,'il pulsante resta dopo l inserimento');
+  });
+  await t('un preventivo fatto dalla commessa si inserisce nel suo contratto',async()=>{
+    const id=await p.evaluate(()=>__DB.preventivi.find(x=>x.cliente_nome==='Anna Rossi').id);
+    must(await p.locator('.pv-desk [data-prevadd="'+id+'"]').count()===1,'manca «Al contratto» per il preventivo della commessa');
+    await p.click('.pv-desk [data-prevadd="'+id+'"]'); await p.waitForSelector('#m-addendum.show',{timeout:3000});
+    const pid=await p.evaluate(id=>__DB.preventivi.find(x=>x.id===id).project_id,id);
+    must(await p.inputValue('#add-pid')===pid,'non propone la commessa da cui nasce il preventivo');
+    await p.evaluate(()=>closeM('m-addendum'));
   });
 
   /* ---------------- NOTE E SCHEDE DA STAMPARE ---------------- */

@@ -55,6 +55,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 34. [`sql/035_solleciti.sql`](sql/035_solleciti.sql) — solleciti di pagamento e messa in mora con l'avvocato
 35. [`sql/036_viste_sicure.sql`](sql/036_viste_sicure.sql) — **sicurezza: le viste rispettano le regole di accesso, niente si legge senza login** (applicata il 21/10/2026)
 36. [`sql/037_funzioni_private.sql`](sql/037_funzioni_private.sql) — **sicurezza: le funzioni del database non si chiamano da fuori** (applicata il 21/10/2026)
+37. [`sql/038_contratto_da_preventivo.sql`](sql/038_contratto_da_preventivo.sql) — l'atto del contratto ricorda il preventivo da cui nasce
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -741,6 +742,26 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Nella scheda *Anagrafica* della commessa il riquadro **Preventivi** elenca
   quelli collegati e **+ Preventivo per questo committente** ne apre uno nuovo
   già intestato, con l'immobile della commessa.
+
+**Il preventivo entra nel contratto** (migrazione 038).
+
+- Creando la commessa da un preventivo, nella sezione *Fatturazione →
+  Contratto e integrazioni* nasce già l'**incarico originario**: oggetto
+  (tipo di preventivo e immobile), importo delle prestazioni, data,
+  riferimento «Preventivo n. … del …» e, nelle note, le voci A, B, C… con il
+  loro importo.
+- **Addendum**: un preventivo per prestazioni aggiuntive di una commessa già
+  avviata si inserisce con **➕ Addendum** (riga del preventivo o editor). Si
+  sceglie la commessa — sono proposte per prime quelle dello stesso
+  committente — e la finestra dice che cosa succede prima di confermare:
+  diventa l'**integrazione n. …** e l'importo della commessa passa da … a ….
+  Se la commessa non aveva ancora atti, il suo importo scritto a mano viene
+  prima registrato come incarico originario, così non si perde. Si può creare
+  anche lo scaglione di fatturazione dell'addendum (proposto).
+- Un preventivo fatto dalla commessa, o già collegato a una commessa senza
+  atto, mostra **➕ Al contratto**: un clic e conferma.
+- Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
+  inserisce due volte, e il pulsante sparisce una volta inserito.
 
 ## Note e schede da stampare
 
