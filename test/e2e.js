@@ -3939,6 +3939,17 @@ function launchOpts(){
     must(Math.abs(g.imp-PVC.imp)<0.01,'importo '+g.imp+' invece di '+PVC.imp);
     must(g.desc.indexOf('Dal preventivo '+PVC.num)===0&&/\nA\. /.test(g.desc),'descrizione: '+g.desc);
     must(g.name&&/preventivo/.test(g.box)&&/dal preventivo/.test(g.t),'nome o avviso mancanti');
+    const cod=await p.inputValue('#w-cod'), atteso=await p.evaluate(()=>prossimoCodice());
+    must(cod===atteso,'codice non progressivo: '+cod+' invece di '+atteso);
+    must(g.name.indexOf(cod+'_BIANCHI COSTRUZIONI SRL_')===0&&g.name===g.name.toUpperCase(),'nome non CODICE_CLIENTE_SINTESI: '+g.name);
+    await p.fill('#w-cod','2026_77'); await p.waitForTimeout(100);
+    must((await p.inputValue('#w-name')).indexOf('2026_77_BIANCHI COSTRUZIONI SRL_')===0,'il nome non segue il codice cambiato: '+(await p.inputValue('#w-name')));
+    await p.fill('#w-cod',cod);
+    const imm=await p.evaluate(()=>[dividiImmobile('VIA PALMIRO TOGLIATTI 1 - 20027 - RESCALDINA (MI)'),dividiImmobile('VIA ROMA 3 A OSIMO'),
+      dividiImmobile('Via Mazzini 4, 62019 Recanati (MC)'),
+      nomeCommessa('2026_45','Ventinove Srl',sintesiDaPreventivo({immobile:'VIA PALMIRO TOGLIATTI 1 - 20027 - RESCALDINA (MI)',modello:'x',titolo:'Verifica parete'}))]);
+    must(imm[0].comune==='RESCALDINA'&&imm[0].indirizzo==='VIA PALMIRO TOGLIATTI 1'&&imm[1].comune==='OSIMO'&&imm[2].comune==='Recanati','lettura dell immobile: '+JSON.stringify(imm));
+    must(imm[3]==='2026_45_VENTINOVE SRL_RESCALDINA - VERIFICA PARETE','nome di esempio: '+imm[3]);
     await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
     await p.waitForTimeout(1600);
     const r=await p.evaluate(id=>{ const x=__DB.preventivi.find(y=>y.id===id); const pr=x&&__DB.projects.find(y=>y.id===x.project_id);

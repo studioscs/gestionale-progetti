@@ -733,9 +733,16 @@ compresi, che stanno solo nella scheda e non nella commessa).
 **Dal preventivo alla commessa, e ritorno.**
 
 - In *Preventivi* (riga o editor) **➜ Crea commessa** apre il modulo già
-  compilato: committente dalla sua scheda (creata al volo se manca), importo
+  compilato. Il **codice** è il primo libero dell'anno e il **nome** segue la
+  regola dello studio `CODICE_CLIENTE_SINTESI`, in maiuscolo: per esempio
+  `2026_45_VENTINOVE SRL_RESCALDINA - VERIFICA PARETE`. La sintesi è il comune
+  dell'immobile (letto da «Via … 3 a Osimo», «Via …, 62019 Recanati (MC)»,
+  «Via … - 20027 - Rescaldina (MI)») e il tipo di lavoro (il titolo del
+  preventivo se personalizzato, altrimenti il nome del modello); si ritocca a
+  mano. Cambiando il codice, il nome lo segue. Indirizzo e comune
+  dell'immobile vanno nei rispettivi campi. Inoltre: committente dalla sua scheda (creata al volo se manca), importo
   = somma delle prestazioni senza cassa e IVA, descrizione con le voci del
-  preventivo, immobile nell'indirizzo, percorso proposto dal modello
+  preventivo, percorso proposto dal modello
   (strutture, sanatoria → violazioni sismiche, architettonico → edilizia
   privata). Salvata la commessa, il preventivo risulta **accettato e
   collegato**: al posto del pulsante compare **📁 Commessa**, che la apre.

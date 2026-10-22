@@ -1533,7 +1533,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.2';
+const VERSIONE = '2026.10.22.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -6322,10 +6322,16 @@ async function commessaDaPreventivo(id) {
   Object.keys(dalPrev).forEach(k => { if (!valCli(WZ.d[k]) && valCli(dalPrev[k])) WZ.d[k] = dalPrev[k]; });
   if (!c) WZ.cli = { tipo: tipoProbabile(x.cliente_piva, x.cliente_cf), note: null };
   const voci = (x.voci || []).filter(v => String(v.descrizione || '').trim());
-  const m = modelloDi(x.modello);
+  const imm = dividiImmobile(x.immobile);
+  /* Il nome segue la regola dello studio: CODICE_CLIENTE_SINTESI, con il
+     codice progressivo gia' proposto (es. 2026_45_VENTINOVE SRL_RESCALDINA -
+     VERIFICA PARETE). La sintesi e' comune dell'immobile e tipo di lavoro:
+     si ritocca a mano se serve. */
+  WZ.d.codice = prossimoCodice();
   Object.assign(WZ.d, {
-    name: [(m && m.nome) || x.titolo || 'Incarico', x.immobile || x.cliente_nome].filter(Boolean).join(' — '),
-    indirizzo: x.immobile || null,
+    name: nomeCommessa(WZ.d.codice, WZ.d.client || x.cliente_nome, sintesiDaPreventivo(x)),
+    indirizzo: imm.indirizzo || null,
+    comune: imm.comune || WZ.d.comune || null,
     amount: r2(contiDocumento(x.voci || []).imponibile) || null,
     description: 'Dal preventivo ' + numeroPreventivo(x) + ' del ' + fdate(x.data) + (voci.length ? ':\n'
       + voci.map((v, i) => lettera(i) + '. ' + String(v.descrizione).trim()).join('\n') : '')
@@ -6337,6 +6343,32 @@ async function commessaDaPreventivo(id) {
   el('mp-t').textContent = 'Nuova Commessa dal preventivo ' + numeroPreventivo(x);
   drawWizard();
 }
+/* "VIA ROMA 12 A RECANATI" oppure "Via Roma 12, Recanati": indirizzo e comune */
+function dividiImmobile(t) {
+  const s = String(t || '').trim();
+  if (!s) return { indirizzo: '', comune: '' };
+  /* "... - 20027 - RESCALDINA (MI)" oppure "..., 62019 Recanati (MC)" */
+  let m = s.match(/^(.*?)[\s,\-]*\b\d{5}\b[\s,\-]*([^\d(,\-][^\d(,]*?)\s*(?:\([A-Za-z]{2}\))?$/);
+  if (m && m[2].trim()) return { indirizzo: m[1].trim(), comune: m[2].trim() };
+  m = s.match(/^(.*\S)\s*,\s*([^,\d]+?)\s*(?:\([A-Za-z]{2}\))?$/);
+  if (m) return { indirizzo: m[1].trim(), comune: m[2].trim() };
+  /* "VIA ROMA 3 A OSIMO", "CENTRO COMMERCIALE IN RESCALDINA" */
+  m = s.match(/^(.*\S)\s+(?:A|IN)\s+([^\d]+?)\s*(?:\([A-Za-z]{2}\))?$/i);
+  if (m && m[2].trim().split(/\s+/).length <= 3) return { indirizzo: m[1].trim(), comune: m[2].trim() };
+  return { indirizzo: s, comune: '' };
+}
+/* Il tipo di lavoro in poche parole: il titolo scritto nel preventivo se e'
+   stato personalizzato, altrimenti il nome del modello */
+function lavoroDelPreventivo(x) {
+  const m = modelloDi(x.modello);
+  const tit = String(x.titolo || '').replace(/^PREVENTIVO\s+(TIPO\s+)?/i, '').trim();
+  const base = m ? String(m.titolo || '').replace(/^PREVENTIVO\s+(TIPO\s+)?/i, '').trim() : '';
+  return (tit && tit.toUpperCase() !== base.toUpperCase() ? tit : (m && m.nome)) || tit || 'INCARICO';
+}
+const sintesiDaPreventivo = x => [dividiImmobile(x.immobile).comune, lavoroDelPreventivo(x)].filter(Boolean).join(' - ');
+const nomeCommessa = (codice, cliente, sintesi) => [codice, cliente, sintesi]
+  .map(v => String(v || '').trim().toUpperCase()).filter(Boolean).join('_');
+
 /* ---------------------------------------------------------------------------
    DAL PREVENTIVO AL CONTRATTO DELLA COMMESSA
    Un preventivo accettato e' un atto del contratto: l'incarico originario se
@@ -12937,6 +12969,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', e => { const b = e.target.closest('[data-notaoggi]');
     if (b) { e.preventDefault(); notaOggi(b.dataset.notaoggi); } });
   el('cl-del').onclick  = () => delCliente(el('cl-id').value);
+  /* Il nome comincia con il codice (CODICE_CLIENTE_...): cambiando il codice
+     a mano, il nome lo segue - finche' comincia ancora con quello vecchio. */
+  el('mp-body').addEventListener('focusin', e => { if (e.target.id === 'w-cod') e.target.dataset.prima = e.target.value; });
+  el('mp-body').addEventListener('input', e => {
+    if (e.target.id !== 'w-cod' || !el('w-name')) return;
+    const prima = e.target.dataset.prima || '', ora = e.target.value.trim(), n = el('w-name');
+    if (prima && n.value.indexOf(prima + '_') === 0) { n.value = ora + n.value.slice(prima.length); }
+    e.target.dataset.prima = ora;
+  });
   el('mp-body').addEventListener('change', e => {
     if (e.target.id === 'w-clid') { wzCollect(); applicaCliente(e.target.value); drawWizard(); }
     /* Aggiorna al volo l'IBAN annunciato, senza ridisegnare il modulo e
