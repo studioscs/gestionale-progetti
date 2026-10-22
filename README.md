@@ -781,6 +781,24 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
   inserisce due volte, e il pulsante sparisce una volta inserito.
 
+## Firme del cliente: senza l'incarico
+
+L'incarico si firma con il **preventivo accettato**, che diventa commessa e
+contratto dalla sezione *Preventivi*: la sezione *Firme del cliente* non lo
+chiede più. Le voci «Preventivo, incarico e privacy» e «Lettera d'incarico»
+non nascono più nei percorsi di lavoro, e quelle delle commesse già create non
+compaiono più fra le firme da raccogliere né nel contatore (restano nella
+checklist della commessa, dove si possono spuntare o eliminare). Nel percorso
+della sanatoria resta solo l'*informativa scritta sugli esiti possibili*, che
+è un documento a sé.
+
+La sezione resta per quello che il preventivo non copre: le **procure
+speciali** (una per ogni pratica telematica, art. 1392 c.c.), i documenti
+degli aventi titolo, gli assensi dei comproprietari o del condominio,
+l'approvazione della soluzione, le firme che maturano a lavori avviati — tutte
+da raccogliere, possibilmente, in un unico appuntamento con la distinta
+stampata.
+
 ## Note e schede da stampare
 
 **Note.** Ci sono in quattro posti:

@@ -1534,7 +1534,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.4';
+const VERSIONE = '2026.10.22.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2006,9 +2006,7 @@ interno: {
     { t:'Verifica catastale e del titolo edilizio pregresso', h:7, rif:'art. 9-bis DPR 380/2001', ms:1,
       cont:'Visura e planimetria catastale, ultimo titolo edilizio e confronto con lo stato reale: le difformità vanno scoperte ora, non dopo la presentazione.' },
     { t:'Conferma che l’intervento rientra in CILA', h:4, rif:'art. 6-bis DPR 380/2001', ms:1,
-      cont:'Nessuna opera strutturale, nessuna modifica a prospetti, volumi o destinazione d’uso; verifica del regolamento condominiale e degli obblighi verso l’amministratore.' },
-    { t:'Preventivo, incarico e privacy', h:3, cat:'firma_cliente',
-      cont:'Preventivo accettato, lettera d’incarico e informativa privacy firmati prima di iniziare il lavoro.' }
+      cont:'Nessuna opera strutturale, nessuna modifica a prospetti, volumi o destinazione d’uso; verifica del regolamento condominiale e degli obblighi verso l’amministratore.' }
   ]},
   { k:'firme', nome:'2. Firme del cliente', ic:'✍️', dur:7,
     desc:'Tutte le firme del committente in un solo appuntamento. La procura speciale vale per una sola pratica: se ne servono più d’una si fanno firmare tutte insieme adesso.', att:[
@@ -2070,8 +2068,6 @@ privato: {
       cont:'Confronto fra rilievo, catasto e ultimo titolo secondo la definizione di stato legittimo riscritta dal Salva Casa (L. 105/2024); le difformità vanno classificate prima di scegliere come sistemarle.' },
     { t:'Verifica dei vincoli e della fattibilità urbanistica', h:18, ente:'Comune / SUE', rif:'art. 30 DPR 380/2001', ms:1,
       cont:'Certificato di destinazione urbanistica, vincoli paesaggistici, monumentali, idrogeologici e sismici, e un sì, un no o un sì con condizioni messo per iscritto, con il quadro economico di massima.' },
-    { t:'Preventivo, incarico e privacy', h:7, cat:'firma_cliente', ms:1,
-      cont:'Prestazioni comprese ed escluse, tempi, compenso e spese; informativa privacy firmata insieme all’incarico.' },
     { t:'Tolleranze costruttive e sanatoria delle difformità', h:30, cond:'difformita', ms:1,
       rif:'artt. 34-bis, 36 e 36-bis DPR 380/2001',
       cont:'Ciò che rientra nelle tolleranze ampliate dal Salva Casa si dichiara e non si sana; per il resto accertamento di conformità, da chiudere prima del nuovo titolo.' },
@@ -2100,7 +2096,7 @@ privato: {
       cont:'Nome, codice fiscale e quote di ciascun avente titolo, titolo di proprietà e diritti di terzi, copia del documento di ogni sottoscrittore.' },
     { t:'Assenso dei comproprietari o delibera condominiale', h:6, opt:1, cat:'firma_cliente',
       cont:'Consenso scritto di tutti i comproprietari; per le parti comuni, delibera assembleare con le maggioranze di legge.' },
-    { t:'Unica seduta di firma: incarico, procure e assensi', h:4, cat:'firma_cliente', ms:1, rif:'art. 1392 c.c.',
+    { t:'Unica seduta di firma: procure e assensi', h:4, cat:'firma_cliente', ms:1, rif:'art. 1392 c.c.',
       cont:'Disciplinare d’incarico, una procura speciale per ogni pratica telematica e le dichiarazioni, tutto firmato nello stesso appuntamento.' }
   ]},
 
@@ -2503,9 +2499,7 @@ strutture: {
   fasi: [
   { k:'avvio', nome:'1. Avvio e dati', ic:'📋', dur:14, att:[
     { t:'Acquisizione del progetto, rilievo e ricerca dei progetti pregressi', h:20,
-      cont:'Progetto architettonico e vincoli dimensionali, rilievo strutturale dello stato di fatto, progetti strutturali depositati in passato, classe d’uso e vita nominale (NTC 2018 §2.4).' },
-    { t:'Lettera d’incarico', h:2, cat:'firma_cliente', ms:1,
-      cont:'Prestazioni strutturali comprese ed escluse, tempi e compenso, firmati prima di iniziare.' }
+      cont:'Progetto architettonico e vincoli dimensionali, rilievo strutturale dello stato di fatto, progetti strutturali depositati in passato, classe d’uso e vita nominale (NTC 2018 §2.4).' }
   ]},
   { k:'firme', nome:'2. Firme del cliente', ic:'✍️', dur:7,
     desc:'Il deposito sismico e la denuncia delle opere in c.a. si presentano telematicamente: le procure si raccolgono adesso, non a calcolo finito.', att:[
@@ -2557,9 +2551,7 @@ vincolo: {
     { t:'Sopralluogo e ricognizione dei vincoli', h:18, ms:1,
       cont:'Foto di dettaglio, decreti di vincolo, ambito di tutela e ente competente.' },
     { t:'Ricerca storica e d’archivio sull’immobile', h:12, cond:'monumentale',
-      cont:'Fonti d’archivio e storiche che motivano le scelte di intervento sul bene.' },
-    { t:'Lettera d’incarico', h:2, cat:'firma_cliente', ms:1,
-      cont:'Prestazioni, tempi e compenso firmati prima di iniziare.' }
+      cont:'Fonti d’archivio e storiche che motivano le scelte di intervento sul bene.' }
   ]},
   { k:'firme', nome:'2. Firme del cliente', ic:'✍️', dur:7,
     desc:'Le istanze agli enti si presentano per conto del committente: procure e assensi si raccolgono prima di iniziare.', att:[
@@ -2622,8 +2614,8 @@ sismica: {
     { t:'Ricostruzione della vicenda e verifiche preliminari', h:14, ms:1,
       rif:'OPCM 3274/2003 — classificazione regionale vigente',
       cont:'Colloquio con il committente, occasione della regolarizzazione (compravendita, mutuo, contenzioso, nuovo intervento), zona sismica del Comune e procedimenti sanzionatori già avviati.' },
-    { t:'Preventivo, incarico e informativa sui rischi', h:7, cat:'firma_cliente', ms:1,
-      cont:'Disciplinare d’incarico e informativa scritta sugli esiti possibili, compreso quello in cui la regolarizzazione non è ammessa.' }
+    { t:'Informativa scritta sugli esiti possibili', h:3, cat:'firma_cliente', ms:1,
+      cont:'Gli esiti possibili, compreso quello in cui la regolarizzazione non è ammessa, firmati per presa visione. L’incarico è il preventivo accettato, già nel contratto della commessa.' }
   ]},
 
   { k:'ricostruzione', nome:'2. Ricostruzione documentale', ic:'🗂️', dur:35,
@@ -3848,7 +3840,7 @@ function updBadges() {
   const nf = firmeAperte().length;
   el('b-firme').textContent = nf;
   el('b-firme').classList.toggle('alert', S.tasks.some(t =>
-    t.categoria === 'firma_cliente' && scadenzaViva(t) && isLate(t.due_date)));
+    firmaDaRaccogliere(t) && scadenzaViva(t) && isLate(t.due_date)));
 
   const pr = S.pratiche.filter(praticaOpen).length;
   el('b-prat').textContent = pr;
@@ -8718,14 +8710,20 @@ function mostraContenuto(id) {
    da convocarlo una volta sola. La procura speciale vale per una sola pratica:
    se ne servono cinque, si firmano tutte e cinque nello stesso appuntamento.
    =========================================================================== */
+/* La firma dell'incarico non e' piu' una firma da raccogliere qui: l'incarico
+   e' il preventivo accettato, che diventa commessa e contratto. Le voci
+   "Preventivo, incarico e privacy" e "Lettera d'incarico" non nascono piu'
+   nei percorsi; quelle delle commesse gia' create non si mostrano. */
+const FIRME_INCARICO = /^(preventivo,\s*incarico|lettera d.incarico)/i;
+const firmaDaRaccogliere = t => t.categoria === 'firma_cliente' && !FIRME_INCARICO.test(String(t.title || '').trim());
 function firmeAperte() {
   /* Stessa regola dello scadenzario: chiusa la fase, quello che conteneva non
      e' piu' in attesa di firma. */
-  return S.tasks.filter(t => t.categoria === 'firma_cliente' && daFare(t));
+  return S.tasks.filter(t => firmaDaRaccogliere(t) && daFare(t));
 }
 
 function rFirme() {
-  el('crumb').textContent = 'Documenti che aspettano la firma del committente.';
+  el('crumb').textContent = 'Procure, documenti e assensi che aspettano la firma del committente. L’incarico si firma con il preventivo.';
   const solo = S.fmProj || '';
   el('top-act').innerHTML =
       '<select class="sel" id="fm-p"><option value="">Tutte le commesse</option>'
@@ -8736,15 +8734,17 @@ function rFirme() {
   el('fm-p').onchange  = e => { S.fmProj = e.target.value; render(); };
   el('fm-all').onchange = e => { S.fmAll = e.target.checked; render(); };
 
-  let list = S.tasks.filter(t => t.categoria === 'firma_cliente');
+  let list = S.tasks.filter(firmaDaRaccogliere);
   if (!S.fmAll) list = list.filter(isOpen);
   if (solo) list = list.filter(t => t.project_id === solo);
 
   if (!list.length) {
     el('page').innerHTML = '<div class="card"><div class="empty"><i>✍️</i>'
       + '<p>Nessun documento in attesa di firma.</p>'
-      + '<p style="font-size:12px;margin-top:6px">Le procure vengono create automaticamente '
-      + 'generando una commessa: una per ogni pratica telematica prevista.</p></div></div>';
+      + '<p style="font-size:12px;margin-top:6px">Qui compaiono le <b>procure speciali</b> (una per ogni pratica '
+      + 'telematica aperta), i documenti degli aventi titolo, gli assensi dei comproprietari o del condominio e '
+      + 'le altre firme che servono durante il lavoro. L’incarico non è qui: è il preventivo accettato, che '
+      + 'diventa commessa e contratto dalla sezione Preventivi.</p></div></div>';
     return;
   }
 
@@ -8759,7 +8759,9 @@ function rFirme() {
   list.slice().sort(ord).forEach(t => (per[t.project_id] = per[t.project_id] || []).push(t));
 
   el('page').innerHTML =
-      '<div class="ibox mb16">La <b>procura speciale</b> per la presentazione telematica vale per una '
+      '<div class="ibox mb16">L’<b>incarico</b> non si raccoglie qui: è il preventivo accettato, che diventa commessa '
+    + 'e contratto dalla sezione <b>Preventivi</b>.<br>'
+    + 'La <b>procura speciale</b> per la presentazione telematica vale per una '
     + 'sola pratica (art. 1392 c.c.) e va firmata a mano, con copia del documento d’identità di ogni '
     + 'sottoscrittore. Raccogliendole tutte in un unico appuntamento il cliente non deve tornare.<br>'
     + '<b>Attenzione:</b> se dopo la firma cambiano anagrafica o dati catastali, le procure vanno '
@@ -8781,7 +8783,7 @@ function rFirme() {
 /* Distinta cartacea da portare all'appuntamento */
 function stampaFirme(pid) {
   const p = byId(S.projects, pid) || {};
-  const list = S.tasks.filter(t => t.categoria === 'firma_cliente' && t.project_id === pid && isOpen(t))
+  const list = S.tasks.filter(t => firmaDaRaccogliere(t) && t.project_id === pid && isOpen(t))
     .sort((a, b) => {
       const A = pd(a.due_date), B = pd(b.due_date);
       if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;

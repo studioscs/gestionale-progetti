@@ -4003,6 +4003,29 @@ function launchOpts(){
     await p.evaluate(()=>closeM('m-prev'));
   });
 
+  /* ---------------- FIRME DEL CLIENTE SENZA L'INCARICO ---------------- */
+  await t('i percorsi non chiedono più la firma dell incarico: è il preventivo',async()=>{
+    const g=await p.evaluate(()=>{ const v=[]; Object.keys(TEMPLATES).forEach(k=>TEMPLATES[k].fasi.forEach(f=>f.att.forEach(a=>{
+      if(a.cat==='firma_cliente') v.push(a.t); })));
+      return {incarico:v.filter(t=>/incarico/i.test(t)),procure:v.filter(t=>/procure/i.test(t)).length}; });
+    must(!g.incarico.length,'ancora firme d incarico nei percorsi: '+g.incarico.join(', '));
+    must(g.procure>0,'sparite anche le firme delle procure');
+  });
+  await t('in Firme del cliente restano procure e documenti, non l incarico delle commesse già create',async()=>{
+    const g=await p.evaluate(async()=>{
+      const {data:pr}=await SB.from('projects').insert({codice:'FIR_1',name:'Firme prova',status:'attivo'}).select().single();
+      await SB.from('tasks').insert({project_id:pr.id,title:'Preventivo, incarico e privacy',status:'da_fare',categoria:'firma_cliente',sort_order:1,is_milestone:false,opzionale:false});
+      await SB.from('tasks').insert({project_id:pr.id,title:'Lettera d’incarico',status:'da_fare',categoria:'firma_cliente',sort_order:2,is_milestone:false,opzionale:false});
+      await SB.from('tasks').insert({project_id:pr.id,title:'Procura speciale - SCIA',status:'da_fare',categoria:'firma_cliente',sort_order:3,is_milestone:false,opzionale:false});
+      await loadAll(true); S.fmProj=pr.id; go('firme');
+      const txt=el('page').textContent; S.fmProj='';
+      return {txt,aperte:firmeAperte().filter(t=>t.project_id===pr.id).map(t=>t.title)}; });
+    must(/Procura speciale - SCIA/.test(g.txt),'la procura non compare');
+    must(!/Preventivo, incarico e privacy|Lettera d’incarico/.test(g.txt.replace(/L’incarico non si raccoglie qui[^.]*\./,'')),'compare ancora la firma dell incarico');
+    must(g.aperte.length===1,'conteggio delle firme da raccogliere: '+JSON.stringify(g.aperte));
+    must(/L’incarico non si raccoglie qui/.test(g.txt),'manca la spiegazione');
+  });
+
   /* ---------------- PREVENTIVO NEL CONTRATTO DI UNA COMMESSA ESISTENTE ---------------- */
   let ADX=null;
   await t('commessa esistente ma contratto vuoto: il preventivo diventa il contratto originario, non un addendum',async()=>{
