@@ -610,7 +610,7 @@ tbody tr:hover td { background:#f0f4f9; }
 <!-- Preventivo accettato come addendum di una commessa -->
 <div class="ov" id="m-addendum">
   <div class="modal" style="max-width:560px">
-    <div class="mh"><h3 id="add-t">Addendum al contratto</h3><button class="mx" data-close="m-addendum">&#10005;</button></div>
+    <div class="mh"><h3 id="add-t">Nel contratto della commessa</h3><button class="mx" data-close="m-addendum">&#10005;</button></div>
     <div class="mb">
       <div class="ibox mb16" id="add-info" style="font-size:12.5px"></div>
       <div class="fg"><label class="fl">Commessa</label><select class="fc" id="add-pid"></select></div>
@@ -781,7 +781,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <button class="btn" id="pv-dup" style="display:none">Duplica come nuovo modello</button>
         <button class="btn" id="pv-copia" style="display:none">&#10697; Duplica preventivo</button>
         <button class="btn" id="pv-comm" style="display:none" title="La commessa nasce con committente, importo e voci di questo preventivo">&#10140; Crea commessa</button>
-        <button class="btn" id="pv-add" style="display:none" title="Prestazioni aggiuntive di una commessa esistente: diventa un’integrazione del contratto">&#10133; Addendum a commessa</button>
+        <button class="btn" id="pv-add" style="display:none" title="Commessa già creata: diventa il contratto originario se il contratto è ancora vuoto, altrimenti un addendum">&#10133; A commessa esistente</button>
         <button class="btn" id="pv-damod" style="display:none" title="Voci, articoli e note diventano un modello nuovo">&#128203; Salva come modello</button>
       </span>
       <button class="btn" data-close="m-prev">Chiudi</button>
@@ -1533,7 +1533,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.1';
+const VERSIONE = '2026.10.22.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5860,7 +5860,7 @@ const azioniPrev = x => '<div class="pv-az">'
             ? '<button class="btn btn-xs btn-p" data-prevadd="' + x.id + '" title="Inserisci il preventivo nel contratto della commessa">&#10133; Al contratto</button>' : '')
       : x.stato !== 'rifiutato' && canW()
         ? '<button class="btn btn-xs" data-prevcomm="' + x.id + '" title="Crea la commessa: committente, importo, voci e incarico nel contratto">&#10140; Crea commessa</button>'
-          + '<button class="btn btn-xs" data-prevadd="' + x.id + '" title="Prestazioni aggiuntive di una commessa esistente: diventa un’integrazione del contratto">&#10133; Addendum</button>' : '')
+          + '<button class="btn btn-xs" data-prevadd="' + x.id + '" title="Commessa già creata: diventa il contratto originario se il contratto è ancora vuoto, altrimenti un addendum">&#10133; A commessa esistente</button>' : '')
   + '</div>';
 function rPreventivi() {
   if (!vedeTutto()) {
@@ -5984,7 +5984,7 @@ function apriEditorPrev() {
   el('pv-comm').style.display = (!mod && canW() && (giaComm || PV.stato !== 'rifiutato')) ? 'inline-flex' : 'none';
   el('pv-comm').innerHTML = giaComm ? '&#128193; Apri commessa' : '&#10140; Crea commessa';
   el('pv-add').style.display = (!mod && canW() && PV.stato !== 'rifiutato' && !(PV.id && attoDelPreventivo(PV))) ? 'inline-flex' : 'none';
-  el('pv-add').innerHTML = giaComm ? '&#10133; Inserisci nel contratto' : '&#10133; Addendum a commessa';
+  el('pv-add').innerHTML = giaComm ? '&#10133; Inserisci nel contratto' : '&#10133; A commessa esistente';
   el('pv-del').style.display = (!mod && PV.id) ? 'inline-flex' : 'none';
   el('pv-ripr').style.display = (mod && PV.base && PV.modificato) ? 'inline-flex' : 'none';
   el('pv-dup').style.display = (mod && PV.chiave) ? 'inline-flex' : 'none';
@@ -6359,27 +6359,22 @@ function datiAttoDaPreventivo(pv) {
       return lettera(i) + '. ' + String(v.descrizione).trim() + ' — ' + feuro(c.imponibile); }).join('\n') || null
   };
 }
-/* Crea l'atto. opz: tipo ('incarico'|'integrazione', altrimenti si deduce),
-   scaglione (crea anche lo scaglione di fatturazione), importo (se diverso). */
+/* Crea l'atto. opz: scaglione (crea anche lo scaglione di fatturazione),
+   importo (se diverso da quello del preventivo). Incarico o integrazione lo
+   decide il contratto della commessa, vedi sotto. */
 async function attoDaPreventivo(pv, pid, opz) {
   opz = opz || {};
   const p = byId(S.projects, pid); if (!p || !pv) return null;
   if (attoDelPreventivo(Object.assign({}, pv, { project_id: pid }))) { toast('Questo preventivo è già nel contratto.', 'warning'); return null; }
   const d = datiAttoDaPreventivo(pv);
   if (opz.importo !== null && opz.importo !== undefined && !isNaN(opz.importo)) d.importo = r2(opz.importo);
-  let atti = contrattiOf(pid);
-  let tipo = opz.tipo || (atti.length ? 'integrazione' : 'incarico');
-  if (tipo === 'incarico' && atti.some(c => c.tipo === 'incarico')) tipo = 'integrazione';
-  /* Una commessa senza atti ha l'importo scritto a mano: e' l'incarico gia'
-     firmato. Prima dell'integrazione lo si registra come incarico originario,
-     altrimenti l'importo della commessa diventerebbe quello del solo addendum. */
-  if (tipo === 'integrazione' && !atti.length && Number(p.amount) > 0) {
-    const { error } = await SB.from('commessa_contratti').insert({ project_id: pid, numero: 1, tipo: 'incarico',
-      oggetto: 'Incarico professionale come da disciplinare', importo: r2(Number(p.amount)), stato: 'accettato',
-      data_atto: p.start_date || null, riferimento: 'Importo della commessa prima degli atti', created_by: S.me.id });
-    if (error) { sbErr(error, 'incarico originario'); return null; }
-    atti = [{ numero: 1 }];
-  }
+  /* LA DISCRIMINANTE E' IL CONTRATTO, NON LA COMMESSA
+     Una commessa puo' esistere senza che nessuno ne abbia inserito il
+     contratto. Finche' non c'e' nessun atto, il primo preventivo che entra E'
+     il contratto originario; solo dopo, i preventivi successivi sono addendum.
+     Il chiamante non puo' forzare il contrario. */
+  const atti = contrattiOf(pid);
+  const tipo = atti.length ? 'integrazione' : 'incarico';
   const numero = atti.reduce((a, c) => Math.max(a, c.numero || 0), 0) + 1;
   const pay = { project_id: pid, numero, tipo, oggetto: d.oggetto, importo: d.importo, stato: 'accettato',
     data_atto: todayISO(), riferimento: d.riferimento, note: d.note, preventivo_id: pv.id, created_by: S.me.id };
@@ -6407,13 +6402,13 @@ async function attoDaPreventivo(pv, pid, opz) {
 }
 
 /* La finestra dell'addendum: a quale commessa, che cosa cambia */
-let ADD = null;
+let ADD = null, ADD_PID = null;
 function apriAddendum(id) {
   const pv = byId(S.preventivi, id); if (!pv) return;
   if (attoDelPreventivo(pv)) return toast('Questo preventivo è già nel contratto della commessa.', 'warning');
   ADD = pv.id;
   const d = datiAttoDaPreventivo(pv);
-  el('add-t').textContent = (pv.project_id ? 'Nel contratto — ' : 'Addendum al contratto — ') + 'Preventivo ' + numeroPreventivo(pv);
+  el('add-t').textContent = 'Nel contratto della commessa — Preventivo ' + numeroPreventivo(pv);
   el('add-info').innerHTML = '<b>' + esc(pv.cliente_nome || '') + '</b> · ' + esc(d.oggetto)
     + '<br>Importo (prestazioni, senza cassa e IVA): <b>' + feuro(d.importo) + '</b>';
   const cliente = clienteDelPreventivo(pv);
@@ -6427,7 +6422,7 @@ function apriAddendum(id) {
     + (sue.length ? '<optgroup label="Commesse di ' + esc(pv.cliente_nome || 'questo committente') + '">' + sue.map(opt).join('') + '</optgroup>' : '')
     + (altre.length ? '<optgroup label="Altre commesse">' + altre.map(opt).join('') + '</optgroup>' : '');
   if (!pv.project_id && sue.length === 1) el('add-pid').value = sue[0].id;
-  el('add-scag').checked = true;
+  ADD_PID = undefined;
   anteprimaAddendum();
   openM('m-addendum');
 }
@@ -6439,25 +6434,25 @@ function anteprimaAddendum() {
   const d = datiAttoDaPreventivo(pv), co = contoContratti(pid), atti = co.list;
   const n = atti.reduce((a, c) => Math.max(a, c.numero || 0), 0) + 1;
   let h;
-  if (!atti.length && Number(p.amount) > 0)
-    h = 'La commessa non ha ancora atti: il suo importo attuale, <b>' + feuro(p.amount) + '</b>, viene registrato come '
-      + '<b>incarico originario (n. 1)</b> e questo preventivo diventa l’<b>integrazione n. 2</b>.<br>'
-      + 'Importo della commessa: ' + feuro(p.amount) + ' → <b>' + feuro(r2(Number(p.amount) + d.importo)) + '</b>';
-  else if (!atti.length)
-    h = 'La commessa non ha ancora atti: questo preventivo diventa l’<b>incarico originario</b>.<br>'
-      + 'Importo della commessa: <b>' + feuro(d.importo) + '</b>';
+  if (!atti.length)
+    h = 'Nel contratto di questa commessa non è ancora inserito nessun atto: questo preventivo diventa il '
+      + '<b>contratto originario (incarico n. 1)</b>, non un addendum.<br>'
+      + 'Importo della commessa: ' + (Number(p.amount) > 0 && Math.abs(Number(p.amount) - d.importo) > 0.005
+          ? feuro(p.amount) + ' (scritto a mano) → <b>' + feuro(d.importo) + '</b>' : '<b>' + feuro(d.importo) + '</b>');
   else
     h = 'Diventa l’<b>integrazione n. ' + n + '</b> del contratto.<br>Importo della commessa: '
       + feuro(co.accettato) + ' → <b>' + feuro(r2(co.accettato + d.importo)) + '</b>';
   box.innerHTML = '<div class="ibox" style="font-size:12.5px">' + h + '</div>';
+  /* il contratto originario si fattura a rate, dalla scheda Fatturazione: lo
+     scaglione unico si propone solo per l'addendum */
+  if (ADD_PID !== pid) { el('add-scag').checked = !!atti.length; ADD_PID = pid; }
+  el('add-go').innerHTML = atti.length ? '&#10133; Inserisci come addendum' : '&#10133; Inserisci come contratto originario';
 }
 async function confermaAddendum() {
   const pv = byId(S.preventivi, ADD), pid = el('add-pid').value;
   if (!pv || !pid) return toast('Scegli la commessa.', 'error');
   setLoading('add-go', true);
-  const atti = contrattiOf(pid);
-  const a = await attoDaPreventivo(pv, pid, { scaglione: el('add-scag').checked,
-    tipo: atti.length || Number((byId(S.projects, pid) || {}).amount) > 0 ? 'integrazione' : 'incarico' });
+  const a = await attoDaPreventivo(pv, pid, { scaglione: el('add-scag').checked });
   setLoading('add-go', false);
   if (!a) return;
   closeM('m-addendum'); await loadAll(true);
@@ -11887,7 +11882,7 @@ async function wzSave() {
       const pv = byId(S.preventivi || [], WZ.daPrev);
       if (pv) {
         if (!byId(S.projects, data.id)) S.projects.push(data);
-        await attoDaPreventivo(pv, data.id, { tipo: 'incarico', scaglione: false,
+        await attoDaPreventivo(pv, data.id, { scaglione: false,
           importo: pay.amount !== null && pay.amount !== '' && pay.amount !== undefined ? Number(pay.amount) : null,
           cliente_id: pay.cliente_id });
       }

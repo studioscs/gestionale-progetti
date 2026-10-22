@@ -750,14 +750,17 @@ compresi, che stanno solo nella scheda e non nella commessa).
   (tipo di preventivo e immobile), importo delle prestazioni, data,
   riferimento «Preventivo n. … del …» e, nelle note, le voci A, B, C… con il
   loro importo.
-- **Addendum**: un preventivo per prestazioni aggiuntive di una commessa già
-  avviata si inserisce con **➕ Addendum** (riga del preventivo o editor). Si
-  sceglie la commessa — sono proposte per prime quelle dello stesso
-  committente — e la finestra dice che cosa succede prima di confermare:
-  diventa l'**integrazione n. …** e l'importo della commessa passa da … a ….
-  Se la commessa non aveva ancora atti, il suo importo scritto a mano viene
-  prima registrato come incarico originario, così non si perde. Si può creare
-  anche lo scaglione di fatturazione dell'addendum (proposto).
+- **Commessa già creata**: dal preventivo, **➕ A commessa esistente** (riga
+  o editor). Si sceglie la commessa — sono proposte per prime quelle dello
+  stesso committente — e la finestra dice che cosa succede prima di
+  confermare. **La discriminante è il contratto, non la commessa**:
+  - se nel contratto della commessa **non c'è ancora nessun atto** (qualcuno
+    ha creato la commessa senza inserire il contratto), il preventivo diventa
+    il **contratto originario** (incarico n. 1), e l'importo della commessa
+    diventa il suo, anche se prima ce n'era uno scritto a mano;
+  - se il contratto **c'è già**, il preventivo diventa un **addendum**
+    (integrazione n. …) e l'importo della commessa si somma. Per l'addendum
+    è proposto anche lo scaglione di fatturazione.
 - Un preventivo fatto dalla commessa, o già collegato a una commessa senza
   atto, mostra **➕ Al contratto**: un clic e conferma.
 - Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
