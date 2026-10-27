@@ -1534,7 +1534,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.22.6';
+const VERSIONE = '2026.10.27.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1557,7 +1557,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -4798,6 +4798,8 @@ function datiFattura(f) {
        scaglione, cosi' si sa cosa e' gia' stato chiesto al committente. */
     proformaNumero: f.proforma_numero || '',
     proformaData  : f.proforma_data || '',
+    /* la proforma e' stata davvero fatta (non e' solo il numero proposto) */
+    proformaFatta : !!f.proforma_numero,
     imponibile  : r2(impFattura(f)),
     /* L'oggetto e' la dicitura dell'incarico se c'e', altrimenti la descrizione
        dello scaglione: e' quello che l'ente rilegge per liquidare. */
@@ -4930,6 +4932,19 @@ function validaFattura(d) {
   return e;
 }
 
+/* RIFERIMENTO ALLA PROFORMA
+   Solo se la proforma e' stata fatta davvero: senza, la fattura non dice
+   niente. Il testo si accorcia, se serve, per restare nei 1000 caratteri che
+   il tracciato ammette per la descrizione - il riferimento non si perde. */
+const rifProforma = d => d && d.proformaFatta && String(d.proformaNumero || '').trim()
+  ? 'Rif. proforma n. ' + String(d.proformaNumero).trim() + (d.proformaData ? ' del ' + fdate(d.proformaData) : '') : '';
+function conRifProforma(testo, d, max) {
+  const rif = rifProforma(d); testo = String(testo || '');
+  if (!rif) return testo;
+  const spazio = (max || 1000) - rif.length - 3;
+  return (testo.length > spazio ? testo.slice(0, Math.max(0, spazio - 1)).trimEnd() + '…' : testo) + ' - ' + rif;
+}
+
 /* --------------------------------------------------------------------------
    GENERAZIONE XML FatturaPA 1.2
    FPA12 verso la Pubblica Amministrazione, FPR12 verso i privati.
@@ -4958,6 +4973,9 @@ function xmlDaDati(d) {
     : [{ descrizione: d.oggetto || d.descrizione, importo: c.imponibile }];
   const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
+  /* La fattura dice a quale proforma risponde, in fondo alla descrizione
+     dell'ultima prestazione: e' quello che il committente ha pagato. */
+  linee[linee.length - 1].descrizione = conRifProforma(linee[linee.length - 1].descrizione, d, 1000);
 
   /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA AL DOCUMENTO
      Esce come riga di solo testo, senza nessun numero accanto.
@@ -8422,7 +8440,8 @@ function disegnaRevisione() {
         ? (() => {
             const pre = premessaDa(d);
             const tutte = (pre ? [{ descrizione: pre, premessa: true }] : [])
-                            .concat(d.righe);
+                            .concat(d.righe.map((r, i) => i === d.righe.length - 1
+                              ? Object.assign({}, r, { descrizione: conRifProforma(r.descrizione || d.descrizione, d, 1000) }) : r));
             return '<div class="fg"><label class="fl">Righe della fattura</label>'
               + '<div style="font-size:12.5px;line-height:1.6;border:1px solid var(--bord);'
                 + 'border-radius:6px;padding:8px 10px">'
@@ -8438,6 +8457,8 @@ function disegnaRevisione() {
               + 'I servizi si modificano dallo scaglione, nella scheda Fatturazione.</div></div>';
           })()
         : '')
+    + (rifProforma(d) ? '<div class="ibox mb16" style="font-size:12.5px">In fondo alla descrizione della fattura: '
+        + '<b>' + esc(rifProforma(d)) + '</b></div>' : '')
     + '<div class="fg"><label class="fl">Oggetto del servizio</label>'
       + '<textarea class="fc" data-rev="oggetto" rows="3">' + esc(d.oggetto || '') + '</textarea>'
       + '<div class="hint">È la <b>prima riga della fattura</b>, quella senza importi. '

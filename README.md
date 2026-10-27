@@ -1123,6 +1123,15 @@ I PDF si scrivono nel browser con una libreria (pdfmake) che si scarica dal
 CDN la prima volta che serve: senza connessione il gestionale lo dice invece
 di bloccarsi.
 
+
+**La fattura richiama la proforma.** Se per lo scaglione è stata fatta la
+proforma, l'XML della fattura finale riporta in fondo alla descrizione
+dell'ultima prestazione `- Rif. proforma n. 2026/012 del 01/09/2026`. Se la
+proforma non è stata fatta non si scrive niente (il numero solo *proposto*
+nella finestra di revisione non conta). La descrizione si accorcia se serve,
+per restare nei 1000 caratteri ammessi dal tracciato: il riferimento non si
+perde. La finestra di revisione mostra il riferimento prima di generare.
+
 ## Costi generali dello studio
 
 Non tutto quello che lo studio paga appartiene a una commessa: la consulenza
