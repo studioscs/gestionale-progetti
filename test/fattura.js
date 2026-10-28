@@ -790,22 +790,21 @@ const cSp=ctx.calcolaFattura(10000,0,true), cNo=ctx.calcolaFattura(10000,0,false
 t('l IVA resta indicata',cSp.iva===2288&&cSp.totale===12688,[cSp.iva,cSp.totale]);
 t('ma non si incassa',cSp.netto===10400&&cNo.netto===12688,[cSp.netto,cNo.netto]);
 
-console.log('— RIFERIMENTO ALLA PROFORMA NELLA FATTURA —');
+console.log('— RIFERIMENTO ALLA PROFORMA NELLE NOTE DELLA FATTURA —');
 {
-  const ultimaDescr=x=>{ const ll=x.match(/<DettaglioLinee>[\s\S]*?<\/DettaglioLinee>/g)||[];
-    return ((ll[ll.length-1]||'').match(/<Descrizione>([\s\S]*?)<\/Descrizione>/)||[])[1]||''; };
-  const conPf=Object.assign({},dR,{proformaFatta:true,proformaNumero:'2026/012',proformaData:'2026-09-01'});
+  const causale=x=>(x.match(/<Causale>([\s\S]*?)<\/Causale>/g)||[]).map(c=>c.replace(/<\/?Causale>/g,'')).join('');
+  const descr=x=>(x.match(/<Descrizione>([\s\S]*?)<\/Descrizione>/g)||[]).join(' ');
+  const conPf=Object.assign({},dR,{causale:'',proformaFatta:true,proformaNumero:'2026/012',proformaData:'2026-09-01'});
   const r1=ctx.xmlDaDati(conPf);
   t('con la proforma l XML si genera',!r1.errori,r1.errori);
-  t('in fondo all ultima descrizione il riferimento alla proforma',/ - Rif\. proforma n\. 2026\/012 del 01\/09\/2026$/.test(ultimaDescr(r1.xml)),ultimaDescr(r1.xml));
-  t('una volta sola nel documento',(r1.xml.match(/Rif\. proforma/g)||[]).length===1,(r1.xml.match(/Rif\. proforma/g)||[]).length);
-  const senza=Object.assign({},dR,{proformaFatta:false,proformaNumero:'2026/099',proformaData:'2026-09-01'});
-  const r2x=ctx.xmlDaDati(senza);
-  t('senza proforma fatta non si scrive niente (neanche il numero solo proposto)',!/proforma/i.test(r2x.xml),null);
-  const lunga=Object.assign({},conPf,{righe:[{descrizione:'X'.repeat(1200),importo:5000}]});
-  const r3=ctx.xmlDaDati(lunga);
-  const d3=ultimaDescr(r3.xml);
-  t('descrizione lunga: resta nei 1000 caratteri e il riferimento non si perde',d3.length<=1000&&/Rif\. proforma n\. 2026\/012/.test(d3),d3.length);
+  t('le note riportano la proforma',causale(r1.xml)==='Rif. proforma n. 2026/012 del 01/09/2026',causale(r1.xml));
+  t('le descrizioni delle righe restano com erano',!/proforma/i.test(descr(r1.xml)),null);
+  const conNote=Object.assign({},conPf,{causale:'Pagamento a 30 giorni'});
+  const r2=ctx.xmlDaDati(conNote);
+  t('dopo le note scritte a mano, in fondo',causale(r2.xml)==='Pagamento a 30 giorni - Rif. proforma n. 2026/012 del 01/09/2026',causale(r2.xml));
+  const senza=Object.assign({},dR,{causale:'',proformaFatta:false,proformaNumero:'2026/099',proformaData:'2026-09-01'});
+  const r3=ctx.xmlDaDati(senza);
+  t('senza proforma fatta non si scrive niente (neanche il numero solo proposto)',!/proforma/i.test(r3.xml)&&!/<Causale>/.test(r3.xml),null);
 }
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');

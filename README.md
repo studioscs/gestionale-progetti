@@ -1125,12 +1125,13 @@ di bloccarsi.
 
 
 **La fattura richiama la proforma.** Se per lo scaglione è stata fatta la
-proforma, l'XML della fattura finale riporta in fondo alla descrizione
-dell'ultima prestazione `- Rif. proforma n. 2026/012 del 01/09/2026`. Se la
-proforma non è stata fatta non si scrive niente (il numero solo *proposto*
-nella finestra di revisione non conta). La descrizione si accorcia se serve,
-per restare nei 1000 caratteri ammessi dal tracciato: il riferimento non si
-perde. La finestra di revisione mostra il riferimento prima di generare.
+proforma, l'XML della fattura finale riporta nelle **note** (la `Causale`,
+quella che si legge stampando la fattura) `Rif. proforma n. 2026/012 del
+01/09/2026`, in fondo a quello eventualmente scritto in «Note in fattura». Se
+la proforma non è stata fatta non si scrive niente (il numero solo *proposto*
+nella finestra di revisione non conta). Le descrizioni delle righe restano
+com'erano. La finestra di revisione mostra il riferimento sotto le note prima
+di generare.
 
 ## Costi generali dello studio
 
