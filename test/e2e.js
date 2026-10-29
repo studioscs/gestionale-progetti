@@ -4084,6 +4084,37 @@ function launchOpts(){
     must(!/non sono in nessuno scaglione|superano il contratto/.test(await p.textContent('#page')),'avviso su una commessa a posto');
   });
 
+  /* ---------------- COMMERCIALISTA: VEDE TUTTO, NON MODIFICA ---------------- */
+  await t('in Utenti si sceglie «Commercialista»: viewer che vede tutte le commesse',async()=>{
+    const uid=await p.evaluate(async()=>{ const {data}=await SB.from('profiles').insert({id:'u-comm',full_name:'Studio Commercialista',email:'comm@prova.it',role:'viewer',attivo:true}).select().single();
+      await loadAll(true); go('users'); return data.id; });
+    await p.evaluate(id=>openUser(id),uid); await p.waitForSelector('#m-user.show',{timeout:3000});
+    await p.selectOption('#mu-r','commercialista'); await p.click('#su-btn'); await p.waitForTimeout(800);
+    const g=await p.evaluate(id=>{ const u=__DB.profiles.find(x=>x.id===id); return {r:u.role,vt:u.vede_tutto,chip:/Commercialista/.test(el('page').textContent)}; },uid);
+    must(g.r==='viewer'&&g.vt===true,'salvato come: '+JSON.stringify(g));
+    must(g.chip,'in elenco non risulta «Commercialista»');
+    await p.evaluate(id=>openUser(id),uid); await p.waitForSelector('#m-user.show',{timeout:3000});
+    must(await p.inputValue('#mu-r')==='commercialista','riaprendo non mostra «Commercialista»');
+    await p.evaluate(()=>closeM('m-user'));
+  });
+  await t('il commercialista vede amministrazione, fatturazione e preventivi senza pulsanti di modifica',async()=>{
+    const g=await p.evaluate(()=>{ const prima={role:S.prof.role,vt:S.prof.vede_tutto};
+      S.prof.role='viewer'; S.prof.vede_tutto=true;
+      el('sec-admin').style.display=(isAd()||isComm())?'block':'none'; el('sn-users').style.display=isAd()?'':'none';
+      const r={comm:isComm(),canW:canW(),admin:el('sec-admin').style.display,utenti:el('sn-users').style.display};
+      go('redditivita'); r.redd=!/riservata agli amministratori/.test(el('page').textContent);
+      go('costi'); r.costi=!/vede chi tiene/.test(el('page').textContent); r.nuovoCosto=!!el('co-nuovo'); r.pagato=!!document.querySelector('[data-costopag],[data-costonon]');
+      go('preventivi'); r.prev=!!document.querySelector('#page tr[data-prev]'); r.nuovoPrev=!!el('pv-nuovo');
+      r.dup=!!document.querySelector('[data-prevdup],[data-prevcomm],[data-prevadd],[data-pvmodello]'); r.pdf=!!document.querySelector('[data-prevpdf]');
+      go('fatturare'); r.report=!!el('bl-btn'); r.soll=!!document.querySelector('[data-soll]'); r.saldo=!!document.querySelector('[data-creasaldo]');
+      S.prof.role=prima.role; S.prof.vede_tutto=prima.vt; el('sec-admin').style.display='block'; el('sn-users').style.display=''; go('oggi');
+      return r; });
+    must(g.comm&&!g.canW,'ruolo non riconosciuto: '+JSON.stringify(g));
+    must(g.admin==='block'&&g.utenti==='none','menu amministrazione: '+JSON.stringify(g));
+    must(g.redd&&g.costi&&g.prev&&g.pdf&&g.report,'non vede tutto: '+JSON.stringify(g));
+    must(!g.nuovoCosto&&!g.pagato&&!g.nuovoPrev&&!g.dup&&!g.soll&&!g.saldo,'restano pulsanti di modifica: '+JSON.stringify(g));
+  });
+
   /* ---------------- FIRME DEL CLIENTE SENZA L'INCARICO ---------------- */
   await t('i percorsi non chiedono più la firma dell incarico: è il preventivo',async()=>{
     const g=await p.evaluate(()=>{ const v=[]; Object.keys(TEMPLATES).forEach(k=>TEMPLATES[k].fasi.forEach(f=>f.att.forEach(a=>{

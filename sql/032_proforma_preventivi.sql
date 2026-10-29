@@ -129,11 +129,11 @@ begin
     execute format('create policy "amm_read_%1$s" on public.%1$I for select to authenticated
                     using (private.vede_tutte_commesse())', t);
     execute format('create policy "amm_insert_%1$s" on public.%1$I for insert to authenticated
-                    with check (private.vede_tutte_commesse())', t);
+                    with check ((private.vede_tutte_commesse() and private.is_staff()))', t);
     execute format('create policy "amm_update_%1$s" on public.%1$I for update to authenticated
-                    using (private.vede_tutte_commesse()) with check (private.vede_tutte_commesse())', t);
+                    using ((private.vede_tutte_commesse() and private.is_staff())) with check ((private.vede_tutte_commesse() and private.is_staff()))', t);
     execute format('create policy "amm_delete_%1$s" on public.%1$I for delete to authenticated
-                    using (private.vede_tutte_commesse())', t);
+                    using ((private.vede_tutte_commesse() and private.is_staff()))', t);
   end loop;
 end $$;
 

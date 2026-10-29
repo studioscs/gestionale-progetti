@@ -488,7 +488,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Amministrazione</span>
       <button class="sn" data-page="redditivita"><span class="snic">&#128200;</span>Redditivit&agrave;</button>
       <button class="sn" data-page="costi"><span class="snic">&#129534;</span>Costi generali</button>
-      <button class="sn" data-page="users"><span class="snic">&#128101;</span>Utenti</button>
+      <button class="sn" data-page="users" id="sn-users"><span class="snic">&#128101;</span>Utenti</button>
     </div>
     <div class="sfoot">
       <button class="sout" id="sout">&#8617; Esci dall'account</button>
@@ -1424,6 +1424,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="fg"><label class="fl">Ruolo</label>
         <select class="fc" id="mu-r">
           <option value="viewer">Viewer &mdash; sola lettura</option>
+          <option value="commercialista">Commercialista &mdash; vede tutto come l&rsquo;amministrazione, sola lettura</option>
           <option value="collaboratore">Collaboratore &mdash; pu&ograve; modificare</option>
           <option value="admin">Admin &mdash; accesso completo</option>
         </select>
@@ -1537,7 +1538,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.2';
+const VERSIONE = '2026.10.29.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1654,6 +1655,12 @@ const isAd = () => !!S.prof && S.prof.role === 'admin';
    commesse a cui sono agganciati (migrazione 018), e l'interfaccia lo dice
    invece di lasciar credere che manchi qualcosa. */
 const vedeTutto = () => isAd() || !!(S.prof && S.prof.vede_tutto);
+/* IL COMMERCIALISTA: sola lettura (viewer) con la visibilita' di tutte le
+   commesse. Vede quello che vede l'amministrazione - fatturazione, costi,
+   redditivita', preventivi - ma non modifica niente: lo garantisce il
+   database (migrazione 039), qui si tolgono solo i pulsanti. */
+const isComm = () => !!S.prof && S.prof.role === 'viewer' && !!S.prof.vede_tutto;
+const eCommercialista = u => !!u && u.role === 'viewer' && !!u.vede_tutto;
 const puoEliminarePratica = () => PERMESSI.eliminaPratica === 'staff' ? canW() : isAd();
 
 const ST_TASK = { da_fare:['Da fare','bgr'], in_corso:['In corso','bb'], revisione:['In revisione','by'], completato:['Completata','bg'] };
@@ -3591,8 +3598,9 @@ async function boot() {
   el('sav').textContent = ini(nm);
   el('snm').textContent = nm;
   el('snm').title = S.me.email || '';
-  el('srl').textContent = ({admin:'Admin', collaboratore:'Collab.', viewer:'Viewer'})[S.prof.role] || '';
-  el('sec-admin').style.display = isAd() ? 'block' : 'none';
+  el('srl').textContent = isComm() ? 'Commerc.' : (({admin:'Admin', collaboratore:'Collab.', viewer:'Viewer'})[S.prof.role] || '');
+  el('sec-admin').style.display = (isAd() || isComm()) ? 'block' : 'none';
+  el('sn-users').style.display = isAd() ? '' : 'none';
   /* I preventivi li prepara chi tiene l'amministrazione, come la RLS (032) */
   el('sn-prev').style.display = vedeTutto() ? '' : 'none';
   el('sver').textContent = 'versione ' + VERSIONE;
@@ -5860,8 +5868,8 @@ const ST_PREV = {
    --------------------------------------------------------------------------- */
 const azioniPrev = x => '<div class="pv-az">'
   + '<button class="btn btn-xs" data-prevpdf="' + x.id + '" title="Scarica il PDF">&#128196; PDF</button>'
-  + '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039; Email</button>'
-  + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Nuovo preventivo con le stesse voci">&#10697; Duplica</button>'
+  + (canW() ? '<button class="btn btn-xs" data-prevmail="' + x.id + '" title="Invia per email con il PDF allegato">&#9993;&#65039; Email</button>'
+  + '<button class="btn btn-xs" data-prevdup="' + x.id + '" title="Nuovo preventivo con le stesse voci">&#10697; Duplica</button>' : '')
   + (x.project_id && byId(S.projects, x.project_id)
       ? '<button class="btn btn-xs" data-proj="' + x.project_id + '" title="Apri la commessa di questo preventivo">&#128193; Commessa</button>'
         + (!attoDelPreventivo(x) && x.stato !== 'rifiutato' && canW()
@@ -5881,9 +5889,9 @@ function rPreventivi() {
   el('top-act').innerHTML = '<select class="sel" id="pv-filtro"><option value="">Tutti gli stati</option>'
     + Object.keys(ST_PREV).map(k => '<option value="' + k + '"' + (k === filtro ? ' selected' : '') + '>'
         + ST_PREV[k][0] + '</option>').join('') + '</select> '
-    + '<button class="btn btn-sm btn-p" id="pv-nuovo">&#43; Preventivo</button>';
+    + (canW() ? '<button class="btn btn-sm btn-p" id="pv-nuovo">&#43; Preventivo</button>' : '');
   el('pv-filtro').onchange = e => { S.prevStato = e.target.value; render(); };
-  el('pv-nuovo').onclick = () => nuovoPreventivo(modelliPreventivo()[0].chiave);
+  if (el('pv-nuovo')) el('pv-nuovo').onclick = () => nuovoPreventivo(modelliPreventivo()[0].chiave);
 
   const anno = today().getFullYear();
   const tutti = S.preventivi || [];
@@ -5927,7 +5935,7 @@ function rPreventivi() {
       + '<td class="ac pv-desk">' + azioniPrev(x) + '</td>'
       + '</tr>').join('');
 
-  el('page').innerHTML = kpis + modelli
+  el('page').innerHTML = kpis + (canW() ? modelli : '')
     + '<div class="card"><div class="card-h"><span class="card-t">Preventivi</span></div>'
     + (lista.length
         ? '<div class="tw"><table class="tsm pv-tab"><thead><tr><th>N.</th><th>Committente</th><th class="pv-nasc">Stato</th>'
@@ -5999,6 +6007,9 @@ function apriEditorPrev() {
   el('pv-damod').style.display = mod ? 'none' : 'inline-flex';
   el('pv-pdf').style.display = mod ? 'none' : 'inline-flex';
   el('pv-mail').style.display = mod ? 'none' : 'inline-flex';
+  /* sola lettura (commercialista): si guarda e basta - il PDF si scarica dall'elenco */
+  if (!canW()) ['pv-save', 'pv-copia', 'pv-comm', 'pv-add', 'pv-damod', 'pv-del', 'pv-ripr', 'pv-dup', 'pv-pdf', 'pv-mail']
+    .forEach(id => { if (el(id)) el(id).style.display = 'none'; });
   disegnaPrev();
   openM('m-prev');
 }
@@ -7420,14 +7431,14 @@ function chipSolleciti(f) {
   return '<div class="soll' + (f.messa_in_mora ? ' soll-mora' : '') + '">'
     + (f.messa_in_mora ? '&#9878;&#65039; ' : '&#128276; ') + esc(testoSolleciti(f)) + '</div>';
 }
-const bottoneSolleciti = f => sollecitabile(f) && vedeTutto()
+const bottoneSolleciti = f => sollecitabile(f) && vedeTutto() && canW()
   ? '<button class="btn btn-xs' + (f.messa_in_mora ? ' btn-d' : '') + '" data-soll="' + f.id + '" title="Solleciti di pagamento e messa in mora">'
     + (f.messa_in_mora ? '&#9878;&#65039;' : '&#128276;') + (passoSollecito(f) ? ' ' + passoSollecito(f) : '') + '</button> ' : '';
 
 let SOLL = null;
 function apriSolleciti(fid) {
   const f = byId(S.fatture, fid); if (!f) return;
-  if (!vedeTutto()) return toast('I solleciti li gestisce chi tiene l’amministrazione.', 'error');
+  if (!vedeTutto() || !canW()) return toast('I solleciti li gestisce chi tiene l’amministrazione.', 'error');
   SOLL = fid;
   const doc = f.stato === 'emessa' ? 'Fattura ' + (f.numero_fattura || '') + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '')
     : 'Proforma ' + f.proforma_numero + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '');
@@ -8081,9 +8092,9 @@ function rCosti() {
   el('crumb').textContent = 'Quello che si paga per tenere aperto lo studio, fuori dalle commesse.';
   el('top-act').innerHTML = '<select class="sel" id="co-annosel">'
       + anni.map(a => '<option value="' + a + '"' + (a === Number(S.costiAnno) ? ' selected' : '') + '>' + a + '</option>').join('')
-    + '</select> <button class="btn btn-sm btn-p" id="co-nuovo">&#43; Costo</button>';
+    + '</select>' + (canW() ? ' <button class="btn btn-sm btn-p" id="co-nuovo">&#43; Costo</button>' : '');
   el('co-annosel').onchange = e => { S.costiAnno = Number(e.target.value); render(); };
-  el('co-nuovo').onclick = () => openCosto();
+  if (el('co-nuovo')) el('co-nuovo').onclick = () => openCosto();
 
   const r = riepilogoCosti(S.costiAnno);
   const kpis = '<div class="kgrid">'
@@ -8120,7 +8131,7 @@ function rCosti() {
       + '<td style="font-size:11.5px;white-space:nowrap">' + (c.pagato
           ? '<span style="color:var(--grn)">✓ pagato' + (c.data_pagamento ? ' il ' + fdate(c.data_pagamento) : '') + '</span>'
           : '<span style="color:var(--ora);font-weight:600">da pagare</span>') + '</td>'
-      + '<td class="ac">' + (c.pagato
+      + '<td class="ac">' + (!canW() ? '' : c.pagato
           ? '<button class="btn btn-xs" data-costonon="' + c.id + '" title="Segna come da pagare">↺</button>'
           : '<button class="btn btn-xs btn-p" data-costopag="' + c.id + '">Segna pagato</button>') + '</td>'
       + '</tr>').join('');
@@ -8131,6 +8142,7 @@ function rCosti() {
 }
 
 function openCosto(id) {
+  if (!canW()) return;
   const c = id ? byId(S.costiGen, id) : null;
   el('mco-t').textContent = c ? 'Costo generale' : 'Nuovo costo generale';
   el('co-id').value   = id || '';
@@ -9736,7 +9748,7 @@ function anagraficaPanel(p) {
           + '</div>'; })()
     + (vedeTutto() ? (() => { const pvs = (S.preventivi || []).filter(x => x.project_id === p.id);
         return '<div class="card" style="grid-column:1/-1"><div class="card-h"><span class="card-t">Preventivi</span>'
-          + '<button class="btn btn-sm" data-act="prevdacomm">&#43; Preventivo per questo committente</button></div>'
+          + (canW() ? '<button class="btn btn-sm" data-act="prevdacomm">&#43; Preventivo per questo committente</button>' : '') + '</div>'
           + (pvs.length ? pvs.map(x => '<div class="spread" data-prev="' + x.id + '" style="cursor:pointer;padding:5px 0;'
               + 'border-bottom:1px solid var(--bord);font-size:12.5px"><span><b>' + esc(numeroPreventivo(x)) + '</b> — '
               + esc((modelloDi(x.modello) || {}).nome || x.titolo || '') + '</span><span>' + feuro(totalePreventivo(x))
@@ -10154,7 +10166,7 @@ function rPratiche() {
       '<button class="btn btn-sm" data-act="prvista">' + (cat ? '&#127963; Torna alle pratiche' : '&#128203; Catalogo pratiche') + '</button> '
     + '<input class="srch" id="pf-q" placeholder="' + (cat ? 'Cerca nel catalogo...' : 'Cerca ente, pratica, protocollo...')
       + '" value="' + esc(S.prQ) + '">'
-    + (cat ? (vedeTutto() ? ' <button class="btn btn-p btn-sm" data-act="pcnuova">＋ Voce di catalogo</button>' : '')
+    + (cat ? (vedeTutto() && canW() ? ' <button class="btn btn-p btn-sm" data-act="pcnuova">＋ Voce di catalogo</button>' : '')
            : (canW() ? '<button class="btn btn-p btn-sm" data-newp="">＋ Pratica</button>' : ''));
   el('pf-q').oninput = e => { S.prQ = e.target.value; cat ? drawCatalogo() : drawPratiche(); };
   cat ? drawCatalogo() : drawPratiche();
@@ -10331,7 +10343,7 @@ function drawCatalogo() {
   const list = catalogoPratiche(true)
     .filter(c => !q || ((c.ente || '') + ' ' + c.tipo + ' ' + (c.rif || '')).toLowerCase().includes(q))
     .sort((a, b) => (a.ord || 50) - (b.ord || 50) || String(a.tipo).localeCompare(String(b.tipo)));
-  const modifica = vedeTutto();
+  const modifica = vedeTutto() && canW();
   el('page').innerHTML = '<div class="ibox mb16" style="font-size:12.5px">Le pratiche che lo studio può aprire. '
     + 'Dopo aver creato una commessa il gestionale <b>propone</b> quelle adatte al tipo di lavoro e alle sue '
     + 'condizioni (colonna «Proposta per»), e si scelgono quelle che servono.'
@@ -11204,7 +11216,7 @@ function redditivita(pid) {
 }
 
 function rRedditivita() {
-  if (!isAd()) return el('page').innerHTML =
+  if (!isAd() && !isComm()) return el('page').innerHTML =
     '<div class="card"><div class="empty"><p>Sezione riservata agli amministratori.</p></div></div>';
 
   el('crumb').textContent = 'Per ogni commessa: quanto ha reso, quanto deve fatturare ciascun socio e quanto resta.';
@@ -11585,6 +11597,7 @@ function rUsers() {
         const open = S.tasks.filter(t => daFare(t) && t.assignee_id === u.id).length;
         const rc = u.role === 'admin' ? '<span class="chip chip-a">Admin</span>'
                  : u.role === 'collaboratore' ? '<span class="chip chip-c">Collaboratore</span>'
+                 : eCommercialista(u) ? '<span class="chip" title="Vede tutto come l’amministrazione, in sola lettura">Commercialista</span>'
                  : '<span class="chip">Viewer</span>';
         return '<tr><td><span class="row">' + av(u.id, 28) + '<b>' + esc(u.full_name) + '</b></span></td>'
           + '<td style="font-size:12px;color:var(--mut)">' + esc(u.email || '-') + '</td>'
@@ -13030,7 +13043,7 @@ function openUser(id) {
   EUID = id;
   el('mu-n').value = u.full_name || '';
   el('mu-e').value = u.email || '';
-  el('mu-r').value = u.role || 'viewer';
+  el('mu-r').value = eCommercialista(u) ? 'commercialista' : (u.role || 'viewer');
   el('mu-a').value = u.attivo === false ? '0' : '1';
   el('mu-vt').value  = u.vede_tutto ? '1' : '0';
   el('mu-rip').value = u.ripartisce ? '1' : '0';
@@ -13071,6 +13084,8 @@ async function saveUser() {
     patch.role   = el('mu-r').value;
     patch.attivo = el('mu-a').value === '1';
     patch.vede_tutto = el('mu-vt').value === '1';
+    /* il commercialista e' un viewer che vede tutte le commesse */
+    if (patch.role === 'commercialista') { patch.role = 'viewer'; patch.vede_tutto = true; }
     patch.ripartisce = el('mu-rip').value === '1';
   }
   const { error } = await SB.from('profiles').update(patch).eq('id', EUID);

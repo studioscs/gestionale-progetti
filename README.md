@@ -56,6 +56,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 35. [`sql/036_viste_sicure.sql`](sql/036_viste_sicure.sql) — **sicurezza: le viste rispettano le regole di accesso, niente si legge senza login** (applicata il 21/10/2026)
 36. [`sql/037_funzioni_private.sql`](sql/037_funzioni_private.sql) — **sicurezza: le funzioni del database non si chiamano da fuori** (applicata il 21/10/2026)
 37. [`sql/038_contratto_da_preventivo.sql`](sql/038_contratto_da_preventivo.sql) — l'atto del contratto ricorda il preventivo da cui nasce
+38. [`sql/039_commercialista.sql`](sql/039_commercialista.sql) — il commercialista: vede tutto come l'amministrazione, non modifica niente
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -933,6 +934,26 @@ sollecito** prepara l'email:
 
 Si invia come per i preventivi (bozza con allegato, condividi, solo testo).
 La casella *Segna come 1° (o 2°) sollecito* registra da sola la data di oggi.
+
+## Il commercialista: vede tutto, non modifica niente (migrazione 039)
+
+Fra gli utenti c'è il ruolo **Commercialista**: vede quello che vede
+l'amministrazione — tutte le commesse, contratti, fatturazione e *Da
+fatturare* (con il report incassi), preventivi, costi generali, redditività
+compreso il costo orario delle persone — ma **non può modificare niente**.
+
+**Come si dà l'accesso.** Il commercialista si registra dalla pagina di
+accesso del gestionale (oppure lo si invita da Supabase → Authentication →
+Users); nasce *Viewer*. Un amministratore apre *Utenti*, clicca il suo nome e
+sceglie il ruolo **Commercialista**. Per toglierlo basta disattivarlo o
+riportarlo a Viewer.
+
+Tecnicamente è un *viewer* con la visibilità su tutte le commesse. La sola
+lettura non dipende dai pulsanti nascosti nell'app ma dal database: ogni
+scrittura richiede di essere amministratore o collaboratore. La 039 ha chiuso
+le quattro tabelle (costi generali, preventivi, modelli di preventivo,
+catalogo pratiche) dove bastava «vede tutte le commesse» anche per scrivere.
+La pagina *Utenti* resta solo agli amministratori.
 
 ## Sicurezza delle viste (migrazione 036)
 

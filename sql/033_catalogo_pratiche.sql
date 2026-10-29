@@ -58,12 +58,12 @@ drop policy if exists "amm_delete_pratiche_catalogo" on public.pratiche_catalogo
 create policy "staff_read_pratiche_catalogo" on public.pratiche_catalogo
   for select to authenticated using (private.is_staff());
 create policy "amm_insert_pratiche_catalogo" on public.pratiche_catalogo
-  for insert to authenticated with check (private.vede_tutte_commesse());
+  for insert to authenticated with check ((private.vede_tutte_commesse() and private.is_staff()));
 create policy "amm_update_pratiche_catalogo" on public.pratiche_catalogo
-  for update to authenticated using (private.vede_tutte_commesse())
-  with check (private.vede_tutte_commesse());
+  for update to authenticated using ((private.vede_tutte_commesse() and private.is_staff()))
+  with check ((private.vede_tutte_commesse() and private.is_staff()));
 create policy "amm_delete_pratiche_catalogo" on public.pratiche_catalogo
-  for delete to authenticated using (private.vede_tutte_commesse());
+  for delete to authenticated using ((private.vede_tutte_commesse() and private.is_staff()));
 
 -- -----------------------------------------------------------------------------
 -- 2. L'ATTIVITA' CHE AVVIA O CONCLUDE UNA PRATICA
