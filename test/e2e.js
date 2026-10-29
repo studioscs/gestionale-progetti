@@ -1357,7 +1357,8 @@ function launchOpts(){
     must(n0,'nessun numero proposto');
     if(vuoto){
       await p.fill('[data-rev="data"]',(y+1)+'-01-03'); await p.waitForTimeout(200);
-      must(await p.inputValue('[data-rev="numero"]')===(y+1)+'/001','con la data dell anno dopo non riparte: '+(await p.inputValue('[data-rev="numero"]')));
+      const serie=await p.evaluate(()=>REV.pa?'PA':'FE');
+      must(await p.inputValue('[data-rev="numero"]')==='1/'+serie,'con la data dell anno dopo non riparte da 1/'+serie+': '+(await p.inputValue('[data-rev="numero"]')));
     }
   });
   await t('scritto a mano, il numero resta quello',async()=>{
@@ -1384,12 +1385,30 @@ function launchOpts(){
     await p.fill('#fa-num','');
     await p.selectOption('#fa-stato2','emessa'); await p.waitForTimeout(150);
     const n=await p.inputValue('#fa-num');
-    must(n&&n===await p.evaluate(id=>prossimoNumero(annoDi(el('fa-data').value),id),fid),'numero non proposto: '+n);
+    must(n&&n===await p.evaluate(id=>prossimoNumero(annoDi(el('fa-data').value),id,serieFattura(FATT_PID)),fid)&&/\/(FE|PA)$/.test(n),'numero non proposto nella serie: '+n);
     await p.fill('#fa-num','X-1'); await p.click('#fa-num-succ');
     must(await p.inputValue('#fa-num')===n,'il pulsante non rimette il successivo');
     await p.fill('#fa-num','5bis');
     must(await p.inputValue('#fa-num')==='5bis','non si può scrivere a mano');
     await p.evaluate(()=>closeM('m-fatt'));
+  });
+  await t('due serie: alla PA si propone n/PA, ai privati n/FE, ognuna dal suo ultimo numero',async()=>{
+    const g=await p.evaluate(async()=>{ const oggi=todayISO();
+      const mk=async(cod,pa)=>(await SB.from('projects').insert({codice:cod,name:'Serie '+cod,client:pa?'COMUNE DI PROVA SERIE':'PRIVATO SERIE',status:'attivo',amount:1000,ente_pubblico:pa,split_payment:pa}).select().single()).data.id;
+      const pa=await mk('SER_PA',true), pr=await mk('SER_FE',false);
+      await SB.from('commessa_fatture').insert({project_id:pa,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'41/PA',data_fattura:oggi,ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:pr,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'93/FE',data_fattura:oggi,ordine:1});
+      const {data:fpa}=await SB.from('commessa_fatture').insert({project_id:pa,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2}).select().single();
+      const {data:fpr}=await SB.from('commessa_fatture').insert({project_id:pr,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2}).select().single();
+      await loadAll(true);
+      openRevisione(fpa.id); const nPA=REV.numero; closeM('m-rev');
+      openRevisione(fpr.id); const nFE=REV.numero; closeM('m-rev');
+      /* pulizia: queste commesse di prova non devono finire nei test che seguono */
+      for (const id of [pa,pr]) { await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id); }
+      await loadAll(true);
+      return {nPA,nFE}; });
+    must(g.nPA==='42/PA','fattura alla PA: '+g.nPA);
+    must(g.nFE==='94/FE','fattura al privato: '+g.nFE);
   });
   /* ---------------- PROFORMA PDF PRIMA DELLA FATTURA ---------------- */
   await t('lo scaglione ha la proforma, e la revisione il suo numero',async()=>{

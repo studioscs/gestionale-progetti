@@ -1015,6 +1015,14 @@ salva, e rigenera l'XML.
 
 ## Numeri dei documenti: proposti, sempre modificabili
 
+**Fatture: due serie, n/FE e n/PA.** Le fatture ai privati sono numerate
+`n/FE`, quelle alla pubblica amministrazione `n/PA`, ognuna con il suo
+contatore che riparte da 1 a inizio anno. Il numero proposto è l'ultimo della
+**stessa serie** più uno: dopo `66/FE` viene `67/FE`, dopo `16/PA` viene
+`17/PA`, senza che l'una conti per l'altra. La serie la decide la commessa:
+**PA** se è segnata come *committente pubblico*, altrimenti **FE**. Il numero
+resta modificabile a mano, nella revisione dell'XML e nello scaglione.
+
 Fatture, proforma e preventivi ricevono **da soli il numero successivo**, e il
 campo resta **sempre scrivibile a mano**.
 

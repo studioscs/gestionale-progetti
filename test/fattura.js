@@ -13,7 +13,7 @@ const ctx={btoa,atob,unescape,encodeURIComponent,console,setTimeout,clearInterva
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,dellaSerie,serieFattura,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -757,6 +757,21 @@ t('fatture 2026: dopo la 52 viene la 53',ctx.prossimoNumero(2026)==='53',ctx.pro
 t('fatture 2025: dopo la 118 la 119',ctx.prossimoNumero(2025)==='119',ctx.prossimoNumero(2025));
 t('anno nuovo senza fatture: si riparte',ctx.prossimoNumero(2027)==='2027/001',ctx.prossimoNumero(2027));
 t('rinumerando la fattura stessa non conta il suo numero',ctx.prossimoNumero(2026,'b')==='48',ctx.prossimoNumero(2026,'b'));
+console.log('— DUE SERIE: n/FE AI PRIVATI, n/PA ALLA PA —');
+ctx.S.fatture=[
+  {id:'f1',numero_fattura:'65/FE',data_fattura:'2026-10-27'},{id:'f2',numero_fattura:'66/FE',data_fattura:'2026-10-28'},
+  {id:'p1',numero_fattura:'08/PA',data_fattura:'2026-07-27'},{id:'p2',numero_fattura:'16/PA',data_fattura:'2026-10-29'},
+  {id:'p3',numero_fattura:'9/PA',data_fattura:'2026-09-23'},{id:'v',numero_fattura:'118/FE',data_fattura:'2025-12-20'}];
+t('privati: dopo 66/FE viene 67/FE (non conta la serie PA)',ctx.prossimoNumero(2026,null,'FE')==='67/FE',ctx.prossimoNumero(2026,null,'FE'));
+t('PA: dopo 16/PA viene 17/PA (non conta la serie FE)',ctx.prossimoNumero(2026,null,'PA')==='17/PA',ctx.prossimoNumero(2026,null,'PA'));
+t('rinumerando la 16/PA stessa si torna a 10/PA',ctx.prossimoNumero(2026,'p2','PA')==='10/PA',ctx.prossimoNumero(2026,'p2','PA'));
+t('anno nuovo: ogni serie riparte da 1',ctx.prossimoNumero(2027,null,'FE')==='1/FE'&&ctx.prossimoNumero(2027,null,'PA')==='1/PA',[ctx.prossimoNumero(2027,null,'FE'),ctx.prossimoNumero(2027,null,'PA')]);
+t('la serie si riconosce anche scritta minuscola o con spazi',ctx.dellaSerie('12 / pa','PA')&&!ctx.dellaSerie('12/FE','PA'),null);
+ctx.S.fatture=[
+  {id:'a',numero_fattura:'47',data_fattura:'2026-03-01',proforma_numero:'2026/004',proforma_data:'2026-02-01'},
+  {id:'b',numero_fattura:'52',data_fattura:'2026-09-01'},
+  {id:'c',numero_fattura:'118',data_fattura:'2025-12-20',proforma_numero:'2025/031',proforma_data:'2025-12-01'},
+  {id:'d',numero_fattura:null}];
 t('proforma 2026: dopo la 004 la 005',ctx.prossimaProforma(2026)==='2026/005',ctx.prossimaProforma(2026));
 t('proforma 2025: 2025/032',ctx.prossimaProforma(2025)==='2025/032',ctx.prossimaProforma(2025));
 t('il doppione si riconosce',!!ctx.numeroDoppio('numero_fattura','data_fattura','52',2026,'x'),null);

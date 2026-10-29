@@ -1126,7 +1126,7 @@ tbody tr:hover td { background:#f0f4f9; }
       </div>
       <div class="fg3">
         <div class="fg"><label class="fl">Numero fattura</label>
-          <div class="row" style="gap:4px"><input class="fc" id="fa-num" placeholder="2026/014">
+          <div class="row" style="gap:4px"><input class="fc" id="fa-num" placeholder="67/FE oppure 17/PA">
           <button class="btn btn-sm" id="fa-num-succ" type="button" title="Metti il numero successivo">&#8635;</button></div></div>
         <div class="fg"><label class="fl">Data fattura</label><input type="date" class="fc" id="fa-data"></div>
         <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
@@ -1538,7 +1538,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.3';
+const VERSIONE = '2026.10.29.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8445,7 +8445,7 @@ function numeriProposti(d) {
   d._numAuto = !d.numero;
   d._pfAuto  = !d.proformaNumero;
   if (!d.proformaData) d.proformaData = todayISO();
-  if (d._numAuto) d.numero = prossimoNumero(annoDi(d.data), d.fattId);
+  if (d._numAuto) d.numero = prossimoNumero(annoDi(d.data), d.fattId, d.pa ? 'PA' : 'FE');
   if (d._pfAuto)  d.proformaNumero = prossimaProforma(annoDi(d.proformaData), d.fattId);
 }
 const annoDi = data => Number(String(data || '').slice(0, 4)) || today().getFullYear();
@@ -8538,9 +8538,18 @@ async function generaProforma() {
 
 /* Propone il numero successivo a quello piu' alto gia' usato nell'anno,
    nel formato in cui lo studio li scrive */
-function prossimoNumero(anno, escludi) {
+/* DUE SERIE DI FATTURE: n/FE ai privati, n/PA alla pubblica amministrazione.
+   Ognuna ha il suo contatore e riparte da 1 a inizio anno: il numero
+   proposto e' l'ultimo della stessa serie piu' uno (dopo 66/FE viene 67/FE,
+   dopo 16/PA viene 17/PA). Senza serie resta la regola di prima: il piu'
+   alto dell'anno, in qualunque formato. */
+const serieFattura = pid => (byId(S.projects, pid) || {}).ente_pubblico ? 'PA' : 'FE';
+const dellaSerie = (num, serie) => new RegExp('\\/\\s*' + serie + '\\s*$', 'i').test(String(num || '').trim());
+function prossimoNumero(anno, escludi, serie) {
   anno = anno || today().getFullYear();
-  return numeroSuccessivo(numeriDellAnno('numero_fattura', 'data_fattura', anno, escludi), anno, anno + '/001');
+  const usati = numeriDellAnno('numero_fattura', 'data_fattura', anno, escludi);
+  if (serie) return numeroSuccessivo(usati.filter(n => dellaSerie(n, serie)), anno, '1/' + serie);
+  return numeroSuccessivo(usati, anno, anno + '/001');
 }
 
 /* Ha l'aria di un ente pubblico? Dal nome, o dal codice destinatario di sei
@@ -8559,7 +8568,8 @@ function disegnaRevisione() {
 
   el('rev-body').innerHTML =
       sez('Documento')
-    + '<div class="fg3">' + t('Numero *', 'numero', '2026/014')
+    + '<div class="fg3">' + t('Numero *', 'numero', d.pa ? '17/PA' : '67/FE', '',
+        'Serie <b>' + (d.pa ? 'PA' : 'FE') + '</b> (' + (d.pa ? 'pubblica amministrazione' : 'privati') + '): proposto il successivo, si può cambiare.')
       + t('Data *', 'data', '', 'date')
       /* Con i servizi elencati l'imponibile e' la loro somma e non si tocca da
          qui: forzarlo lo farebbe divergere dalle righe, e una fattura le cui
@@ -8779,7 +8789,7 @@ function revCambia(k, v) {
     REV[campo] = prossimo; const i = document.querySelector('[data-rev="' + campo + '"]'); if (i) i.value = prossimo; };
   if (k === 'numero') REV._numAuto = false;
   if (k === 'proformaNumero') REV._pfAuto = false;
-  if (k === 'data' && REV._numAuto) segui('numero', true, prossimoNumero(annoDi(v), REV.fattId));
+  if (k === 'data' && REV._numAuto) segui('numero', true, prossimoNumero(annoDi(v), REV.fattId, REV.pa ? 'PA' : 'FE'));
   if (k === 'proformaData' && REV._pfAuto) segui('proformaNumero', true, prossimaProforma(annoDi(v), REV.fattId));
   /* passando a ente pubblico, la scissione dei pagamenti e' la regola */
   if (k === 'pa' && REV.pa) REV.split = true;
@@ -13287,7 +13297,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('sp-tipo').onchange = disegnaSpesa;
   el('fa-save2').onclick = saveFatt;
   /* Il numero successivo, su richiesta o quando lo scaglione diventa emesso */
-  const numScaglione = () => prossimoNumero(annoDi(el('fa-data').value || todayISO()), el('fa-id2').value || null);
+  const numScaglione = () => prossimoNumero(annoDi(el('fa-data').value || todayISO()), el('fa-id2').value || null, serieFattura(FATT_PID));
   el('fa-num-succ').onclick = () => { el('fa-num').value = numScaglione(); };
   el('fa-stato2').addEventListener('change', () => {
     if (['emessa', 'incassata'].indexOf(el('fa-stato2').value) >= 0 && !el('fa-num').value.trim()) {
