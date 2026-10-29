@@ -841,6 +841,30 @@ PDF**. Il contenuto è lo stesso nei due casi.
   fatture emesse, fatturato, incassato, ancora da fatturare). Non escono le
   attività una per una, le ore, i costi né le note generali della commessa.
 
+## Controllo: il contratto è tutto in fatturazione?
+
+L'importo della commessa (scritto a mano o somma degli atti del contratto)
+deve trovarsi **per intero negli scaglioni di fatturazione**, e a commessa
+completata dev'essere **tutto fatturato**. Prima una commessa senza lo
+scaglione di saldo non compariva da nessuna parte: il saldo restava da
+fatturare senza che nessuno lo vedesse.
+
+In *Da fatturare*:
+- l'indicatore **Senza saldo in fatturazione** dice quante commesse hanno una
+  parte di contratto fuori da ogni scaglione, e quanto vale;
+- il riquadro rosso **Contratto e fatturazione non tornano** elenca le
+  commesse con contratto, importo negli scaglioni, fatturato, ancora da
+  fatturare e il problema: *manca il saldo* (o *nessuno scaglione*), *gli
+  scaglioni superano il contratto*, *commessa completata ancora da fatturare*;
+- fra quelli che **matureranno più avanti** compaiono in rosso anche i saldi
+  mancanti, «Saldo finale mancante» o «Nessuno scaglione», con l'importo
+  scoperto.
+
+**+ Saldo** crea con un clic lo scaglione «Saldo» dell'importo che manca (già
+*pronto da emettere* se la commessa è completata). Lo stesso avviso, con lo
+stesso pulsante, compare in testa alla scheda *Fatturazione* della commessa.
+Le commesse archiviate non si controllano.
+
 ## Report incassi e pagamenti ("black list")
 
 In *Da fatturare* il pulsante **🖨️ Report incassi** (solo per chi tiene

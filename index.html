@@ -235,9 +235,12 @@ tbody tr:hover td { background:#f0f4f9; }
 /* Azioni dei preventivi: affiancate, e a capo quando lo spazio non basta */
 .pv-az { display:flex; gap:4px; justify-content:flex-end; flex-wrap:wrap; }
 .pv-mob { display:none; }
+.cf-mob { display:none; }
 @media (max-width:760px) {
   .pv-tab th.pv-nasc, .pv-tab td.pv-nasc, .pv-tab .pv-desk { display:none; }
   .pv-mob { display:block; margin-top:6px; }
+  .cf-tab .cf-nasc { display:none; }
+  .cf-mob { display:block; margin-top:5px; }
   .pv-az { justify-content:flex-start; }
 }
 .mh { padding:16px 20px 13px; border-bottom:1px solid var(--bord); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; }
@@ -1534,7 +1537,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.28.1';
+const VERSIONE = '2026.10.29.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7330,7 +7333,13 @@ function fatturePanel(pid) {
       + '</td></tr>';
   }).join('');
 
-  return contrattiPanel(p)
+  const ck = controlloFatturazione(p);
+  return (ck.problema ? '<div class="wbox mb16 spread" style="gap:10px;align-items:center;border-color:var(--red)">'
+      + '<span><b style="color:var(--red)">&#9888;&#65039; ' + esc(TESTO_PROBLEMA[ck.problema](ck)) + '.</b> '
+      + 'Contratto ' + feuro(ck.imp) + ' · negli scaglioni ' + feuro(ck.piano) + ' · fatturato ' + feuro(ck.fatt) + '</span>'
+      + (ck.problema === 'saldo' && canW() ? '<button class="btn btn-sm btn-p" data-creasaldo="' + p.id + '">&#43; Crea lo scaglione di saldo</button>' : '')
+      + '</div>' : '')
+    + contrattiPanel(p)
     + spesePanel(p)
     + '<div class="g2 mb16">'
     + '<div class="card"><div class="card-h"><span class="card-t">Situazione economica</span></div>'
@@ -7551,6 +7560,85 @@ function schedaDaStampare() {
   return SCHEDA.crea(v);
 }
 
+/* ---------------------------------------------------------------------------
+   CONTROLLO: IL CONTRATTO E' TUTTO IN FATTURAZIONE?
+   L'importo della commessa (scritto a mano o somma degli atti) deve trovarsi
+   per intero negli scaglioni, e a lavoro finito deve essere tutto fatturato.
+   Una commessa senza lo scaglione di saldo non compariva da nessuna parte:
+   il saldo restava da fatturare senza che nessuno lo vedesse.
+     saldo    = gli scaglioni non arrivano all'importo: manca il saldo
+     eccesso  = gli scaglioni superano l'importo
+     finita   = commessa completata ma non ancora tutta fatturata
+   --------------------------------------------------------------------------- */
+function controlloFatturazione(p) {
+  const imp = r2(Number(p && p.amount) || 0);
+  const ff = fattureOf(p.id).filter(f => f.stato !== 'annullata');
+  const piano = r2(ff.reduce((a, f) => a + impFattura(f), 0));
+  const fatt = r2(ff.filter(f => ['emessa', 'incassata'].indexOf(f.stato) >= 0).reduce((a, f) => a + impFattura(f), 0));
+  const r = { imp, piano, fatt, nScag: ff.length, scoperto: r2(imp - piano), eccesso: r2(piano - imp),
+              daFatturare: r2(imp - fatt), problema: null };
+  if (imp > 0 && r.scoperto > 0.01) r.problema = 'saldo';
+  else if (imp > 0 && r.eccesso > 0.01) r.problema = 'eccesso';
+  else if (imp > 0 && p.status === 'completato' && r.daFatturare > 0.01) r.problema = 'finita';
+  return r;
+}
+/* Il nome con il codice davanti, se il nome non lo porta gia' */
+const nomeConCodice = p => (p.codice && String(p.name || '').indexOf(p.codice) !== 0 ? p.codice + ' · ' : '') + (p.name || '');
+const commesseDaControllare = () => S.projects.filter(p => !p.archiviato)
+  .map(p => ({ p, c: controlloFatturazione(p) })).filter(x => x.c.problema)
+  .sort((a, b) => (a.c.problema === 'saldo' ? 0 : 1) - (b.c.problema === 'saldo' ? 0 : 1)
+    || Math.abs(b.c.scoperto) - Math.abs(a.c.scoperto));
+const TESTO_PROBLEMA = {
+  saldo:   c => (c.nScag ? 'Manca il saldo: ' : 'Nessuno scaglione: ') + feuro(c.scoperto) + ' non sono in nessuno scaglione',
+  eccesso: c => 'Gli scaglioni superano il contratto di ' + feuro(c.eccesso),
+  finita:  c => 'Commessa completata, ancora da fatturare ' + feuro(c.daFatturare)
+};
+/* Lo scaglione di saldo che manca, con un clic: l'importo scoperto */
+async function creaSaldo(pid) {
+  const p = byId(S.projects, pid); if (!p) return;
+  const c = controlloFatturazione(p);
+  if (!(c.scoperto > 0.01)) return toast('Il contratto è già tutto negli scaglioni.', 'success');
+  if (!confirm('Creare lo scaglione «Saldo» da ' + feuro(c.scoperto) + ' per ' + p.name + '?\n\n'
+    + 'Contratto ' + feuro(c.imp) + ', già negli scaglioni ' + feuro(c.piano) + '.')) return;
+  const { error } = await SB.from('commessa_fatture').insert({ project_id: pid, descrizione: 'Saldo',
+    imponibile: c.scoperto, stato: p.status === 'completato' ? 'pronta' : 'da_emettere',
+    ordine: fattureOf(pid).reduce((a, f) => Math.max(a, f.ordine || 0), 0) + 1, created_by: S.me.id });
+  if (error) return sbErr(error, 'scaglione di saldo');
+  await loadAll(true); render();
+  toast('Scaglione di saldo creato: ' + feuro(c.scoperto), 'success');
+}
+/* Il riquadro del controllo, in testa a Da fatturare */
+function riquadroControlloFatt(elenco) {
+  if (!elenco.length) return '<div class="ibox mb16" style="font-size:12.5px">&#10003; <b>Contratti e fatturazione tornano</b>: '
+    + 'in ogni commessa l’importo del contratto è tutto negli scaglioni, e le commesse completate sono tutte fatturate.</div>';
+  const tot = r2(elenco.filter(x => x.c.problema === 'saldo').reduce((a, x) => a + x.c.scoperto, 0));
+  return '<div class="card mb16" style="border:2px solid var(--red)">'
+    + '<div class="card-h"><span class="card-t" style="color:var(--red)">&#9888;&#65039; Contratto e fatturazione non tornano '
+      + '<span class="chip">' + elenco.length + '</span></span>'
+      + (tot ? '<b style="font-size:13px;color:var(--red)">' + feuro(tot) + ' fuori da ogni scaglione</b>' : '') + '</div>'
+    + '<div class="hint" style="margin:-6px 0 10px">Il totale del contratto deve essere tutto negli scaglioni di fatturazione, '
+      + 'e a commessa completata tutto fatturato. Qui le commesse dove non è così.</div>'
+    + '<div class="tw"><table class="tsm cf-tab"><thead><tr><th>Commessa</th><th style="text-align:right">Contratto</th>'
+      + '<th class="cf-nasc" style="text-align:right">Negli scaglioni</th><th class="cf-nasc" style="text-align:right">Fatturato</th>'
+      + '<th class="cf-nasc" style="text-align:right">Da fatturare</th><th class="cf-nasc">Problema</th><th class="cf-nasc"></th></tr></thead><tbody>'
+    + elenco.map(x => {
+        const prob = '<span style="color:var(--red);font-weight:600">' + esc(TESTO_PROBLEMA[x.c.problema](x.c)) + '</span>';
+        const btn = x.c.problema === 'saldo' && canW()
+          ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '" title="Crea lo scaglione con l’importo che manca">&#43; Saldo</button>' : '';
+        return '<tr data-projfatt="' + x.p.id + '" style="cursor:pointer">'
+        + '<td style="font-size:12px"><b>' + esc(nomeConCodice(x.p)) + '</b>'
+          + '<div style="color:var(--mut)">' + esc(x.p.client || '') + (x.p.status === 'completato' ? ' · completata' : '') + '</div>'
+          /* sul telefono il problema e il pulsante stanno sotto il nome */
+          + '<div class="cf-mob">' + prob + (btn ? '<div style="margin-top:5px">' + btn + '</div>' : '') + '</div></td>'
+        + '<td style="text-align:right">' + feuro(x.c.imp) + '</td>'
+        + '<td class="cf-nasc" style="text-align:right">' + feuro(x.c.piano) + '</td>'
+        + '<td class="cf-nasc" style="text-align:right">' + feuro(x.c.fatt) + '</td>'
+        + '<td class="cf-nasc" style="text-align:right"><b>' + feuro(x.c.daFatturare) + '</b></td>'
+        + '<td class="cf-nasc" style="font-size:12px">' + prob + '</td>'
+        + '<td class="ac cf-nasc">' + btn + '</td></tr>'; }).join('')
+    + '</tbody></table></div></div>';
+}
+
 function rFatturare() {
   el('crumb').textContent = 'Quello che è maturato e non è ancora stato fatturato.';
   /* Il quadro C del modello ISA si compila una volta l'anno: il pulsante sta
@@ -7583,7 +7671,8 @@ function rFatturare() {
     .reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0);
   const emesse = S.fatture.filter(f => f.stato === 'emessa');
 
-  if (!list.length && !emesse.length) {
+  const daControllare = commesseDaControllare();
+  if (!list.length && !emesse.length && !daControllare.length) {
     /* Nessuna fattura, ma le parcelle degli esterni possono esserci lo stesso:
        sono soldi che escono e vanno visti comunque. */
     el('page').innerHTML = '<div class="card mb16"><div class="empty"><i>💶</i>'
@@ -7614,13 +7703,24 @@ function rFatturare() {
       + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f) + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
         + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
   };
-  const tabella = (arr, titolo, colore) => !arr.length ? '' :
+  /* extra: i saldi che mancano, come righe in rosso fra quelli che matureranno */
+  const tabella = (arr, titolo, colore, extra) => !arr.length && !(extra && extra.length) ? '' :
       '<div class="card mb16"><div class="card-h"><span class="card-t"' + (colore ? ' style="color:' + colore + '"' : '') + '>'
-    + titolo + ' <span class="chip">' + arr.length + '</span></span>'
-    + '<b style="font-size:13px">' + feuro(arr.reduce((a, f) => a + impFattura(f), 0)) + '</b></div>'
+    + titolo + ' <span class="chip">' + (arr.length + (extra ? extra.length : 0)) + '</span></span>'
+    + '<b style="font-size:13px">' + feuro(r2(arr.reduce((a, f) => a + impFattura(f), 0)
+        + (extra || []).reduce((a, x) => a + x.c.scoperto, 0))) + '</b></div>'
     + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th>Scaglione</th><th>Stato</th>'
     + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
-    + '<th>Prevista</th><th></th></tr></thead><tbody>' + arr.map(riga).join('') + '</tbody></table></div></div>';
+    + '<th>Prevista</th><th></th></tr></thead><tbody>' + arr.map(riga).join('')
+    + (extra || []).map(x => '<tr class="riga-saldo" data-projfatt="' + x.p.id + '" style="cursor:pointer">'
+        + '<td style="font-size:12px"><b>' + esc(x.p.name) + '</b><div style="color:var(--mut)">' + esc(x.p.client || '') + '</div></td>'
+        + '<td><b style="color:var(--red)">' + (x.c.nScag ? 'Saldo finale mancante' : 'Nessuno scaglione') + '</b>'
+          + '<div style="font-size:11px;color:var(--mut)">contratto ' + feuro(x.c.imp) + ', negli scaglioni ' + feuro(x.c.piano) + '</div></td>'
+        + '<td><span class="bdg br">Da inserire</span></td>'
+        + '<td style="text-align:right;color:var(--red)"><b>' + feuro(x.c.scoperto) + '</b></td>'
+        + '<td></td><td></td>'
+        + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>').join('')
+    + '</tbody></table></div></div>';
 
   el('page').innerHTML =
       '<div class="kgrid">'
@@ -7632,10 +7732,14 @@ function rFatturare() {
       + kpi('Emesse non incassate', emesse.length,
             feuro(emesse.reduce((a, f) => a + impFattura(f), 0)), emesse.length ? 100 : 0, 'var(--blue)')
       + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
+      + (() => { const sz = daControllare.filter(x => x.c.problema === 'saldo');
+          return kpi('Senza saldo in fatturazione', sz.length,
+            feuro(r2(sz.reduce((a, x) => a + x.c.scoperto, 0))) + ' scoperti', sz.length ? 100 : 0, sz.length ? 'var(--red)' : 'var(--grn)'); })()
       + (() => { const m = S.fatture.filter(f => sollecitabile(f) && f.messa_in_mora);
           return m.length ? kpi('In mora con l’avvocato', m.length,
             feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
+    + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
@@ -7647,7 +7751,8 @@ function rFatturare() {
         : '')
     + tabella(richieste, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
     + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
-    + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti')
+    + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti', null,
+        daControllare.filter(x => x.c.problema === 'saldo'))
     + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)');
 }
 
@@ -13283,6 +13388,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
+    if ((n = f('data-creasaldo'))) { e.stopPropagation(); return creaSaldo(n.dataset.creasaldo); }
+    if ((n = f('data-projfatt')))  { return goProject(n.dataset.projfatt, 'fatture'); }
     if ((n = f('data-soll')))      { e.stopPropagation(); return apriSolleciti(n.dataset.soll); }
     if ((n = f('data-notecomm')))  { return apriNoteCommessa(n.dataset.notecomm); }
     if ((n = f('data-prevadd')))   { e.stopPropagation(); return apriAddendum(n.dataset.prevadd); }

@@ -4026,6 +4026,48 @@ function launchOpts(){
     await p.evaluate(()=>closeM('m-prev'));
   });
 
+  /* ---------------- CONTROLLO CONTRATTO / FATTURAZIONE ---------------- */
+  let CF=null;
+  await t('controllo: commessa con il saldo fuori dagli scaglioni, in evidenza in Da fatturare',async()=>{
+    CF=await p.evaluate(async()=>{ S.prof.role='admin';
+      const mk=async(cod,name,amount,status)=>(await SB.from('projects').insert({codice:cod,name,client:'Cliente '+cod,status:status||'attivo',amount}).select().single()).data.id;
+      const a=await mk('CF_1','Saldo mancante',10000), b=await mk('CF_2','Senza scaglioni',3000),
+            c=await mk('CF_3','Troppi scaglioni',1000), d=await mk('CF_4','Finita non fatturata',2000,'completato'), ok=await mk('CF_5','Tutto a posto',500);
+      await SB.from('commessa_fatture').insert({project_id:a,descrizione:'Acconto 40%',imponibile:4000,stato:'emessa',numero_fattura:'CF/1',data_fattura:'2026-09-01',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:c,descrizione:'Unico',imponibile:1500,stato:'da_emettere',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:d,descrizione:'Unico',imponibile:2000,stato:'da_emettere',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:ok,descrizione:'Unico',imponibile:500,stato:'incassata',numero_fattura:'CF/2',data_fattura:'2026-09-02',ordine:1});
+      await loadAll(true); go('fatturare'); return {a,b,c,d,ok}; });
+    await p.waitForTimeout(400);
+    const g=await p.evaluate(x=>{ const pg=el('page'); const card=[...pg.querySelectorAll('.card')].find(c=>/Contratto e fatturazione non tornano/.test(c.textContent));
+      const righe=card?[...card.querySelectorAll('tr[data-projfatt]')].map(r=>({id:r.dataset.projfatt,t:r.textContent})):[];
+      const mat=[...pg.querySelectorAll('.card')].find(c=>/Matureranno più avanti/.test(c.textContent));
+      return {card:!!card,righe,kpi:/Senza saldo in fatturazione/.test(pg.textContent),
+        mat:mat?[...mat.querySelectorAll('tr.riga-saldo')].map(r=>r.dataset.projfatt):[]}; },CF);
+    const riga=id=>g.righe.find(r=>r.id===id);
+    must(g.card&&g.kpi,'manca il riquadro del controllo o l indicatore');
+    must(riga(CF.a)&&/Manca il saldo: 6\.000,00/.test(riga(CF.a).t),'saldo mancante: '+JSON.stringify(riga(CF.a)));
+    must(riga(CF.b)&&/Nessuno scaglione: 3\.000,00/.test(riga(CF.b).t),'senza scaglioni: '+JSON.stringify(riga(CF.b)));
+    must(riga(CF.c)&&/superano il contratto di 500,00/.test(riga(CF.c).t),'eccesso: '+JSON.stringify(riga(CF.c)));
+    must(riga(CF.d)&&/completata, ancora da fatturare 2\.000,00/.test(riga(CF.d).t),'commessa finita: '+JSON.stringify(riga(CF.d)));
+    must(!riga(CF.ok),'segnalata una commessa a posto');
+    must(g.mat.indexOf(CF.a)>=0&&g.mat.indexOf(CF.b)>=0&&g.mat.indexOf(CF.c)<0,'saldi mancanti fra quelli che matureranno: '+JSON.stringify(g.mat));
+  });
+  await t('con un clic si crea lo scaglione di saldo, e la commessa esce dal controllo',async()=>{
+    await p.locator('.card [data-creasaldo="'+CF.a+'"]:visible').first().click(); await p.waitForTimeout(900);
+    const g=await p.evaluate(x=>({sc:__DB.commessa_fatture.filter(f=>f.project_id===x.a).map(f=>f.descrizione+':'+Number(f.imponibile)+':'+f.stato),
+      ancora:commesseDaControllare().some(y=>y.p.id===x.a)}),CF);
+    must(g.sc.indexOf('Saldo:6000:da_emettere')>=0,'scaglione di saldo: '+JSON.stringify(g.sc));
+    must(!g.ancora,'la commessa resta fra quelle da controllare');
+  });
+  await t('nella scheda Fatturazione della commessa l avviso e il pulsante del saldo',async()=>{
+    await p.evaluate(x=>goProject(x.b,'fatture'),CF); await p.waitForTimeout(400);
+    const txt=await p.textContent('#page');
+    must(/Nessuno scaglione: 3\.000,00/.test(txt)&&await p.locator('#page [data-creasaldo="'+CF.b+'"]').count()===1,'manca l avviso nella commessa');
+    await p.evaluate(x=>goProject(x.ok,'fatture'),CF); await p.waitForTimeout(300);
+    must(!/non sono in nessuno scaglione|superano il contratto/.test(await p.textContent('#page')),'avviso su una commessa a posto');
+  });
+
   /* ---------------- FIRME DEL CLIENTE SENZA L'INCARICO ---------------- */
   await t('i percorsi non chiedono più la firma dell incarico: è il preventivo',async()=>{
     const g=await p.evaluate(()=>{ const v=[]; Object.keys(TEMPLATES).forEach(k=>TEMPLATES[k].fasi.forEach(f=>f.att.forEach(a=>{
