@@ -43,6 +43,12 @@ function launchOpts(){
   p.on('console',m=>{ if(m.type()==='error') errs.push(m.text()); });
   p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   await p.goto('file://'+__dirname+'/app-test.html');
+  /* Tipologia ISA e anno sono obbligatori: gli scaglioni che i test creano
+     direttamente nel database li portano, come quelli salvati dal modulo. */
+  await p.evaluate(()=>{ window.__conIsa=x=>{ const d={isa_tipo:'C05',anno_competenza:today().getFullYear()};
+    return Array.isArray(x)?x.map(r=>Object.assign({},d,r)):Object.assign({},d,x); }; });
+  const isaScelta=()=>p.evaluate(()=>{ if(!el('fa-isa').value) el('fa-isa').value='C05';
+    if(!el('fa-anno').value) el('fa-anno').value=String(today().getFullYear()); });
   await p.waitForTimeout(800);
   /* Le pratiche ora sono attivita' delle fasi: nascono con la struttura. */
   await p.evaluate(()=>{ window.generaConPratiche=async(id,t,c,d)=>{
@@ -661,7 +667,7 @@ function launchOpts(){
     must((await p.inputValue('#fa-desc')).length>3,'descrizione non caricata');
     await p.fill('#fa-num','2026/014'); await p.fill('#fa-data','2026-09-15');
     await p.selectOption('#fa-stato2','emessa');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     must(await p.evaluate(()=>__DB.commessa_fatture.some(f=>f.numero_fattura==='2026/014'&&f.stato==='emessa')),'non salvato');
   });
   await t('anteprima del calcolo nella modale',async()=>{
@@ -688,7 +694,7 @@ function launchOpts(){
     /* con i servizi elencati percentuale e importo fisso non contano piu' */
     must(await p.isDisabled('#fa-perc')&&await p.isDisabled('#fa-imp'),
       'percentuale e importo fisso restano modificabili');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(()=>{
       const rr=__DB.commessa_fattura_righe;
       const f=__DB.commessa_fatture.find(x=>rr.some(r=>r.fattura_id===x.id));
@@ -708,7 +714,7 @@ function launchOpts(){
     await p.click('#fa-righe [data-frigdel] >> nth=2');
     await p.waitForTimeout(150);
     must(await p.locator('#fa-righe [data-fk="descrizione"]').count()===2,'la riga non è stata tolta');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(()=>{
       const rr=__DB.commessa_fattura_righe;
       const f=__DB.commessa_fatture.find(x=>rr.some(r=>r.fattura_id===x.id));
@@ -721,7 +727,7 @@ function launchOpts(){
     await p.locator('tbody tr[data-fatt]').first().click(); await p.waitForSelector('#m-fatt.show');
     await p.click('#fa-addriga');
     await p.fill('#fa-righe [data-fk="importo"] >> nth=-1','300');
-    await p.click('#fa-save2'); await p.waitForTimeout(500);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(500);
     must(await p.isVisible('#m-fatt'),'la finestra si è chiusa nonostante la riga senza nome');
     must(await p.evaluate(()=>__DB.commessa_fattura_righe.length)===2,'ha salvato una riga senza descrizione');
     await p.click('#fa-righe [data-frigdel] >> nth=-1');
@@ -748,7 +754,7 @@ function launchOpts(){
     await p.waitForSelector('#m-fatt.show');
     must(await p.locator('#fa-notefatt').count()===1,'la casella "Note in fattura" non c è sul form');
     await p.fill('#fa-notefatt','Pagamento a 60 giorni come da disciplinare');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const d=await p.evaluate(()=>{
       const f=S.fatture.find(x=>x.note_fattura);
       return {salvata:f&&f.note_fattura, causale:f?anteprimaCausale(datiFattura(f)):null};
@@ -761,7 +767,7 @@ function launchOpts(){
     await p.locator('tbody tr[data-fatt]').first().click();
     await p.waitForSelector('#m-fatt.show');
     await p.fill('#fa-note2','promemoria che resta fra noi');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const d=await p.evaluate(()=>{
       const f=S.fatture.find(x=>x.note==='promemoria che resta fra noi');
       return {interna:f&&f.note, causale:f?anteprimaCausale(datiFattura(f)):null};
@@ -1086,7 +1092,7 @@ function launchOpts(){
   await t('si classifica una fattura e resta scritto',async()=>{
     await p.selectOption('#fa-isa','C02');
     await p.selectOption('#fa-anno','2026');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(()=>{
       const f=S.fatture.find(x=>x.isa_tipo==='C02');
       return {tipo:f&&f.isa_tipo, anno:f&&f.anno_competenza,
@@ -1104,7 +1110,7 @@ function launchOpts(){
     must(await p.locator('#fa-righe [data-fk="isa_tipo"]').count()>0,'la riga non ha la tendina ISA');
     await p.selectOption('#fa-righe [data-fk="isa_tipo"] >> nth=-1','C12');
     await p.selectOption('#fa-righe [data-fk="anno_competenza"] >> nth=-1','2026');
-    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(()=>{
       const r=__DB.commessa_fattura_righe.find(x=>x.descrizione==='Direzione lavori');
       return r?{tipo:r.isa_tipo,anno:r.anno_competenza}:null;
@@ -1153,6 +1159,12 @@ function launchOpts(){
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   });
   await t('la generazione passa dalla finestra di revisione',async()=>{
+    /* gli scaglioni nati dal modello 30/40/30 su una commessa senza tipologia
+       vanno classificati prima di fatturarli: lo si fa qui, come l'utente */
+    await p.evaluate(async()=>{ const ids=S.fatture.filter(f=>!f.isa_tipo||!f.anno_competenza).map(f=>f.id);
+      if(ids.length) await SB.from('commessa_fatture').update({isa_tipo:'C05',anno_competenza:2026}).in('id',ids);
+      await loadAll(true); render(); });
+    await p.waitForTimeout(300);
     await p.locator('[data-fxml]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});
     must(await p.isVisible('#m-rev'),'finestra di revisione non aperta');
@@ -1214,10 +1226,10 @@ function launchOpts(){
     const g=await p.evaluate(async()=>{ const oggi=todayISO();
       const mk=async(cod,pa)=>(await SB.from('projects').insert({codice:cod,name:'Serie '+cod,client:pa?'COMUNE DI PROVA SERIE':'PRIVATO SERIE',status:'attivo',amount:1000,ente_pubblico:pa,split_payment:pa}).select().single()).data.id;
       const pa=await mk('SER_PA',true), pr=await mk('SER_FE',false);
-      await SB.from('commessa_fatture').insert({project_id:pa,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'41/PA',data_fattura:oggi,ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:pr,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'93/FE',data_fattura:oggi,ordine:1});
-      const {data:fpa}=await SB.from('commessa_fatture').insert({project_id:pa,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2}).select().single();
-      const {data:fpr}=await SB.from('commessa_fatture').insert({project_id:pr,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2}).select().single();
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:pa,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'41/PA',data_fattura:oggi,ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:pr,descrizione:'gia',imponibile:100,stato:'emessa',numero_fattura:'93/FE',data_fattura:oggi,ordine:1}));
+      const {data:fpa}=await SB.from('commessa_fatture').insert(__conIsa({project_id:pa,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2})).select().single();
+      const {data:fpr}=await SB.from('commessa_fatture').insert(__conIsa({project_id:pr,descrizione:'nuova',imponibile:500,stato:'pronta',ordine:2})).select().single();
       await loadAll(true);
       openRevisione(fpa.id); const nPA=REV.numero; closeM('m-rev');
       openRevisione(fpr.id); const nFE=REV.numero; closeM('m-rev');
@@ -1633,8 +1645,8 @@ function launchOpts(){
   await t('revisione di una fattura verso la PA',async()=>{
     await p.evaluate(async()=>{
       const x=__DB.projects.find(y=>y.name==='Consolidamento scuola primaria');
-      await SB.from('commessa_fatture').insert({project_id:x.id,descrizione:'Acconto 30%',
-        imponibile:24000,stato:'pronta',ordine:1});
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:x.id,descrizione:'Acconto 30%',
+        imponibile:24000,stato:'pronta',ordine:1}));
       await loadAll(true); S.projId=x.id; S.tab='fatture'; go('project');
     });
     await p.waitForTimeout(700);
@@ -1690,8 +1702,8 @@ function launchOpts(){
       await loadAll(true);
       const out=[];
       for(const d of ['Prima fattura','Seconda fattura']){
-        const {data}=await SB.from('commessa_fatture').insert({project_id:pid,
-          descrizione:d,imponibile:1000,stato:'pronta',ordine:90}).select().single();
+        const {data}=await SB.from('commessa_fatture').insert(__conIsa({project_id:pid,
+          descrizione:d,imponibile:1000,stato:'pronta',ordine:90})).select().single();
         await loadAll(true);
         openRevisione(data.id);
         REV.numero='2026/'+d.length; REV.data='2026-08-05';
@@ -2532,9 +2544,9 @@ function launchOpts(){
     await p.evaluate(async()=>{
       const {data}=await SB.from('projects').insert({codice:'TST_09',name:'Da fatturare a Vania',status:'attivo',
         amount:40000,client:'Committente X'}).select().single();
-      await SB.from('commessa_fatture').insert([
+      await SB.from('commessa_fatture').insert(__conIsa([
         {project_id:data.id,descrizione:'Primo acconto 30%',imponibile:12000,stato:'da_emettere',ordine:1},
-        {project_id:data.id,descrizione:'Saldo',imponibile:28000,stato:'da_emettere',ordine:2}]);
+        {project_id:data.id,descrizione:'Saldo',imponibile:28000,stato:'da_emettere',ordine:2}]));
       await loadAll(true);
       window.__PIDF=data.id;
       S.projId=data.id; S.tab='fatture'; go('project');
@@ -2611,10 +2623,14 @@ function launchOpts(){
       el('ch-imp').value='3500';
       el('ch-note').value='Variante approvata in corso d’opera';
       mailAmministrazione=()=>{};
+      /* senza tipologia ISA non si crea */
+      el('ch-isa').value=''; await inviaChiedi(); await loadAll(true);
+      const bloccato=S.fatture.filter(x=>x.project_id===pid).length===prima;
+      el('ch-isa').value='C05'; el('ch-anno').value=String(today().getFullYear());
       await inviaChiedi();
       await loadAll(true);
       const nuovo=S.fatture.find(x=>x.project_id===pid&&/variante/i.test(x.descrizione));
-      return {prima,dopo:S.fatture.filter(x=>x.project_id===pid).length,
+      return {prima,bloccato,isa:nuovo&&nuovo.isa_tipo,dopo:S.fatture.filter(x=>x.project_id===pid).length,
               stato:nuovo&&nuovo.stato,imp:nuovo&&Number(nuovo.imponibile),
               richiesta:!!(nuovo&&nuovo.richiesta_at)};
     },await p.evaluate(()=>window.__PIDF));
@@ -2623,6 +2639,8 @@ function launchOpts(){
     must(g.stato==='pronta','non nasce già pronta da emettere: '+g.stato);
     must(g.imp===3500,'importo sbagliato: '+g.imp);
     must(g.richiesta,'lo scaglione nuovo non porta la richiesta');
+    must(g.bloccato,'creato senza tipologia ISA');
+    must(g.isa==='C05','tipologia non salvata: '+g.isa);
   });
   await t('la richiesta si chiude da sola quando la fattura viene emessa',async()=>{
     const g=await p.evaluate(async pid=>{
@@ -3864,10 +3882,10 @@ function launchOpts(){
       const mk=async(cod,name,amount,status)=>(await SB.from('projects').insert({codice:cod,name,client:'Cliente '+cod,status:status||'attivo',amount}).select().single()).data.id;
       const a=await mk('CF_1','Saldo mancante',10000), b=await mk('CF_2','Senza scaglioni',3000),
             c=await mk('CF_3','Troppi scaglioni',1000), d=await mk('CF_4','Finita non fatturata',2000,'completato'), ok=await mk('CF_5','Tutto a posto',500);
-      await SB.from('commessa_fatture').insert({project_id:a,descrizione:'1^ ACCONTO per progetto strutturale del capannone in via Roma',imponibile:4000,stato:'emessa',numero_fattura:'CF/1',data_fattura:'2026-09-01',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:c,descrizione:'Unico',imponibile:1500,stato:'da_emettere',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:d,descrizione:'Unico',imponibile:2000,stato:'da_emettere',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:ok,descrizione:'Unico',imponibile:500,stato:'incassata',numero_fattura:'CF/2',data_fattura:'2026-09-02',ordine:1});
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:a,descrizione:'1^ ACCONTO per progetto strutturale del capannone in via Roma',imponibile:4000,stato:'emessa',numero_fattura:'CF/1',data_fattura:'2026-09-01',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:c,descrizione:'Unico',imponibile:1500,stato:'da_emettere',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:d,descrizione:'Unico',imponibile:2000,stato:'da_emettere',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:ok,descrizione:'Unico',imponibile:500,stato:'incassata',numero_fattura:'CF/2',data_fattura:'2026-09-02',ordine:1}));
       await loadAll(true); go('fatturare'); return {a,b,c,d,ok}; });
     await p.waitForTimeout(400);
     const g=await p.evaluate(x=>{ const pg=el('page'); const card=[...pg.querySelectorAll('.card')].find(c=>/Contratto e fatturazione non tornano/.test(c.textContent));
@@ -3885,7 +3903,13 @@ function launchOpts(){
     must(g.mat.indexOf(CF.a)>=0&&g.mat.indexOf(CF.b)>=0&&g.mat.indexOf(CF.c)<0,'saldi mancanti fra quelli che matureranno: '+JSON.stringify(g.mat));
   });
   await t('con un clic si crea lo scaglione di saldo, e la commessa esce dal controllo',async()=>{
-    await p.locator('.card [data-creasaldo="'+CF.a+'"]:visible').first().click(); await p.waitForTimeout(900);
+    await p.locator('.card [data-creasaldo="'+CF.a+'"]:visible').first().click(); await p.waitForSelector('#m-fatt.show',{timeout:4000});
+    const pre=await p.evaluate(()=>({d:el('fa-desc').value,i:el('fa-imp').value,isa:el('fa-isa').value}));
+    must(/^SALDO/.test(pre.d)&&Number(pre.i)===6000,'scaglione non precompilato: '+JSON.stringify(pre));
+    /* senza tipologia non si salva */
+    await p.evaluate(()=>{ el('fa-isa').value=''; }); await p.click('#fa-save2'); await p.waitForTimeout(500);
+    must(await p.isVisible('#m-fatt.show'),'salvato senza tipologia ISA');
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(x=>({sc:__DB.commessa_fatture.filter(f=>f.project_id===x.a).map(f=>f.descrizione+':'+Number(f.imponibile)+':'+f.stato),
       ancora:commesseDaControllare().some(y=>y.p.id===x.a)}),CF);
     must(g.sc.indexOf('SALDO - progetto strutturale del capannone in via Roma:6000:da_emettere')>=0,'scaglione di saldo: '+JSON.stringify(g.sc));
@@ -3898,7 +3922,7 @@ function launchOpts(){
       await loadAll(true);
       const {data:e}=await SB.from('projects').insert({codice:'CF_6',name:'Fatture e contratto',status:'attivo',amount:9000}).select().single();
       await SB.from('commessa_contratti').insert({project_id:e.id,numero:1,tipo:'incarico',oggetto:'Architettonico',importo:9000,stato:'accettato'});
-      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE A RECANATI (MC)_1° ACCONTO',imponibile:3000,stato:'emessa',numero_fattura:'CF/6',data_fattura:'2026-09-03',ordine:1});
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:e.id,descrizione:'Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE A RECANATI (MC)_1° ACCONTO',imponibile:3000,stato:'emessa',numero_fattura:'CF/6',data_fattura:'2026-09-03',ordine:1}));
       await loadAll(true);
       return {b:descrizioneSaldo(byId(S.projects,x.b)),d:descrizioneSaldo(byId(S.projects,x.d)),e:descrizioneSaldo(byId(S.projects,e.id)),
         pul:['1° ACCONTO','2°ACCONTO','Integrazione n. 2 — Progetto impianti','Art. 1 OGGETTO SU IMMOBILE A LORETO_Saldo','Acconto 40% - Rilievo','Salone di bellezza'].map(pulisciDescrizione)}; },CF);
@@ -4071,9 +4095,9 @@ function launchOpts(){
     PNOTE=await p.evaluate(async()=>{ const pr=__DB.projects.find(x=>x.name==='Bagno Rossi');
       await SB.from('commessa_contratti').insert({project_id:pr.id,numero:1,tipo:'incarico',oggetto:'Progetto e DL bagno',
         importo:4000,stato:'accettato',data_atto:'2026-09-10',note:'Firmato in studio, copia al cliente'});
-      await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Acconto 30%',imponibile:1200,stato:'emessa',
-        numero_fattura:'12/2026',data_fattura:'2026-09-15',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Saldo',imponibile:2800,stato:'da_emettere',ordine:2});
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:pr.id,descrizione:'Acconto 30%',imponibile:1200,stato:'emessa',
+        numero_fattura:'12/2026',data_fattura:'2026-09-15',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:pr.id,descrizione:'Saldo',imponibile:2800,stato:'da_emettere',ordine:2}));
       await loadAll(true); goProject(pr.id,'anagrafica'); return pr.id; });
     await p.waitForTimeout(300);
     await p.click('[data-notecomm="note"]'); await p.waitForSelector('#m-note.show',{timeout:3000});
@@ -4129,11 +4153,11 @@ function launchOpts(){
       const mk=async(name,client,x)=>(await SB.from('projects').insert(Object.assign({codice:'BL_'+name.slice(0,3),name,client,status:'attivo'},x||{})).select().single()).data;
       const e=await mk('Ente BL','COMUNE DI PROVA BL',{ente_pubblico:true,split_payment:true});
       const q=await mk('Privato BL','SIGNOR BIANCHI BL');
-      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'SAL',imponibile:1000,stato:'emessa',numero_fattura:'BL-1/PA',data_fattura:'2026-05-02',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'Vecchia',imponibile:777,stato:'incassata',numero_fattura:'BL-0',data_fattura:'2026-01-02',ordine:2});
-      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Acconto',imponibile:1000,stato:'pronta',proforma_numero:'BL7',proforma_data:'2026-06-01',ordine:1});
-      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Saldo',imponibile:500,stato:'da_emettere',proforma_numero:'BL8',proforma_data:'2026-07-01',ordine:2});
-      await SB.from('commessa_fatture').insert({project_id:q.id,descrizione:'Senza proforma',imponibile:300,stato:'da_emettere',ordine:3});
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:e.id,descrizione:'SAL',imponibile:1000,stato:'emessa',numero_fattura:'BL-1/PA',data_fattura:'2026-05-02',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:e.id,descrizione:'Vecchia',imponibile:777,stato:'incassata',numero_fattura:'BL-0',data_fattura:'2026-01-02',ordine:2}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:q.id,descrizione:'Acconto',imponibile:1000,stato:'pronta',proforma_numero:'BL7',proforma_data:'2026-06-01',ordine:1}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:q.id,descrizione:'Saldo',imponibile:500,stato:'da_emettere',proforma_numero:'BL8',proforma_data:'2026-07-01',ordine:2}));
+      await SB.from('commessa_fatture').insert(__conIsa({project_id:q.id,descrizione:'Senza proforma',imponibile:300,stato:'da_emettere',ordine:3}));
       await SB.from('commessa_spese').insert({project_id:q.id,tipo:'bolli',importo:50,data_spesa:'2026-05-20'});
       await SB.from('costi_generali').insert({categoria:'utenze',descrizione:'Bolletta',fornitore:'Fornitore BL',importo:99.5,data_spesa:'2026-09-01',pagato:false});
       await SB.from('costi_generali').insert({categoria:'utenze',descrizione:'Bolletta',fornitore:'Pagato BL',importo:10,data_spesa:'2026-09-01',pagato:true,data_pagamento:'2026-09-02'});
@@ -4262,6 +4286,31 @@ function launchOpts(){
     const v=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; go('fatturare');
       const r=!!el('bl-btn'); S.prof.role='admin'; go('oggi'); return r; });
     must(!v,'il collaboratore vede il report');
+  });
+
+  /* ---------------- ISA E ANNO OBBLIGATORI ---------------- */
+  await t('senza tipologia ISA o anno lo scaglione non si salva',async()=>{
+    const pid=await p.evaluate(()=>S.projects[0].id);
+    const prima=await p.evaluate(()=>__DB.commessa_fatture.length);
+    await p.evaluate(id=>openFatt(null,id),pid); await p.waitForSelector('#m-fatt.show');
+    await p.fill('#fa-desc','Acconto senza ISA'); await p.fill('#fa-imp','1000');
+    await p.evaluate(()=>{ el('fa-isa').value=''; });
+    await p.click('#fa-save2'); await p.waitForTimeout(500);
+    must(await p.evaluate(n=>__DB.commessa_fatture.length===n,prima),'salvato senza tipologia ISA');
+    await p.evaluate(()=>{ el('fa-isa').value='C05'; el('fa-anno').value=''; });
+    await p.click('#fa-save2'); await p.waitForTimeout(500);
+    must(await p.evaluate(n=>__DB.commessa_fatture.length===n,prima),'salvato senza anno di competenza');
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(800);
+    must(await p.evaluate(n=>__DB.commessa_fatture.length===n+1,prima),'con tipologia e anno non salva');
+  });
+  await t('senza tipologia ISA la fattura non si fa: si apre lo scaglione',async()=>{
+    const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Vecchio senza ISA',imponibile:500,stato:'pronta',ordine:99}).select().single();
+      await loadAll(true); openRevisione(data.id);
+      const r={rev:el('m-rev').classList.contains('show'),fatt:el('m-fatt').classList.contains('show')};
+      closeM('m-fatt'); closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',data.id); await loadAll(true); return r; });
+    must(!g.rev,'aperta la revisione della fattura senza tipologia ISA');
+    must(g.fatt,'non apre lo scaglione da completare');
   });
 
   /* ---------------- PRATICHE: ATTIVITA' DELLE FASI ---------------- */
@@ -4434,8 +4483,8 @@ function launchOpts(){
       const {data:pr}=await SB.from('projects').insert({codice:'JESI_01',name:'COMUNE JESI DL Federico II',status:'attivo',
         client:'COMUNE DI JESI',cliente_piva:'00135880425',cliente_indirizzo:'Piazza Indipendenza 1',cliente_cap:'60035',
         cliente_comune:'Jesi',cliente_prov:'AN',ente_pubblico:false,split_payment:false}).select().single();
-      const {data:f}=await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Acconto DL',imponibile:10000,
-        stato:'pronta',ordine:1}).select().single();
+      const {data:f}=await SB.from('commessa_fatture').insert(__conIsa({project_id:pr.id,descrizione:'Acconto DL',imponibile:10000,
+        stato:'pronta',ordine:1})).select().single();
       await loadAll(true); openRevisione(f.id); return f.id; });
     await p.waitForSelector('#m-rev.show',{timeout:4000});
     must(/sembra un ente pubblico/.test(await p.textContent('#rev-body')),'nessun avviso sul Comune trattato da privato');

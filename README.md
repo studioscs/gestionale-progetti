@@ -1191,6 +1191,26 @@ L'**anno di competenza non è per forza quello della fattura**: un acconto
 incassato a gennaio può essere competenza dell'anno prima. Per questo è un campo
 suo e non una data dedotta.
 
+### Obbligatori: senza, lo scaglione non si salva e la fattura non si fa
+
+Le due tendine in alto nello scaglione — *Tipologia ISA* e *Anno di
+competenza* — sono **obbligatorie**:
+
+- **Salva** rifiuta lo scaglione se ne manca una, e dice quale.
+- **Proforma / fattura XML**: se lo scaglione non è classificato non si apre la
+  revisione; si apre invece lo scaglione, da completare.
+- **+ Saldo** non salva più alla cieca: apre lo scaglione già compilato
+  (descrizione, importo), con la tipologia dell'ultimo scaglione della commessa
+  proposta; si conferma e si salva.
+- **Chiedi fatturazione → nuovo scaglione** chiede anche lì tipologia e anno.
+- Gli scaglioni che nascono da soli (dall'atto del contratto, dal preventivo,
+  dal modello 30/40/30) prendono la tipologia dell'ultimo scaglione
+  classificato della commessa e l'anno in corso; se la commessa non ne ha
+  ancora, vanno completati prima di fatturarli.
+
+Gli scaglioni già esistenti senza tipologia restano come sono finché non li si
+apre: alla prima modifica, o alla prima fattura, va scelta.
+
 ### Il pulsante ISA
 
 Nella pagina **Da fatturare**, in alto a destra. Si sceglie l'anno e compare il

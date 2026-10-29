@@ -959,6 +959,10 @@ tbody tr:hover td { background:#f0f4f9; }
           <div class="fg"><label class="fl">oppure % dell&rsquo;importo commessa</label>
             <input type="number" class="fc" id="ch-perc" step="0.5" min="0" max="100"></div>
         </div>
+        <div class="fg2">
+          <div class="fg"><label class="fl">Tipologia ISA *</label><select class="fc" id="ch-isa"></select></div>
+          <div class="fg"><label class="fl">Anno di competenza *</label><select class="fc" id="ch-anno"></select></div>
+        </div>
       </div>
       <div class="fg" id="ch-riep-box"><div class="hint" id="ch-riep"></div></div>
       <div class="fg"><label class="fl">Nota per l&rsquo;amministrazione</label>
@@ -1081,10 +1085,10 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mb">
       <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="fa-desc" placeholder="Es. Acconto 30% alla sottoscrizione dell'incarico"></div>
       <div class="fg2">
-        <div class="fg"><label class="fl">Tipologia ISA
+        <div class="fg"><label class="fl">Tipologia ISA *
           <span style="font-weight:400;color:var(--mut)">&mdash; quadro C</span></label>
           <select class="fc" id="fa-isa"></select></div>
-        <div class="fg"><label class="fl">Anno di competenza</label>
+        <div class="fg"><label class="fl">Anno di competenza *</label>
           <select class="fc" id="fa-anno"></select></div>
       </div>
       <div class="hint" style="margin:-8px 0 14px">Servono a ricostruire a fine anno il quadro C del
@@ -1539,7 +1543,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.5';
+const VERSIONE = '2026.10.29.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4562,6 +4566,19 @@ const isaAnni = () => { const q = today().getFullYear(); const out = [];
   for (let a = q + 1; a >= q - 5; a--) out.push(a); return out; };
 const isaOpzAnni = sel => '<option value="">— anno non indicato —</option>'
   + isaAnni().map(a => '<option value="' + a + '"' + (Number(sel) === a ? ' selected' : '') + '>' + a + '</option>').join('');
+/* TIPOLOGIA ISA E ANNO DI COMPETENZA SONO OBBLIGATORI
+   Uno scaglione non si salva e una fattura non si fa senza: a fine anno il
+   quadro C si ricostruisce da qui, e una voce non classificata e' una voce
+   da ricercare a mano. Quello che manca, detto per esteso. */
+const isaMancante = x => [!(x && x.isa_tipo) ? 'la tipologia ISA' : null,
+  !(x && Number(x.anno_competenza)) ? 'l’anno di competenza' : null].filter(Boolean);
+/* Per gli scaglioni che nascono da soli (saldo, atti, modello 30/40/30): la
+   tipologia dell'ultimo scaglione classificato della stessa commessa. */
+function isaDellaCommessa(pid) {
+  const f = fattureOf(pid).filter(x => x.isa_tipo)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+  return f ? { isa_tipo: f.isa_tipo, anno_competenza: today().getFullYear() } : {};
+}
 
 /* LE VOCI CHE CONCORRONO ALL'ISA, PER UN ANNO
    Una fattura con i servizi elencati porta una voce per riga; una a voce unica
@@ -6537,11 +6554,11 @@ async function attoDaPreventivo(pv, pid, opz) {
   }
   if (r.error) { sbErr(r.error, 'atto dal preventivo'); return null; }
   if (opz.scaglione && d.importo > 0) {
-    const { error: e2 } = await SB.from('commessa_fatture').insert({
+    const { error: e2 } = await SB.from('commessa_fatture').insert(Object.assign({
       project_id: pid, contratto_id: r.data.id,
       descrizione: (tipo === 'incarico' ? 'Incarico' : 'Integrazione n. ' + numero) + ' — ' + d.oggetto,
       imponibile: d.importo, stato: 'da_emettere', ordine: fattureOf(pid).length + 1,
-      data_prevista: todayISO(), created_by: S.me.id });
+      data_prevista: todayISO(), created_by: S.me.id }, isaDellaCommessa(pid)));
     if (e2) sbErr(e2, 'scaglione dell’atto');
   }
   const agg = { project_id: pid };
@@ -7309,13 +7326,13 @@ async function salvaContratto() {
       /* Le prestazioni aggiuntive vanno fatturate: lo scaglione nasce qui,
          altrimenti resta un accordo che nessuno mette in fattura. */
       if (el('mc-scag').checked && pay.importo > 0) {
-        const { error: e2 } = await SB.from('commessa_fatture').insert({
+        const { error: e2 } = await SB.from('commessa_fatture').insert(Object.assign({
           project_id: CONTR_PID, contratto_id: cid,
           descrizione: (pay.tipo === 'incarico' ? 'Incarico' : 'Integrazione n. ' + pay.numero) + ' — ' + ogg,
           imponibile: pay.importo, stato: 'da_emettere',
           ordine: fattureOf(CONTR_PID).length + 1,
           data_prevista: pay.data_atto, created_by: S.me.id
-        });
+        }, isaDellaCommessa(CONTR_PID)));
         if (e2) sbErr(e2, 'scaglione dell’integrazione');
       }
     }
@@ -7726,16 +7743,16 @@ async function creaSaldo(pid) {
   const c = controlloFatturazione(p);
   if (!(c.scoperto > 0.01)) return toast('Il contratto è già tutto negli scaglioni.', 'success');
   const descr = descrizioneSaldo(p);
-  if (!confirm('Creare lo scaglione di saldo da ' + feuro(c.scoperto) + ' per ' + p.name + '?\n\n'
-    + 'Descrizione: ' + (descr.length > 220 ? descr.slice(0, 220) + '…' : descr) + '\n\n'
-    + 'Contratto ' + feuro(c.imp) + ', già negli scaglioni ' + feuro(c.piano) + '. '
-    + 'La descrizione si può correggere dallo scaglione.')) return;
-  const { error } = await SB.from('commessa_fatture').insert({ project_id: pid, descrizione: descr,
-    imponibile: c.scoperto, stato: p.status === 'completato' ? 'pronta' : 'da_emettere',
-    ordine: fattureOf(pid).reduce((a, f) => Math.max(a, f.ordine || 0), 0) + 1, created_by: S.me.id });
-  if (error) return sbErr(error, 'scaglione di saldo');
-  await loadAll(true); render();
-  toast('Scaglione di saldo creato: ' + feuro(c.scoperto), 'success');
+  /* Si apre lo scaglione gia' compilato: tipologia ISA e anno si confermano
+     li', e senza non si salva. */
+  openFatt(null, pid);
+  const isa = isaDellaCommessa(pid);
+  el('fa-desc').value = descr;
+  el('fa-imp').value = c.scoperto;
+  el('fa-stato2').value = p.status === 'completato' ? 'pronta' : 'da_emettere';
+  el('fa-isa').innerHTML = isaOpzioni(isa.isa_tipo || '');
+  aggiornaCalcolo();
+  toast('Controlla tipologia ISA e anno di competenza, poi salva il saldo.', 'info');
 }
 /* Il riquadro del controllo, in testa a Da fatturare */
 function riquadroControlloFatt(elenco) {
@@ -8411,6 +8428,11 @@ async function saveFatt() {
     return toast('I servizi elencati sommano zero: indica gli importi.', 'error');
   if (!FATT_RIGHE.length && !perc && !imp)
     return toast('Indica una percentuale, un importo fisso, oppure elenca i servizi.', 'error');
+  const manca = isaMancante({ isa_tipo: el('fa-isa').value, anno_competenza: el('fa-anno').value });
+  if (manca.length) {
+    el(manca[0] === 'la tipologia ISA' ? 'fa-isa' : 'fa-anno').focus();
+    return toast('Scegli in alto ' + manca.join(' e ') + ': senza non si salva.', 'error');
+  }
   const id = el('fa-id2').value;
   const pay = {
     project_id: FATT_PID, descrizione: desc,
@@ -8493,11 +8515,11 @@ async function scaglioniStandard(pid) {
   ].filter(m => m.fase || true);
   if (!confirm('Creo tre scaglioni (30% / 40% / 30%) agganciati alle fasi della commessa.\n\n'
     + 'Diventeranno “pronti da emettere” automaticamente alla chiusura della fase collegata. Procedo?')) return;
-  const rows = modello.map((m, i) => ({
+  const rows = modello.map((m, i) => Object.assign({
     project_id: pid, descrizione: m.d, percentuale: m.perc, fase_id: m.fase,
     ordine: i, stato: 'da_emettere', created_by: S.me.id,
     data_prevista: m.fase ? (byId(S.fasi, m.fase) || {}).data_fine_prevista || null : null
-  }));
+  }, isaDellaCommessa(pid)));
   const { error } = await SB.from('commessa_fatture').insert(rows);
   if (error) return sbErr(error, 'scaglioni');
   await loadAll(true); render();
@@ -8518,6 +8540,12 @@ let REV = null;
 
 function openRevisione(id) {
   const f = byId(S.fatture, id); if (!f) return;
+  const manca = isaMancante(f);
+  if (manca.length) {
+    toast('Prima di fare la fattura scegli nello scaglione ' + manca.join(' e ') + '.', 'error');
+    if (canW()) openFatt(id);
+    return;
+  }
   REV = datiFattura(f);
   numeriProposti(REV);
   disegnaRevisione();
@@ -9976,6 +10004,8 @@ function openChiedi(pid, fid) {
   el('ch-proj').value = p.name;
   el('ch-note').value = '';
   el('ch-desc').value = ''; el('ch-imp').value = ''; el('ch-perc').value = '';
+  el('ch-isa').innerHTML = isaOpzioni(isaDellaCommessa(pid).isa_tipo || '');
+  el('ch-anno').innerHTML = isaOpzAnni(today().getFullYear());
 
   const aperte = fattureOf(pid).filter(fattAperta);
   fillSel('ch-fatt', aperte.map(f => ({
@@ -10032,12 +10062,15 @@ async function inviaChiedi() {
       if (!desc) return toast('Descrivi lo scaglione da fatturare.', 'error');
       const fisso = el('ch-imp').value, perc = el('ch-perc').value;
       if (fisso === '' && perc === '') return toast('Indica un imponibile oppure una percentuale.', 'error');
+      const manca = isaMancante({ isa_tipo: el('ch-isa').value, anno_competenza: el('ch-anno').value });
+      if (manca.length) return toast('Scegli ' + manca.join(' e ') + ' del nuovo scaglione.', 'error');
       const { data, error } = await SB.from('commessa_fatture').insert({
         project_id: CHIEDI_PID, descrizione: desc,
         imponibile:  fisso === '' ? null : parseFloat(fisso),
         percentuale: perc  === '' ? null : parseFloat(perc),
         stato: 'pronta', ordine: fattureOf(CHIEDI_PID).length,
         data_prevista: todayISO(), created_by: S.me.id,
+        isa_tipo: el('ch-isa').value, anno_competenza: Number(el('ch-anno').value),
         richiesta_at: new Date().toISOString(), richiesta_da: S.me.id, richiesta_note: note
       }).select().single();
       if (error) return sbErr(error, 'nuovo scaglione');
