@@ -10,7 +10,7 @@ const ctx={console,setTimeout,clearInterval,setInterval:()=>0,Date,Math,Number,S
   document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx;
 vm.createContext(ctx);
-try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,CATEGORIE_COSTO,nomeCategoria,annoCosto,costiAnno,totCosti,riepilogoCosti,anniCosti,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT,catalogoPratiche,voceCatalogo});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
+try{vm.runInContext(blocks.slice(0,4).join('\n;\n')+'\n;Object.assign(globalThis,{pd,iso,today,todayISO,addD,diffD,fdate,isLate,isSoon,dueLabel,esc,ini,pianifica,statoDerivato,scadenze,praticaLate,praticaOpen,progressOf,costoDi,costoAttuale,costoCommessa,eEsterna,nomiEsterni,r2,ISA_TIPI,isaBreve,isaCompleto,isaVoci,isaRiepilogo,percentualiA100,isaAnniConDati,CATEGORIE_COSTO,nomeCategoria,annoCosto,costiAnno,totCosti,riepilogoCosti,anniCosti,esterniDi,esterniTutti,daPagare,giaPagate,totEsterni,daFare,inCarico,titolare,allineaFineCommessa,scadenzaViva,scadenzaSospesa,riguarda,migrazioneDi,feriale,ferialiTra,sociTecnici,contributiTask,cmpCodice,prossimoCodice,codiceOccupato,periodoFase,partecipantiFase,impegnoStimato,impegnoPerFase,oreFase,scordaImpegno,STUDIO,S,TEMPLATES,CONDIZIONI,PRATICHE_CAT,catalogoPratiche,voceCatalogo,praticaCoperta});',ctx)}catch(e){console.log('LOAD ERR',e.message)}
 
 let fail=0;
 const r2b=n=>Math.round(n*100)/100;
@@ -375,7 +375,9 @@ const nAtt=pv.fasi.reduce((a,f)=>a+f.att.length,0);
 console.log('   privato →',pv.fasi.length,'fasi ·',nAtt,'attivita nel modello');
 /* Per il privato meno burocrazia: poche voci che dicono cosa comprendono.
    Le parti specialistiche compaiono solo con la loro condizione. */
-const nGen=(k,c)=>ctx.pianifica(k,c,'2026-01-07').fasi.reduce((a,f)=>a+f.att.length,0);
+/* Si conta il percorso: le pratiche entrate nelle fasi (a.pratica) dipendono
+   dalle condizioni scelte e hanno i loro test piu' sotto. */
+const nGen=(k,c)=>ctx.pianifica(k,c,'2026-01-07').fasi.reduce((a,f)=>a+f.att.filter(x=>!x.pratica).length,0);
 const tipico=['strutture','catasto','energetico','impianti','dl','sicurezza','agibilita'];
 t('privato senza condizioni: al massimo 20 attivita',nGen('privato',[])<=20,nGen('privato',[]));
 t('privato tipico (strutture, impianti, energetica, DL...): al massimo 40',nGen('privato',tipico)<=40,nGen('privato',tipico));
@@ -458,6 +460,38 @@ t('senza condizioni restano solo le pratiche di base',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k).sort().join(',')
     ==='accesso_atti,cdu,titolo_edilizio',
   ctx.pianifica('privato',[],'2026-01-07').pratiche.map(x=>x.k));
+
+console.log('\n— LE PRATICHE SONO ATTIVITA\' DELLE FASI —');
+const attDi=pl=>pl.fasi.reduce((x,f)=>x.concat(f.att.map(a=>Object.assign({fase:f.fase_key},a))),[]);
+const gAtt=attDi(gen);
+/* ogni pratica prevista o e' gia' un'attivita' del percorso o ci entra */
+t('ogni pratica prevista sta in una fase',
+  gen.pratiche.every(p=>ctx.praticaCoperta(gen.fasi,p)),
+  gen.pratiche.filter(p=>!ctx.praticaCoperta(gen.fasi,p)).map(p=>p.k));
+const comePratica=gAtt.filter(a=>a.pratica&&a.categoria!=='firma_cliente');
+t('entrano come pietre miliari con ente e riferimento',
+  comePratica.length>=8&&comePratica.every(a=>a.is_milestone&&a.contenuto&&a.contenuto.length>40),
+  comePratica.length);
+t('con i termini nel contenuto',
+  comePratica.filter(a=>{const c=ctx.PRATICHE_CAT.find(p=>p.k===a.pratica);return c&&c.gg;})
+    .every(a=>/Termine indicativo: \d+ giorni/.test(a.contenuto)),null);
+t('la telematica e\' marcata piattaforma',
+  comePratica.filter(a=>(ctx.PRATICHE_CAT.find(p=>p.k===a.pratica)||{}).proc).every(a=>a.categoria==='piattaforma'),null);
+const procure=gAtt.filter(a=>/^Procura speciale/.test(a.title));
+t('una procura per pratica telematica, nella fase delle firme',
+  procure.length>=5&&procure.every(a=>a.fase==='firme'&&a.categoria==='firma_cliente'&&a.rif_normativo==='art. 1392 c.c.'),
+  procure.map(a=>a.fase));
+t('nessuna pratica finisce nella fase delle firme',!comePratica.some(a=>a.fase==='firme'),null);
+t('niente doppioni: una pratica gia\' nel percorso non si ripete',
+  (()=>{const tt=gAtt.map(a=>a.title);return tt.length===new Set(tt).size;})(),
+  gAtt.map(a=>a.title).filter((x,i,a)=>a.indexOf(x)!==i));
+/* la stessa pratica con l'ente gia' presente in una fase va in quella fase */
+const vvf=comePratica.find(a=>/Vigili/.test(a.ente||''));
+t('la pratica va dove si parla gia\' con lo stesso ente',
+  !vvf||gen.fasi.find(f=>f.fase_key===vvf.fase).att.some(a=>!a.pratica&&/vigili|antincend|vvf/i.test((a.ente||'')+' '+a.title)),
+  vvf&&vvf.fase);
+t('senza condizioni: solo le pratiche di base nelle fasi',
+  attDi(ctx.pianifica('privato',[],'2026-01-07')).filter(a=>a.pratica).every(a=>['accesso_atti','cdu','titolo_edilizio'].indexOf(a.pratica)>=0),null);
 
 console.log('\n— ORE DELLO STUDIO E PARCELLE DEGLI ESTERNI —');
 ctx.S.costi=[{id:'c1',profile_id:'u1',costo_orario_lordo:50,costo_orario_netto:30,

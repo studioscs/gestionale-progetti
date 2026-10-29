@@ -43,21 +43,10 @@ function launchOpts(){
   p.on('console',m=>{ if(m.type()==='error') errs.push(m.text()); });
   p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   await p.goto('file://'+__dirname+'/app-test.html');
-  /* Le pratiche non nascono piu' da sole: dopo aver creato una commessa si
-     confermano quelle proposte. I test che danno per scontata la struttura
-     completa fanno quello che fa una persona: accettano le proposte. */
-  const accettaPratiche=async()=>{
-    try{ await p.waitForSelector('#m-pratsug.show',{timeout:1500}); }catch(e){ return; }
-    if(await p.isDisabled('#ps-go')) return p.evaluate(()=>closeM('m-pratsug'));
-    await p.click('#ps-go'); await p.waitForTimeout(700);
-  };
   await p.waitForTimeout(800);
+  /* Le pratiche ora sono attivita' delle fasi: nascono con la struttura. */
   await p.evaluate(()=>{ window.generaConPratiche=async(id,t,c,d)=>{
-    const r=await generaStruttura(id,t,c,d); await loadAll(true);
-    const gia=praticheOf(id).map(x=>x.pratica_key);
-    const ks=pianifica(t,c,d).pratiche.map(x=>x.k).filter(k=>gia.indexOf(k)<0);
-    const a=ks.length?await aggiungiPratiche(id,ks,true):{prat:0,proc:0}; await loadAll(true);
-    return Object.assign({},r,{prat:(a&&a.prat)||0}); }; });
+    const r=await generaStruttura(id,t,c,d); await loadAll(true); return r; }; });
   const ok=[],bad=[];
   /* Un controllo che fallisce lasciava aperto il modale su cui stava
      lavorando, e da li' in poi ogni click finiva sul velo: un solo guasto ne
@@ -109,14 +98,15 @@ function launchOpts(){
     await p.click('[data-cond="vvf"]'); await p.waitForTimeout(120); must(!(await on()),'non si spegne');
   });
   await t('crea commessa e genera struttura',async()=>{
-    await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-save');
     await p.waitForSelector('.grp',{timeout:8000});
     const n=await p.locator('.grp').count(); must(n>=10,'solo '+n+' fasi');
   });
-  const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,prat:__DB.commessa_pratiche.length}));
+  const stats=await p.evaluate(()=>({fasi:__DB.commessa_fasi.length,att:__DB.tasks.length,
+    prat:__DB.tasks.filter(t=>t.is_milestone&&t.ente&&!/^Procura/.test(t.title)).length}));
   console.log('   generati →',JSON.stringify(stats));
   await t('generazione consistente',async()=>{ /* percorso privato asciutto: completo ma senza decine di micro-voci */
-    must(stats.fasi>=10&&stats.att>=30&&stats.att<=80&&stats.prat>=5,JSON.stringify(stats)); });
+    must(stats.fasi>=10&&stats.att>=30&&stats.att<=95&&stats.prat>=5,JSON.stringify(stats)); });
   // --- LA COMMESSA SI MODIFICA IN TUTTI E TRE I PASSAGGI ---
   await t('il codice commessa è obbligatorio e viene proposto',async()=>{
     await p.evaluate(()=>openNewProj());
@@ -318,7 +308,7 @@ function launchOpts(){
         out[caso]={res:!!res,
                    fasi:fasiOf(data.id).map(f=>f.fase_key),
                    att:S.tasks.filter(t=>t.project_id===data.id).map(t=>t.title),
-                   prat:S.pratiche.filter(x=>x.project_id===data.id).map(x=>x.tipo)};
+                   prat:S.tasks.filter(t=>t.project_id===data.id).map(t=>t.title+' '+(t.rif_normativo||''))};
       }
       return out;
     });
@@ -418,7 +408,7 @@ function launchOpts(){
   });
 
   // --- NAVIGAZIONE ---
-  for(const [pg,sel] of [['pratiche','.card'],['tasks','.card'],['kanban','.kboard'],
+  for(const [pg,sel] of [['tasks','.card'],['kanban','.kboard'],
                          ['timeline','.gi'],['scadenzario','.card'],['time','.kgrid'],
                          ['chat','.card'],['users','table'],['projects','.card'],['oggi','.kgrid']]){
     await t('pagina '+pg,async()=>{ await p.click('.sn[data-page="'+pg+'"]');
@@ -515,194 +505,22 @@ function launchOpts(){
   });
 
 
-  // --- PRATICHE ---
-  await t('apre pratica dal catalogo',async()=>{
-    await p.click('.sn[data-page="pratiche"]'); await p.waitForSelector('#page .card');
-    await p.locator('[data-prat]').first().click(); await p.waitForSelector('#m-prat.show');
-  });
-  await t('termine di legge calcola la scadenza',async()=>{
-    await p.fill('#pr-inv','2026-03-02'); await p.fill('#pr-gg','45');
-    await p.dispatchEvent('#pr-gg','change'); await p.waitForTimeout(150);
-    const s=await p.inputValue('#pr-scad'); must(s==='2026-04-16','scadenza calcolata: '+s);
-  });
-  await t('salva pratica',async()=>{
-    await p.selectOption('#pr-stato','inviata'); await p.fill('#pr-prot','12345/2026');
-    await p.click('#pr-save'); await p.waitForTimeout(600);
-    must(await p.evaluate(()=>__DB.commessa_pratiche.some(x=>x.protocollo==='12345/2026')));
-  });
-
-
-  // --- PRATICHE: FILTRI ---
-  await t('prepara dati per i filtri',async()=>{
-    await p.evaluate(async()=>{
-      const {data}=await SB.from('projects').insert({codice:'TST_04',name:'Capannone Marini',status:'attivo',
-        start_date:'2026-06-01'}).select().single();
-      await generaConPratiche(data.id,'privato',['vvf','strutture','impianti','acustica'],'2026-06-01');
-      await loadAll(true);
-      const ps=S.pratiche;
-      await SB.from('commessa_pratiche').update({stato:'rilasciata'}).eq('id',ps[1].id);
-      await SB.from('commessa_pratiche').update({stato:'integrazioni',responsabile_id:'u-due'}).eq('id',ps[2].id);
-      await loadAll(true); go('pratiche');
-    });
-    await p.waitForTimeout(700);
-    must(await p.locator('[data-bucket]').count()===6,'chip di filtro mancanti');
-    must(await p.evaluate(()=>S.prBucket)==='aperte','la vista di partenza non è «Aperte»');
-    must(await p.evaluate(()=>filtraPratiche().every(praticaOpen)),'nella vista di partenza ci sono pratiche concluse');
-    await p.click('[data-bucket=""]'); await p.waitForTimeout(250);
-  });
-  const nRighe=()=>p.locator('tbody tr[data-prat]').count();
-  let totPrat;
-  await t('elenco completo',async()=>{ totPrat=await nRighe(); must(totPrat>10,'poche pratiche: '+totPrat); });
-  await t('chip filtra per stato',async()=>{
-    for(const k of ['todo','ente','late','done']){
-      await p.click('[data-bucket="'+k+'"]'); await p.waitForTimeout(250);
-      const coerente=await p.evaluate(b=>filtraPratiche().every(BUCKET[b].f),k);
-      must(coerente,'bucket '+k+' incoerente');
-      must(await nRighe()===await p.evaluate(()=>filtraPratiche().length),'tabella e filtro divergono su '+k);
-    }
-    await p.click('[data-bucket=""]'); await p.waitForTimeout(250);
-    must(await nRighe()===totPrat,'ritorno a Tutte fallito');
-  });
-  await t('filtro per ente',async()=>{
-    const n=await p.locator('#pf-ente option').count(); must(n>4,'pochi enti: '+n);
-    await p.selectOption('#pf-ente',{index:2}); await p.waitForTimeout(300);
-    const e=await p.inputValue('#pf-ente');
-    must(await p.evaluate(v=>filtraPratiche().every(x=>x.ente===v),e),'ente non filtrato');
-    must(await nRighe()<totPrat,'nessuna riduzione');
-    await p.selectOption('#pf-ente',''); await p.waitForTimeout(200);
-  });
-  await t('filtro per commessa',async()=>{
-    await p.selectOption('#pf-proj',{index:1}); await p.waitForTimeout(300);
-    const pid=await p.inputValue('#pf-proj');
-    must(await p.evaluate(v=>filtraPratiche().every(x=>x.project_id===v),pid),'commessa non filtrata');
-    await p.selectOption('#pf-proj',''); await p.waitForTimeout(200);
-  });
-  await t('filtro per responsabile',async()=>{
-    await p.selectOption('#pf-resp','none'); await p.waitForTimeout(300);
-    must(await p.evaluate(()=>filtraPratiche().every(x=>!x.responsabile_id)),'"senza responsabile" errato');
-    await p.selectOption('#pf-resp',{index:3}); await p.waitForTimeout(300);
-    const u=await p.inputValue('#pf-resp');
-    must(await p.evaluate(v=>filtraPratiche().every(x=>x.responsabile_id===v),u),'utente non filtrato');
-    await p.selectOption('#pf-resp',''); await p.waitForTimeout(200);
-  });
-  await t('ricerca testuale',async()=>{
-    await p.fill('#pf-q','sismic'); await p.waitForTimeout(400);
-    const n=await nRighe(); must(n>0&&n<totPrat,'ricerca "sismic": '+n+' righe su '+totPrat);
-    await p.fill('#pf-q','Marini'); await p.waitForTimeout(400);
-    must(await p.evaluate(()=>filtraPratiche().every(x=>pn(x.project_id).includes('Marini'))),'ricerca per commessa errata');
-    await p.fill('#pf-q',''); await p.waitForTimeout(300);
-  });
-  await t('cambio raggruppamento',async()=>{
-    await p.selectOption('#pf-grp','proj'); await p.waitForTimeout(400);
-    const nProj=await p.evaluate(()=>new Set(filtraPratiche().map(x=>x.project_id)).size);
-    must(await p.locator('#page .card').count()===nProj,'gruppi per commessa errati');
-    await p.selectOption('#pf-grp','stato'); await p.waitForTimeout(400);
-    const nSt=await p.evaluate(()=>new Set(filtraPratiche().map(x=>x.stato)).size);
-    must(await p.locator('#page .card').count()===nSt,'gruppi per stato errati');
-    await p.selectOption('#pf-grp',''); await p.waitForTimeout(400);
-    must(await p.locator('#page .card').count()===1,'elenco piatto non unico');
-    must(await nRighe()===totPrat,'elenco piatto perde righe');
-    await p.selectOption('#pf-grp','ente'); await p.waitForTimeout(300);
-  });
-  await t('azzera filtri',async()=>{
-    await p.click('[data-bucket="late"]'); await p.fill('#pf-q','zzz'); await p.waitForTimeout(400);
-    must(await p.locator('[data-act="prreset"]').count()===1,'pulsante azzera assente');
-    await p.click('[data-act="prreset"]'); await p.waitForTimeout(400);
-    /* azzerare riporta alla vista di partenza: le pratiche aperte */
-    const g=await p.evaluate(()=>({b:S.prBucket,q:S.prQ,aperte:S.pratiche.filter(praticaOpen).length}));
-    must(g.b==='aperte'&&g.q==='','filtri non azzerati: '+JSON.stringify(g));
-    must(await nRighe()===g.aperte,'righe '+(await nRighe())+' invece delle '+g.aperte+' aperte');
-    await p.click('[data-bucket=""]'); await p.waitForTimeout(250);
-    must(await nRighe()===totPrat,'«Tutte» non le mostra tutte');
-  });
-
-  // --- PRATICHE: CHAT ---
-  await t('due schede nella pratica',async()=>{
-    await p.locator('tbody tr[data-prat]').first().click(); await p.waitForSelector('#m-prat.show');
-    must(await p.locator('.mtab').count()===2,'schede assenti');
-    await p.click('[data-mtab="chat"]'); await p.waitForTimeout(300);
-    must(await p.isVisible('#pr-chat')&&!(await p.isVisible('#pr-tab-dati')),'cambio scheda non funziona');
-  });
-  await t('invio con tasto Invio',async()=>{
-    await p.fill('#pr-msg','Ho caricato la relazione');
-    await p.press('#pr-msg','Enter'); await p.waitForTimeout(800);
-    must(await p.evaluate(()=>__DB.pratica_eventi.some(e=>e.tipo==='messaggio'&&/relazione/.test(e.descrizione))),'non salvato');
-    must(await p.locator('.msg .bub').count()===1,'bolla non disegnata');
-    must(await p.inputValue('#pr-msg')==='','campo non svuotato');
-    must(await p.locator('.msg.me').count()===1,'messaggio proprio non allineato');
-  });
-  await t('Shift+Invio va a capo, non invia',async()=>{
-    await p.fill('#pr-msg','bozza'); await p.press('#pr-msg','Shift+Enter'); await p.waitForTimeout(300);
-    must(await p.evaluate(()=>__DB.pratica_eventi.filter(e=>e.tipo==='messaggio').length===1),'ha inviato');
-    await p.fill('#pr-msg','');
-  });
-  await t('ordine cronologico',async()=>{
-    await p.fill('#pr-msg','Attendo il parere');
-    await p.click('#pr-send'); await p.waitForTimeout(800);
-    const b=await p.locator('.msg .bub').allTextContents();
-    must(b.length===2&&/relazione/.test(b[0])&&/parere/.test(b[1]),JSON.stringify(b));
-  });
-  await t('evento formale nella stessa cronologia',async()=>{
-    await p.selectOption('#ev-tipo','protocollo');
-    await p.fill('#ev-desc','Prot. 4412 del 12/03');
-    await p.click('#ev-add'); await p.waitForTimeout(800);
-    must(await p.locator('.sys').count()>=1,'evento non mostrato');
-    must(await p.locator('.msg .bub').count()===2,'eventi e messaggi confusi');
-  });
-  await t('destinatari dichiarati esplicitamente',async()=>{
-    const d=await p.textContent('#pr-dest');
-    const attesi=await p.evaluate(()=>destinatariChat(el('pr-id').value).length);
-    const inviate=await p.evaluate(()=>__DB.notifiche.filter(n=>n.pratica_id).length);
-    must(attesi ? (inviate>0 && /Verranno avvisati/.test(d)) : /Nessuno segue/.test(d),
-      'destinatari='+attesi+' notifiche='+inviate+' :: '+d);
-  });
-  await t('elimina un proprio messaggio',async()=>{
-    await p.locator('[data-delmsg]').first().click(); await p.waitForTimeout(900);
-    must(await p.evaluate(()=>__DB.pratica_eventi.filter(e=>e.tipo==='messaggio').length===1),'non eliminato');
-  });
-  await t('contatore messaggi visibile in elenco',async()=>{
-    must((await p.textContent('#pr-nmsg'))==='1','badge scheda: '+(await p.textContent('#pr-nmsg')));
-    await p.keyboard.press('Escape'); await p.waitForTimeout(700);
-    must(/💬/.test(await p.textContent('tbody')),'nessuna icona messaggi in elenco');
-  });
-  await t('pratica nuova: chat non disponibile prima del salvataggio',async()=>{
-    await p.click('[data-newp=""]'); await p.waitForSelector('#m-prat.show'); await p.waitForTimeout(300);
-    must(!(await p.locator('.mtab').nth(1).isVisible()),'scheda chat visibile su pratica nuova');
-    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-  });
-
-
-  await t('pratiche: eliminazione e alternativa reversibile',async()=>{
-    await p.click('.sn[data-page="pratiche"]'); await p.waitForTimeout(600);
-    must(await p.locator('tbody [data-nonnec]').count()>0,'azione "non necessaria" assente in elenco');
-    must(await p.locator('tbody [data-delprat]').count()>0,'azione elimina assente in elenco (admin)');
-    const pre=await p.evaluate(()=>__DB.commessa_pratiche.length);
-    await p.locator('tbody [data-nonnec]').first().click(); await p.waitForTimeout(900);
-    must(await p.evaluate(()=>__DB.commessa_pratiche.some(x=>x.stato==='non_necessaria')),'stato non applicato');
-    must(await p.evaluate(()=>__DB.pratica_eventi.some(e=>/non necessaria/i.test(e.descrizione||''))),'scelta non tracciata nel diario');
-    must(await p.evaluate(n=>__DB.commessa_pratiche.length===n,pre),'"non necessaria" ha cancellato la pratica');
-    await p.locator('tbody [data-delprat]').first().click(); await p.waitForTimeout(900);
-    must(await p.evaluate(n=>__DB.commessa_pratiche.length===n-1,pre),'eliminazione dalla lista non eseguita');
-  });
-  await t('pratiche: permessi rispettati per ruolo',async()=>{
-    await p.evaluate(()=>{ S.prof.role='collaboratore'; render(); });
-    await p.waitForTimeout(400);
-    must(await p.locator('tbody [data-delprat]').count()===0,'collaboratore vede elimina con PERMESSI=admin');
-    must(await p.locator('tbody [data-nonnec]').count()>0,'collaboratore non vede "non necessaria"');
-    await p.evaluate(()=>{ S.prof.role='viewer'; render(); });
-    await p.waitForTimeout(400);
-    must(await p.locator('tbody [data-nonnec]').count()===0,'viewer puo modificare le pratiche');
-    await p.evaluate(()=>{ S.prof.role='admin'; render(); });
-    await p.waitForTimeout(300);
+  // --- PRATICHE: NON C'E' PIU' LA SEZIONE ---
+  await t('la sezione Pratiche non c è più',async()=>{
+    must(await p.locator('.sn[data-page="pratiche"]').count()===0,'voce di menu ancora presente');
+    const pid=await p.evaluate(()=>S.projects.find(x=>/Palazzo Bianchi/.test(x.name)).id);
+    await p.evaluate(id=>goProject(id),pid); await p.waitForTimeout(300);
+    must(!(await p.locator('[data-tab="pratiche"]').count()),'scheda Pratiche ancora nella commessa');
+    must(!/Pratiche &amp; Enti|Pratiche & Enti/.test(await p.innerHTML('#page')),'la commessa parla ancora di Pratiche & Enti');
   });
 
 
   // --- FIRME DEL CLIENTE ---
   await t('procure generate: una per pratica telematica',async()=>{
     const n=await p.evaluate(()=>__DB.tasks.filter(t=>t.categoria==='firma_cliente'&&/^Procura speciale/.test(t.title)).length);
-    const np=await p.evaluate(()=>__DB.commessa_pratiche.length);
+    const np=await p.evaluate(()=>__DB.tasks.filter(t=>t.categoria==='piattaforma'&&t.is_milestone).length);
     must(n>0,'nessuna procura generata');
-    must(n<=np,'più procure che pratiche: '+n+' su '+np);
+    must(n<=np,'più procure che pratiche telematiche: '+n+' su '+np);
   });
   await t('le procure stanno nella fase delle firme, non in fondo',async()=>{
     const ok=await p.evaluate(()=>{
@@ -1504,7 +1322,7 @@ function launchOpts(){
     await p.fill('#w-refe','amministrazione@prova.it'); await p.fill('#w-reft','075 1234567');
     await p.fill('#w-ref2','Geom. Rossi'); await p.fill('#w-ref2r','Responsabile tecnico');
     await p.fill('#w-ref2e','rossi@prova.it'); await p.fill('#w-ref2t','335 1112223');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1500);
     const r=await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Commessa due referenti');
       return x&&{a:x.referente,ae:x.referente_email,ar:x.referente_ruolo,at:x.referente_tel,
@@ -1601,7 +1419,7 @@ function launchOpts(){
   });
   await t('la commessa resta collegata al cliente',async()=>{
     await p.fill('#w-name','Lavori per Alfa');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     const ok=await p.evaluate(()=>{
       const pr=__DB.projects.find(x=>x.name==='Lavori per Alfa');
@@ -1617,7 +1435,7 @@ function launchOpts(){
     await p.fill('#w-name','Commessa cliente nuovo');
     await p.fill('#w-cli','Immobiliare Beta S.n.c.');
     await p.fill('#w-cpiva','09876543210'); await p.fill('#w-ccom','Macerata');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     const dopo=await p.evaluate(()=>__DB.clienti.length);
     must(dopo===prima+1,'clienti passati da '+prima+' a '+dopo);
@@ -1634,7 +1452,7 @@ function launchOpts(){
     await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
     await p.fill('#w-name','Secondo lavoro Beta');
     await p.fill('#w-cli','Immobiliare Beta S.n.c.');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     must(await p.evaluate(v=>__DB.clienti.length===v,prima),'cliente duplicato');
   });
@@ -1714,7 +1532,7 @@ function launchOpts(){
   await t('il contrassegno si salva sulla commessa',async()=>{
     await p.fill('#w-name','Ricostruzione post-sisma Via Roma');
     await p.fill('#w-cli','Condominio Via Roma');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     must(await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Ricostruzione post-sisma Via Roma');
       return x&&x.sisma===true;}),'sisma non salvato');
@@ -1774,7 +1592,7 @@ function launchOpts(){
     await p.fill('#w-rif','DET-2026-118'); await p.fill('#w-rifdata','2026-03-04');
     await p.fill('#w-ogg','Progettazione esecutiva e coordinamento della sicurezza\nper il consolidamento sismico della scuola primaria “B. Gigli”');
     await p.fill('#w-imp','80000');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1800);
     const pr=await p.evaluate(()=>__DB.projects.find(x=>x.name==='Consolidamento scuola primaria'));
     must(pr,'commessa non creata');
@@ -3080,33 +2898,24 @@ function launchOpts(){
       const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
       return {f:__DB.commessa_fasi.filter(f=>f.project_id===pr.id).length,
               t:__DB.tasks.filter(t=>t.project_id===pr.id).length,
-              p:__DB.commessa_pratiche.filter(x=>x.project_id===pr.id).length};
+              p:__DB.tasks.filter(t=>t.project_id===pr.id&&t.is_milestone&&t.ente&&!/^Procura/.test(t.title)).length};
     });
     must(st.f===13,'fasi: '+st.f);
-    must(st.t>=55&&st.t<=100,'attività: '+st.t);
-    must(st.p>=30,'pratiche: '+st.p);
+    must(st.t>=55&&st.t<=140,'attività: '+st.t);
+    must(st.p>=15,'pratiche nelle fasi: '+st.p);
   });
-  await t('le pratiche escono in ordine di esecuzione',async()=>{
-    const ord=await p.evaluate(()=>{
+  await t('le pratiche stanno nella fase in cui si fanno',async()=>{
+    const g=await p.evaluate(()=>{
       const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
-      return __DB.commessa_pratiche.filter(x=>x.project_id===pr.id)
-        .map(x=>({k:x.pratica_key,o:x.ordine}));
+      const fase=title=>{ const t=__DB.tasks.find(x=>x.project_id===pr.id&&x.title===title);
+        const f=t&&__DB.commessa_fasi.find(y=>y.id===t.commessa_fase_id); return f&&f.fase_key; };
+      return {docfa:fase('Accatastamento DOCFA'),titolo:fase('Titolo edilizio (CILA / SCIA / PdC)'),
+              alberi:fase('Autorizzazione abbattimento alberature'),postumo:fase('Deposito sismico postumo')};
     });
-    must(ord.every(x=>typeof x.o==='number'),'pratiche senza ordine');
-    const pos=k=>ord.find(x=>x.k===k);
-    must(pos('accesso_atti')&&pos('agibilita'),'mancano pratiche chiave');
-    must(pos('accesso_atti').o<pos('titolo_edilizio').o,'accesso atti dopo il titolo');
-    must(pos('paes_ord').o<pos('titolo_edilizio').o,'paesaggistica dopo il titolo');
-    must(pos('docfa').o<pos('agibilita').o,'catasto dopo l agibilità');
-  });
-  await t('l elenco pratiche le mostra nella sequenza giusta',async()=>{
-    await p.evaluate(()=>{ S.tab='pratiche'; render(); });
-    await p.waitForTimeout(600);
-    const primi=await p.evaluate(()=>{
-      const pr=__DB.projects.find(x=>x.name==='Villa Rossi — ampliamento');
-      return praticheOf(pr.id).slice(0,3).map(x=>x.pratica_key);
-    });
-    must(primi[0]==='accesso_atti','la prima non è l accesso agli atti: '+primi.join(','));
+    must(g.docfa==='chiusura','DOCFA in '+g.docfa);
+    must(g.titolo==='presentazione','titolo edilizio in '+g.titolo);
+    must(g.alberi==='pareri','alberature in '+g.alberi);
+    must(g.postumo==='strutture','sismico postumo in '+g.postumo);
   });
   await t('le procure sono generate e stanno all inizio',async()=>{
     const d=await p.evaluate(()=>{
@@ -3151,7 +2960,7 @@ function launchOpts(){
   });
   await t('il template DL non genera fasi di progettazione',async()=>{
     await p.click('[data-tpl="dl_cse"]'); await p.waitForTimeout(200);
-    await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche(); await p.waitForTimeout(2000);
+    await p.click('#mp-next'); await p.click('#mp-save'); await p.waitForTimeout(2000);
     const fasi=await p.evaluate(()=>{
       const pr=__DB.projects.find(x=>x.name==='DL Palestra comunale');
       return __DB.commessa_fasi.filter(f=>f.project_id===pr.id).map(f=>f.fase_key);
@@ -3282,7 +3091,10 @@ function launchOpts(){
     await p.waitForTimeout(400);
     must(await p.locator('[data-cont]').count()>0,'nessun rimando al contenuto');
     ultimoDialogo='';
-    await p.locator('[data-cont]').first().click(); await p.waitForTimeout(500);
+    /* il primo elaborato del percorso, non una pratica entrata nelle fasi */
+    await p.evaluate(()=>{ const b=Array.from(document.querySelectorAll('[data-cont]'))
+      .find(x=>{ const t=byId(S.tasks,x.dataset.cont); return t&&!/^Pratica verso/.test(t.contenuto||''); }); b.click(); });
+    await p.waitForTimeout(500);
     must(/All\. I\.7/.test(ultimoDialogo),'il contenuto non richiama la norma: '+ultimoDialogo);
     must(/Sintesi operativa/.test(ultimoDialogo),'non avverte che è una sintesi');
   });
@@ -3336,7 +3148,7 @@ function launchOpts(){
     await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(400);
     await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
     await p.fill('#w-name','Commessa che non si salva');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1200);
     try{
       /* Solo il testo dell'avviso: il corpo della pagina contiene anche i
@@ -3538,7 +3350,7 @@ function launchOpts(){
     await p.click('#del-go'); await p.waitForTimeout(1600);
     const post=await p.evaluate(()=>({p:__DB.projects.length,t:__DB.tasks.length,f:__DB.commessa_fasi.length,
       pr:__DB.commessa_pratiche.length,te:__DB.time_entries.length,fi:__DB.files.length}));
-    must(post.p===pre.p-1&&post.t<pre.t&&post.f<pre.f&&post.pr<pre.pr,JSON.stringify(post));
+    must(post.p===pre.p-1&&post.t<pre.t&&post.f<pre.f&&post.pr<=pre.pr,JSON.stringify(post));
   });
   await t('elimina: nessun record orfano',async()=>{
     const orf=await p.evaluate(()=>{const ids=__DB.projects.map(x=>x.id);
@@ -3967,7 +3779,7 @@ function launchOpts(){
     await p.selectOption('#w-ctipo','persona'); await p.fill('#w-cnote','Preferisce essere chiamata al mattino');
     await p.fill('#w-cpec','anna.rossi@pec.it'); await p.fill('#w-ref','Anna Rossi'); await p.fill('#w-reft','333 1234567');
     await p.fill('#w-name','Bagno Rossi'); await p.fill('#w-com','Osimo');
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     const g=await p.evaluate(()=>{ const c=__DB.clienti.find(x=>x.denominazione==='Anna Rossi');
       const pr=__DB.projects.find(x=>x.name==='Bagno Rossi');
@@ -4011,7 +3823,7 @@ function launchOpts(){
       nomeCommessa('2026_45','Ventinove Srl',sintesiDaPreventivo({immobile:'VIA PALMIRO TOGLIATTI 1 - 20027 - RESCALDINA (MI)',modello:'x',titolo:'Verifica parete'}))]);
     must(imm[0].comune==='RESCALDINA'&&imm[0].indirizzo==='VIA PALMIRO TOGLIATTI 1'&&imm[1].comune==='OSIMO'&&imm[2].comune==='Recanati','lettura dell immobile: '+JSON.stringify(imm));
     must(imm[3]==='2026_45_VENTINOVE SRL_RESCALDINA - VERIFICA PARETE','nome di esempio: '+imm[3]);
-    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save'); await accettaPratiche();
+    await p.click('#mp-next'); await p.click('#mp-next'); await p.click('#mp-save');
     await p.waitForTimeout(1600);
     const r=await p.evaluate(id=>{ const x=__DB.preventivi.find(y=>y.id===id); const pr=x&&__DB.projects.find(y=>y.id===x.project_id);
       return {stato:x.stato,pr:pr&&{cli:pr.cliente_id,amount:Number(pr.amount)}}; },PVC.id);
@@ -4452,65 +4264,35 @@ function launchOpts(){
     must(!v,'il collaboratore vede il report');
   });
 
-  /* ---------------- PRATICHE: CATALOGO, PROPOSTE, ATTIVITA' COLLEGATE ---------------- */
-  let PRID=null;
-  await t('creando una commessa le pratiche non nascono più da sole',async()=>{
+  /* ---------------- PRATICHE: ATTIVITA' DELLE FASI ---------------- */
+  await t('creando una commessa le pratiche entrano nelle fasi, con le procure',async()=>{
     const g=await p.evaluate(async()=>{ S.prof.role='admin';
       const {data}=await SB.from('projects').insert({codice:'TST_PR1',name:'Autorimessa Neri',status:'attivo',
         start_date:'2026-09-01',template_key:'privato',condizioni:['vvf','strutture','catasto']}).select().single();
       await generaStruttura(data.id,'privato',['vvf','strutture','catasto'],'2026-09-01'); await loadAll(true);
-      return {id:data.id,prat:praticheOf(data.id).length,proc:S.tasks.filter(t=>t.project_id===data.id&&/^Procura/.test(t.title)).length,
-        proposte:proposteDi(data.id).map(x=>x.k)};
+      const tt=S.tasks.filter(t=>t.project_id===data.id);
+      const fk=t=>(fasiOf(data.id).find(f=>f.id===t.commessa_fase_id)||{}).fase_key;
+      const docfa=tt.find(t=>t.title==='Accatastamento DOCFA');
+      return {docfa:docfa&&{f:fk(docfa),ms:docfa.is_milestone,ente:docfa.ente,c:docfa.contenuto},
+        proc:tt.filter(t=>/^Procura/.test(t.title)).map(t=>({t:t.title,f:fk(t)})),
+        pratiche:praticheOf(data.id).length};
     });
-    PRID=g.id;
-    must(g.prat===0,'sono nate '+g.prat+' pratiche da sole');
-    must(g.proc===0,'sono nate '+g.proc+' procure senza pratiche');
-    must(g.proposte.includes('vvf_scia')&&g.proposte.includes('docfa'),'proposte: '+g.proposte.join());
+    must(g.docfa&&g.docfa.f==='chiusura'&&g.docfa.ms&&g.docfa.ente,'DOCFA: '+JSON.stringify(g.docfa));
+    must(/Pratica verso/.test(g.docfa.c),'il contenuto non dice cosa fare');
+    must(g.proc.some(x=>/SCIA antincendio/.test(x.t)),'manca la procura della SCIA antincendio (attività già nel percorso)');
+    must(g.proc.length&&g.proc.every(x=>x.f==='firme'),'procure fuori dalla fase firme');
+    must(g.pratiche===0,'nate pratiche nella tabella a parte');
   });
-  await t('la finestra propone le pratiche spuntate, e si sceglie',async()=>{
-    await p.evaluate(id=>{ goProject(id); apriSceltaPratiche(id); },PRID);
-    await p.waitForSelector('#m-pratsug.show',{timeout:4000});
-    const g=await p.evaluate(id=>({spuntate:Array.from(document.querySelectorAll('[data-psk]:checked')).map(c=>c.dataset.psk),
-      proposte:proposteDi(id).map(x=>x.k), tutte:document.querySelectorAll('[data-psk]').length}),PRID);
-    must(g.spuntate.sort().join()===g.proposte.sort().join(),'spuntate diverse dalle proposte');
-    must(g.tutte>g.spuntate.length+10,'il resto del catalogo non c è');
-    await p.uncheck('[data-psk="docfa"]');
-    await p.fill('#ps-q','idrogeologico'); await p.waitForTimeout(150);
-    must(await p.locator('[data-psk]').count()<=3,'la ricerca non filtra');
-    await p.check('[data-psk="idrogeo"]');
-    await p.fill('#ps-q',''); await p.waitForTimeout(150);
-    must(!(await p.isChecked('[data-psk="docfa"]'))&&await p.isChecked('[data-psk="idrogeo"]'),'la ricerca ha perso le scelte');
-    await p.click('#ps-go'); await p.waitForTimeout(800);
-    const r=await p.evaluate(id=>({k:praticheOf(id).map(x=>x.pratica_key),
-      proc:S.tasks.filter(t=>t.project_id===id&&/^Procura/.test(t.title)),
-      firme:(fasiOf(id).find(f=>f.fase_key==='firme')||{}).id}),PRID);
-    must(!r.k.includes('docfa'),'aperta una pratica tolta');
-    must(r.k.includes('idrogeo')&&r.k.includes('vvf_scia'),'mancano le scelte: '+r.k.join());
-    must(r.k.length===g.proposte.length,'numero di pratiche sbagliato: '+r.k.length);
-    must(r.proc.length>0&&r.proc.every(t=>t.commessa_fase_id===r.firme),'procure assenti o fuori dalla fase firme');
-    must(!r.proc.some(t=>/Accatastamento/.test(t.title)),'procura per una pratica non scelta');
+  await t('dopo il salvataggio non si apre più la scelta delle pratiche',async()=>{
+    await p.evaluate(()=>openNewProj()); await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(300);
+    await p.fill('#w-name','Pratiche nelle fasi'); await p.evaluate(()=>closeM('m-proj'));
+    must(!(await p.locator('#m-pratsug.show').count()),'la finestra delle pratiche si è aperta');
+    const src=await p.evaluate(()=>wzSave.toString());
+    must(!/apriSceltaPratiche/.test(src),'il salvataggio apre ancora la scelta delle pratiche');
   });
-  await t('nella scheda della commessa restano le proposte non scelte',async()=>{
-    await p.evaluate(()=>{ S.tab='pratiche'; render(); }); await p.waitForTimeout(200);
-    must(/1 proposta\b/.test(await p.textContent('[data-act="sceltapratiche"]')),'il pulsante non conta la proposta rimasta');
-  });
-  await t('nuova attività: la pratica è proposta dal titolo, come avvio',async()=>{
-    await p.evaluate(id=>openTask(null,id),PRID); await p.waitForSelector('#m-task.show',{timeout:4000});
-    await p.fill('#tt-n','Presentazione SCIA antincendio al Comando'); await p.waitForTimeout(150);
-    const g=await p.evaluate(()=>({sel:el('tt-prat').value, k:(byId(S.pratiche,el('tt-prat').value)||{}).pratica_key, r:el('tt-pruolo').value}));
-    must(g.k==='vvf_scia','pratica proposta: '+g.k);
-    must(g.r==='inizio','ruolo proposto: '+g.r);
-    await p.click('#st-btn'); await p.waitForTimeout(600);
-    const t=await p.evaluate(()=>__DB.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando'));
-    must(t&&t.pratica_id&&t.pratica_ruolo==='inizio','collegamento non salvato');
-  });
-  await t('e se il titolo parla di esito la propone come conclusiva',async()=>{
-    await p.evaluate(id=>openTask(null,id),PRID); await p.waitForSelector('#m-task.show',{timeout:4000});
-    await p.fill('#tt-n','Ritiro esito della SCIA antincendio'); await p.waitForTimeout(150);
-    must(await p.inputValue('#tt-pruolo')==='fine','non la propone come conclusiva');
-    await p.selectOption('#tt-prat',''); await p.fill('#tt-n','Ritiro esito della SCIA antincendio.');
-    await p.waitForTimeout(150);
-    must(await p.inputValue('#tt-prat')==='','scelta «Nessuna» ignorata: la ripropone');
+  await t('nel modulo attività non c è più la pratica collegata',async()=>{
+    await p.evaluate(()=>openTask(null,S.projects[0].id)); await p.waitForSelector('#m-task.show',{timeout:4000});
+    must(!(await p.isVisible('#tt-prat')),'il campo Pratica collegata è visibile');
     await p.evaluate(()=>closeM('m-task'));
   });
   await t('senza la migrazione 033 le attività si caricano lo stesso, e lo si dice',async()=>{
@@ -4521,92 +4303,6 @@ function launchOpts(){
     must(g.senza,'non si accorge che manca la migrazione');
     must(g.avviso.includes('sql/033_catalogo_pratiche.sql'),'l avviso non indica la 033: '+g.avviso.join());
   });
-  await t('il collegamento alla pratica resta dopo il ricaricamento',async()=>{
-    const g=await p.evaluate(async()=>{ await loadAll(true);
-      const t=S.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando');
-      return t&&{id:t.pratica_id,r:t.pratica_ruolo}; });
-    must(g&&g.id&&g.r==='inizio','dopo il ricaricamento il collegamento è sparito: '+JSON.stringify(g));
-  });
-  await t('completata l attività che la avvia, la pratica risulta inviata',async()=>{
-    const id=await p.evaluate(()=>__DB.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando').id);
-    await p.evaluate(id=>openTask(id),id); await p.waitForSelector('#m-task.show',{timeout:4000});
-    await p.selectOption('#tt-s','completato'); await p.click('#st-btn'); await p.waitForTimeout(700);
-    const pr=await p.evaluate(id=>{ const t=__DB.tasks.find(x=>x.id===id); const p=__DB.commessa_pratiche.find(x=>x.id===t.pratica_id);
-      return {stato:p.stato,invio:p.data_invio,scad:p.data_scadenza,gg:p.termine_giorni,
-        ev:__DB.pratica_eventi.filter(e=>e.pratica_id===p.id).map(e=>e.descrizione)}; },id);
-    must(pr.stato==='inviata','stato: '+pr.stato);
-    must(pr.invio===new Date().toISOString().slice(0,10),'data di invio non impostata');
-    must(!pr.gg||pr.scad,'scadenza non calcolata');
-    must(pr.ev.some(e=>/Avviata con l.attività/.test(e)),'il diario non lo dice');
-  });
-  await t('la pratica mostra le attività collegate',async()=>{
-    const pid=await p.evaluate(()=>{ const t=__DB.tasks.find(x=>x.title==='Presentazione SCIA antincendio al Comando'); return t.pratica_id; });
-    await p.evaluate(id=>openPratica(id),pid); await p.waitForSelector('#m-prat.show',{timeout:4000});
-    must(/avvia: Presentazione SCIA antincendio/.test(await p.textContent('#pr-att')),'attività collegate non mostrate');
-    await p.evaluate(()=>closeM('m-prat'));
-  });
-  await t('un attività esistente non collegata riceve solo un suggerimento',async()=>{
-    const id=await p.evaluate(async pid=>{ const {data}=await SB.from('tasks').insert({project_id:pid,title:'Deposito sismico delle strutture',
-        status:'da_fare',priority:'media',is_milestone:false,opzionale:false,sort_order:0}).select().single(); await loadAll(true); return data.id; },PRID);
-    await p.evaluate(id=>openTask(id),id); await p.waitForSelector('#m-task.show',{timeout:4000});
-    must(await p.inputValue('#tt-prat')==='','collegata di nascosto aprendola');
-    must(await p.locator('#tt-prat-usa').count()===1,'nessun suggerimento');
-    await p.click('#tt-prat-usa');
-    must(await p.inputValue('#tt-prat')!=='','il suggerimento non collega');
-    await p.evaluate(()=>closeM('m-task'));
-  });
-  await t('il catalogo si consulta e si modifica',async()=>{
-    await p.evaluate(()=>{ S.prVista='catalogo'; S.prQ=''; go('pratiche'); }); await p.waitForTimeout(400);
-    const n=await p.locator('[data-pcat]').count();
-    must(n===await p.evaluate(()=>catalogoPratiche(true).length),'righe del catalogo: '+n);
-    await p.click('[data-pcat="docfa"]'); await p.waitForSelector('#m-pcat.show',{timeout:4000});
-    await p.fill('#pc-gg','15'); await p.uncheck('#pc-attivo'); await p.click('#pc-save'); await p.waitForTimeout(600);
-    const g=await p.evaluate(id=>({riga:__DB.pratiche_catalogo.find(x=>x.chiave==='docfa'),prop:proposteDi(id).map(x=>x.k)}),PRID);
-    must(g.riga&&g.riga.giorni===15&&g.riga.attivo===false,'voce non salvata');
-    must(!g.prop.includes('docfa'),'una voce tolta dalle proposte viene ancora proposta');
-    await p.click('[data-pcat="docfa"]'); await p.waitForSelector('#m-pcat.show',{timeout:4000});
-    must(await p.isVisible('#pc-ripr'),'manca Ripristina');
-    await p.click('#pc-ripr'); await p.waitForTimeout(600);
-    must(!(await p.evaluate(()=>__DB.pratiche_catalogo.some(x=>x.chiave==='docfa'))),'non ripristinata');
-  });
-  await t('si aggiunge una pratica propria al catalogo, e si può proporre',async()=>{
-    await p.click('[data-act="pcnuova"]'); await p.waitForSelector('#m-pcat.show',{timeout:4000});
-    await p.fill('#pc-tipo','Nulla osta Consorzio di bonifica'); await p.fill('#pc-ente','Consorzio di bonifica');
-    await p.fill('#pc-gg','45'); await p.click('#pc-save'); await p.waitForTimeout(600);
-    const k=await p.evaluate(()=>(__DB.pratiche_catalogo.find(x=>x.tipo==='Nulla osta Consorzio di bonifica')||{}).chiave);
-    must(k,'voce nuova non salvata');
-    await p.evaluate(id=>apriSceltaPratiche(id),PRID); await p.waitForSelector('#m-pratsug.show',{timeout:4000});
-    must(await p.locator('[data-psk="'+k+'"]').count()===1,'la voce nuova non è nel catalogo della commessa');
-    await p.evaluate(()=>closeM('m-pratsug'));
-  });
-  await t('riordino: si tolgono le pratiche mai toccate',async()=>{
-    await p.evaluate(()=>{ S.prVista='pratiche'; S.prBucket='aperte'; S.prProj=''; S.prEnte=''; S.prResp=''; S.prQ=''; go('pratiche'); });
-    await p.waitForTimeout(400);
-    const prima=await p.evaluate(()=>praticheIntatte().length);
-    must(prima>0,'nessuna pratica intatta da riordinare');
-    must(await p.locator('[data-act="riordina"]').count()===1,'manca il pulsante Riordina');
-    await p.click('[data-act="riordina"]'); await p.waitForSelector('#m-riordina.show',{timeout:4000});
-    const ids=await p.evaluate(()=>Array.from(document.querySelectorAll('[data-rio]')).map(c=>c.dataset.rio));
-    must(ids.length===prima,'elenco del riordino incompleto');
-    const tenuta=ids[0];
-    await p.uncheck('[data-rio="'+tenuta+'"]');
-    const procPrima=await p.evaluate(()=>__DB.tasks.filter(t=>/^Procura/.test(t.title)).length);
-    await p.click('#rio-go'); await p.waitForTimeout(800);
-    const g=await p.evaluate(t=>({resta:__DB.commessa_pratiche.some(x=>x.id===t),intatte:praticheIntatte().length,
-      proc:__DB.tasks.filter(t=>/^Procura/.test(t.title)).length}),tenuta);
-    must(g.resta,'tolta anche quella da tenere');
-    must(g.intatte===1,'restano '+g.intatte+' pratiche intatte invece di 1');
-    must(g.proc<procPrima,'le procure da firmare delle pratiche tolte sono rimaste');
-    must(await p.evaluate(()=>__DB.commessa_pratiche.some(x=>x.stato==='inviata')),'tolta una pratica già avviata');
-  });
-  await t('un collaboratore consulta il catalogo ma non lo modifica',async()=>{
-    const n=await p.evaluate(()=>{ S.prof.role='collaboratore'; S.prof.vede_tutto=false; S.prVista='catalogo'; go('pratiche');
-      return {righe:document.querySelectorAll('#page tbody tr').length, mod:document.querySelectorAll('[data-pcat]').length,
-        nuova:document.querySelectorAll('[data-act="pcnuova"]').length}; });
-    must(n.righe>10&&n.mod===0&&n.nuova===0,'permessi sul catalogo sbagliati: '+JSON.stringify(n));
-    await p.evaluate(()=>{ S.prof.role='admin'; S.prVista='pratiche'; go('oggi'); });
-  });
-
   /* ---------------- CLIENTE UNICO: ANAGRAFICA <-> COMMESSE ---------------- */
   let CLI=null;
   await t('modificando il cliente in Clienti si aggiornano le sue commesse e i preventivi in bozza',async()=>{

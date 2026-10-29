@@ -474,7 +474,6 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Commesse</span>
       <button class="sn" data-page="projects"><span class="snic">&#9707;</span>Progetti<span class="snb" id="b-proj">0</span></button>
       <button class="sn" data-page="clienti"><span class="snic">&#127970;</span>Clienti<span class="snb" id="b-cli">0</span></button>
-      <button class="sn" data-page="pratiche"><span class="snic">&#127963;</span>Pratiche &amp; Enti<span class="snb" id="b-prat">0</span></button>
       <button class="sn" data-page="tasks"><span class="snic">&#9745;</span>Attivit&agrave;</button>
       <button class="sn" data-page="kanban"><span class="snic">&#9636;</span>Kanban</button>
       <button class="sn" data-page="timeline"><span class="snic">&#9644;</span>Timeline</button>
@@ -1212,7 +1211,9 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Scadenza</label><input type="date" class="fc" id="tt-d"><div id="tt-quick" class="row" style="margin-top:6px;flex-wrap:wrap"></div></div>
         <div class="fg"><label class="fl">Ente / riferimento</label><input class="fc" id="tt-ente" placeholder="Es. Soprintendenza"><div class="hint" id="tt-rif"></div></div>
       </div>
-      <div class="fg2">
+      <!-- La sezione Pratiche non c'e' piu': le pratiche sono attivita' delle fasi.
+           I campi restano nascosti perche' il salvataggio li legge. -->
+      <div class="fg2" style="display:none">
         <div class="fg"><label class="fl">Pratica collegata</label><select class="fc" id="tt-prat"></select>
           <div class="hint" id="tt-prat-hint"></div></div>
         <div class="fg"><label class="fl">Ruolo nel processo della pratica</label>
@@ -1538,7 +1539,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.4';
+const VERSIONE = '2026.10.29.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -2782,10 +2783,12 @@ async function loadAll(silent) {
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS + TASK_COLS_PRATICA).order('sort_order'),
       SB.from('commessa_fasi').select('*').order('ordine'),
-      SB.from('commessa_pratiche').select('*').order('data_scadenza', {nullsFirst:false}),
+      /* Le pratiche non hanno piu' una sezione: sono attivita' delle fasi.
+         La tabella resta nel database per lo storico, ma non si carica. */
+      Promise.resolve({ data: [], error: null }),
       SB.from('notifiche').select('*').order('created_at', {ascending:false}).limit(40),
       SB.from('time_entries').select('*').order('entry_date', {ascending:false}).limit(1000),
-      SB.from('v_pratiche_chat').select('pratica_id,messaggi,ultimo_movimento'),
+      Promise.resolve({ data: [], error: null }),
       SB.from('commessa_fatture').select('*').order('ordine'),
       SB.from('clienti').select('*').order('denominazione'),
       SB.from('profili_costi').select('*').order('valido_dal', {ascending:false}),
@@ -3112,7 +3115,97 @@ function pianifica(tplKey, conds, dataInizio) {
     ? ((tpl.prat.indexOf(p.k) >= 0 && attiva(p)) || (!p.base && p.cond && conds.indexOf(p.cond) >= 0))
     : ((p.cond && conds.indexOf(p.cond) >= 0) || (tpl.pratBase || []).indexOf(p.k) >= 0))
     .sort((a, b) => (a.ord || 50) - (b.ord || 50));
+  /* LE PRATICHE SONO ATTIVITA' DELLE FASI
+     Non c'e' piu' una sezione delle pratiche a parte: quelle che il percorso e
+     le condizioni richiedono entrano nella fase in cui si fanno, come
+     attivita' con ente, riferimento e termini - una pietra miliare della fase.
+     Se il percorso ha gia' un'attivita' equivalente (stesso riferimento di
+     legge o stesso nome) non si raddoppia. La pratica telematica porta con se'
+     la sua procura speciale nella fase delle firme (art. 1392 c.c.). */
+  pratichInFasi(out, prat);
   return { fasi: out, pratiche: prat, tpl };
+}
+
+/* La pratica c'e' gia' fra le attivita'? Stesso articolo della stessa legge
+   (art. 94 DPR 380/2001 e' coperto da "artt. 93 e 94 DPR 380/2001", ma non
+   basta citare il DPR 380/2001) o stesso nome. */
+function rifScomposto(rif) {
+  const atti = [];
+  const resto = String(rif || '').replace(/\d+\/\d+(?:\/\d+)?/g, m => { atti.push(m); return ' '; });
+  return { atti, art: resto.match(/\d+(?:-\w+)?/g) || [] };
+}
+function praticaCoperta(fasi, p) {
+  const r = rifScomposto(p.rif);
+  const tipo = String(p.tipo || '').toLowerCase();
+  return fasi.some(f => f.att.some(a => {
+    if (/^Procura speciale/.test(a.title || '')) return false;   // la procura non e' la pratica
+    const t = String(a.title || '').toLowerCase();
+    if (tipo && t.indexOf(tipo) >= 0) return true;
+    if (!r.art.length || !r.atti.length) return false;
+    const ra = rifScomposto(a.rif_normativo);
+    return r.atti.every(x => ra.atti.indexOf(x) >= 0) && r.art.every(x => ra.art.indexOf(x) >= 0);
+  }));
+}
+/* La fase in cui si fa. Ogni pratica ha il suo momento nel procedimento
+   (l'ordine del catalogo, 0-100): per ogni momento le fasi dei percorsi in
+   cui di solito si fa, in ordine di preferenza. Se il percorso non ne ha
+   nessuna, la fase che nella sequenza sta dove la pratica sta nel catalogo. */
+const FASI_PRATICA = {
+  sismica:  ['pratica_sismica', 'strutture', 'deposito', 'calcolo', 'istanze', 'esecutivo', 'enti'],
+  edilizia: ['pratica_edilizia', 'presentazione', 'titolo', 'istanze', 'deposito', 'progetto', 'enti'],
+  inizio:   ['incarico', 'ricostruzione', 'avvio', 'analisi', 'preliminare', 'enti'],
+  pareri:   ['pareri', 'istanze', 'enti', 'cds', 'titolo', 'deposito', 'progetto', 'pfte'],
+  energia:  ['energetica', 'presentazione', 'titolo', 'deposito', 'progetto', 'esecutivo'],
+  /* 'avvio' per ultimo: nel privato e' l'avvio del cantiere, negli altri
+     percorsi l'avvio della commessa */
+  cantiere: ['consegna', 'lavori', 'esecuzione', 'opere', 'dl', 'avvio'],
+  fine:     ['chiusura', 'collaudo', 'esecuzione', 'opere', 'lavori']
+};
+const MOMENTO_PRATICA = { sis_deposito_post: 'sismica', sis_aut_post: 'sismica', sismica_aut: 'sismica',
+  sismica_dep: 'sismica', denuncia_ca: 'sismica', sanatoria: 'edilizia', san_36: 'edilizia',
+  san_36bis: 'edilizia', tolleranze_sis: 'edilizia', l10: 'energia', fognatura: 'cantiere' };
+function momentoPratica(p) {
+  if (MOMENTO_PRATICA[p.k]) return MOMENTO_PRATICA[p.k];
+  const o = p.ord != null ? p.ord : 50;
+  return o <= 21 ? 'inizio' : o <= 62 ? 'pareri' : o <= 69 ? 'edilizia' : o <= 73 ? 'sismica'
+       : o <= 84 ? 'cantiere' : 'fine';
+}
+function faseDellaPratica(fasi, p) {
+  const lavoro = fasi.filter(f => f.fase_key !== 'firme');
+  if (!lavoro.length) return fasi[0] || null;
+  const pref = FASI_PRATICA[momentoPratica(p)] || [];
+  for (let i = 0; i < pref.length; i++) {
+    const f = lavoro.find(x => x.fase_key === pref[i]);
+    if (f) return f;
+  }
+  const i = Math.round(Math.min(100, Math.max(0, p.ord || 50)) / 100 * (lavoro.length - 1));
+  return lavoro[i];
+}
+function pratichInFasi(fasi, prat) {
+  const firme = fasi.find(f => f.fase_key === 'firme') || null;
+  prat.forEach(p => {
+    /* la procura serve anche quando la pratica e' gia' un'attivita' del percorso */
+    if (p.proc && firme) {
+      const titolo = 'Procura speciale — ' + (p.ente || 'Ente') + ': ' + p.tipo;
+      if (!firme.att.some(a => a.title === titolo)) firme.att.push({
+        title: titolo, estimated_hours: 0.5, rif_normativo: 'art. 1392 c.c.',
+        contenuto: 'Procura speciale firmata dal cliente per presentare in via telematica «' + p.tipo
+          + '»: vale solo per questa pratica, quindi se ne firma una per ciascuna.',
+        ente: p.ente || null, categoria: 'firma_cliente', is_milestone: false, opzionale: false,
+        sort_order: firme.att.length, due_date: firme.data_fine_prevista, pratica: p.k });
+    }
+    if (praticaCoperta(fasi, p)) return;
+    const f = faseDellaPratica(fasi, p); if (!f) return;
+    const termini = p.gg ? 'Termine indicativo: ' + p.gg + ' giorni.' : (p.gg === 0 ? 'Efficace al protocollo.' : '');
+    const verso = 'Pratica verso ' + (p.ente || 'l\'ente competente') + ': preparare gli elaborati e i moduli, '
+      + (p.proc ? 'presentarla sulla piattaforma telematica' : 'presentarla') + ' e seguirla fino all\'esito.';
+    f.att.push({
+      title: p.tipo, estimated_hours: p.proc ? 4 : 3, rif_normativo: p.rif || null,
+      contenuto: [verso, p.note, termini].filter(Boolean).join(' '),
+      ente: p.ente || null, categoria: p.proc ? 'piattaforma' : null,
+      is_milestone: true, opzionale: false, sort_order: f.att.length, due_date: f.data_fine_prevista,
+      pratica: p.k });
+  });
 }
 
 /* ---------------------------------------------------------------------------
@@ -3220,11 +3313,9 @@ function differenzaStruttura(pid, tplKey, conds, dataInizio) {
     });
   });
 
-  /* LE PRATICHE NON LE DECIDE PIU' IL PERCORSO
-     Il piano le PROPONE (pratProposte) e si scelgono dopo, dal catalogo:
-     aggiornare il percorso non ne aggiunge e non ne toglie nessuna. */
+  /* Le pratiche sono attivita' delle fasi: arrivano con le righe del piano. */
   const esistenti   = praticheOf(pid);
-  const pratProposte = plan.pratiche.filter(x => !esistenti.some(e => e.pratica_key === x.k));
+  const pratProposte = [];
   const pratNuove = [], pratObsolete = [], pratProtette = [];
 
   /* Una fase si toglie solo se resta davvero vuota */
@@ -3854,9 +3945,6 @@ function updBadges() {
   /* la sezione la vede solo chi segue almeno una commessa */
   el('sn-firme').style.display = commesseCheSeguo().size ? '' : 'none';
 
-  const pr = S.pratiche.filter(praticaOpen).length;
-  el('b-prat').textContent = pr;
-  el('b-prat').classList.toggle('alert', S.pratiche.filter(praticaLate).length > 0);
 }
 
 /* ===========================================================================
@@ -9570,7 +9658,6 @@ function rProject() {
 
   const tabs = [
     ['avanzamento', 'Avanzamento', pr.tot],
-    ['pratiche',    'Pratiche & Enti', praticheOf(p.id).length],
     ['fatture',     'Fatturazione', fattureOf(p.id).length],
     ['contabilita', 'Contabilità & SAL', salOf(p.id).length || null],
     ['anagrafica',  'Anagrafica', null],
@@ -11828,13 +11915,13 @@ function anteprimaNuova(tpl, conds, dataI) {
   return '<div class="card mb16" style="margin-top:16px;background:var(--bluelt);border-color:#B5D4F4">'
     + '<b style="font-size:13px">Riepilogo di quello che verrà creato</b>'
     + '<div style="font-size:13px;margin-top:8px">'
-    + '<b>' + plan.fasi.length + '</b> fasi · <b>' + nAtt + '</b> attività · <b>'
-    + plan.pratiche.length + '</b> pratiche verso gli enti</div>'
+    + '<b>' + plan.fasi.length + '</b> fasi · <b>' + nAtt + '</b> attività'
+    + (plan.pratiche.length ? ', fra cui <b>' + plan.pratiche.length + '</b> pratiche verso gli enti' : '') + '</div>'
     + '<div style="font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.7">'
     + plan.fasi.map(f => '• ' + esc(f.nome) + ' <span style="color:var(--mut2)">(' + f.att.length + ')</span>').join('<br>')
     + '</div>'
-    + (plan.pratiche.length ? '<div style="font-size:11.5px;margin-top:10px"><b>Pratiche:</b> '
-        + plan.pratiche.map(p => esc(p.ente + ' — ' + p.tipo)).join('; ') + '</div>' : '')
+    + (plan.pratiche.length ? '<div style="font-size:11.5px;margin-top:10px"><b>Pratiche</b> (attività nelle fasi, con ente e termini): '
+        + plan.pratiche.map(p => esc((p.ente ? p.ente + ' — ' : '') + p.tipo)).join('; ') + '</div>' : '')
     + '</div>';
 }
 
@@ -11883,12 +11970,6 @@ function anteprimaModifica(pid, tpl, conds, dataI) {
       + '<div class="hint">Se lasci la casella vuota le voci restano dove sono: '
       + 'aggiungere è sempre sicuro, togliere lo decidi tu.</div>');
   }
-
-  if (d.pratProposte && d.pratProposte.length)
-    h += box(['var(--bluelt)', '#B5D4F4'], 'Pratiche proposte — si scelgono dopo il salvataggio',
-      '<div style="font-size:12.5px;margin-top:6px;color:var(--mut)">Non vengono create da sole: '
-      + 'salvata la commessa, si spuntano quelle che servono.</div>'
-      + elenco(d.pratProposte.map(x => esc((x.ente ? x.ente + ' — ' : '') + x.tipo))));
 
   if (d.attProtette.length || d.pratProtette.length) {
     const r = d.attProtette.map(x => esc(x.t.title) + ' <span style="color:var(--mut2)">('
@@ -12117,9 +12198,7 @@ async function wzSave() {
       toast((res && (res.att || res.fasi || res.tolte)
         ? 'Commessa aggiornata: +' + res.fasi + ' fasi, +' + res.att + ' attività'
           + (res.tolte ? ', ' + res.tolte + ' voci rimosse' : '')
-        : 'Commessa aggiornata')
-        + (diff.pratProposte.length ? '. Il percorso propone ' + diff.pratProposte.length
-            + ' pratiche: le trovi nella scheda Pratiche & Enti.' : ''), 'success');
+        : 'Commessa aggiornata'), 'success');
       return;
     }
     pay.created_by = S.me.id;
@@ -12152,10 +12231,8 @@ async function wzSave() {
     const res = await generaStruttura(data.id, WZ.tpl, WZ.conds, pay.start_date);
     closeM('m-proj');
     await loadAll(true);
-    if (res) toast('Commessa creata: ' + res.fasi + ' fasi, ' + res.att + ' attività. Ora scegli le pratiche.', 'success');
+    if (res) toast('Commessa creata: ' + res.fasi + ' fasi, ' + res.att + ' attività (pratiche comprese).', 'success');
     goProject(data.id);
-    /* Subito dopo: quali pratiche aprire. Il gestionale propone, si decide qui. */
-    apriSceltaPratiche(data.id);
   } finally {
     setLoading('mp-save', false);
   }

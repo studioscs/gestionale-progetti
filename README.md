@@ -405,37 +405,7 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
 - **Redditività** (solo admin): per ogni commessa, quanto ha reso e come si
   divide. Vedi sotto.
 - **Kanban** con drag & drop tra le colonne.
-- **Scadenzario** unifica attività e pratiche di tutto lo studio, filtrabile per persona.
-- **Pratiche & Enti** ha una barra di filtri rapidi: i chip in alto (*Da preparare,
-  Presso l'ente, In ritardo, Concluse*) mostrano il conteggio e filtrano con un click;
-  sotto ci sono commessa, ente e responsabile, più una ricerca su ente, tipo pratica,
-  oggetto, protocollo, riferimento normativo e nome commessa. Il raggruppamento si
-  cambia al volo: **per ente, per commessa, per stato** o elenco piatto ordinato per
-  scadenza.
-- **Ogni pratica ha una conversazione interna** (scheda *Conversazione*): messaggi
-  rapidi fra chi la segue, con Invio per inviare e Shift+Invio per andare a capo.
-  Nella stessa cronologia compaiono anche gli eventi formali (invio, protocollo,
-  integrazione, sollecito, sopralluogo, parere, rilascio) e i cambi di stato, perché
-  quando segui una pratica conta l'ordine dei fatti, non la loro categoria.
-  Sotto il campo di scrittura è indicato **chi riceverà la notifica**; se la pratica
-  non ha un responsabile te lo dice invece di inviare nel vuoto. In elenco ogni
-  pratica mostra 💬 con il numero di messaggi, evidenziato se ce ne sono di non letti.
-- **Togliere una pratica** — due strade, entrambe raggiungibili sia dall'elenco
-  (colonna a destra) sia dalla finestra della pratica:
-  - **⊘ Non necessaria** (tutti i collaboratori, reversibile): la pratica esce dai
-    conteggi e dallo scadenzario ma resta consultabile, a documentare che la
-    valutazione è stata fatta. La scelta finisce nel diario con nome e data.
-    È la strada giusta quando la generazione automatica ha creato una pratica che
-    per quella commessa non serve.
-  - **🗑 Elimina** (di default solo admin, irreversibile): cancella anche protocollo,
-    date, diario e conversazione. La conferma dice quanti messaggi si perdono e
-    ricorda l'alternativa.
-
-  Per lasciare eliminare anche ai collaboratori: esegui
-  [`sql/003_permessi_pratiche.sql`](sql/003_permessi_pratiche.sql) e porta
-  `PERMESSI.eliminaPratica` da `'admin'` a `'staff'` in cima a `index.html`.
-  Servono entrambe le modifiche: il solo cambio nel file non basta, perché la
-  cancellazione è bloccata anche dalle policy del database.
+- **Scadenzario** unifica le attività di tutto lo studio (pratiche comprese), filtrabile per persona.
 - **Chiudere una commessa**: dal dettaglio → *Modifica* trovi due operazioni distinte.
   - **Archivia** (collaboratori e admin, reversibile): la commessa esce dagli elenchi
     e dai menu a tendina ma resta consultabile dal filtro *Archiviate*, con tutto lo
@@ -645,57 +615,36 @@ violazioni sismiche il bivio fra tolleranze, parziale e totale difformità.
 mai toccate del vecchio percorso se ne vanno e arrivano quelle nuove; quelle già
 avviate, chiuse, aggiunte a mano o con una conversazione restano.
 
-## Pratiche: il catalogo, le proposte, le attività che le avviano
+## Le pratiche sono attività delle fasi
 
-Prima, creando una commessa, il gestionale apriva da solo **tutte** le pratiche
-che quel tipo di lavoro poteva richiedere — anche sedici — con una procura per
-ognuna. *Pratiche & Enti* si riempiva di voci che nessuno aveva deciso.
+Non c'è più la sezione *Pratiche & Enti* (né nel menu né nella commessa), e
+dopo aver creato una commessa non si apre più la finestra per scegliere le
+pratiche. Le pratiche stanno **dentro le fasi**, insieme al resto del lavoro.
 
-**Ora le pratiche si scelgono.**
+- **Creando la commessa** ogni pratica che il percorso e le condizioni
+  richiedono diventa un'**attività della fase in cui si fa**, marcata come
+  pietra miliare, con ente, riferimento normativo e termini («Termine
+  indicativo: 60 giorni», «Efficace al protocollo»). Le pratiche telematiche
+  sono segnate *piattaforma*.
+- **La fase giusta**: ogni pratica ha il suo momento nel procedimento —
+  ricerche iniziali, pareri degli enti, titolo edilizio, pratica sismica,
+  energetica, cantiere, chiusura — e finisce nella fase del percorso che
+  corrisponde (nel privato: *Pareri*, *Strutture*, *Presentazione*, *Avvio
+  lavori*, *Chiusura*…). Se il percorso non ha quella fase, quella che nella
+  sequenza sta allo stesso punto.
+- **Niente doppioni**: se il percorso ha già un'attività equivalente — stesso
+  articolo della stessa legge (l'art. 93 DPR 380/2001 è coperto da «artt. 93 e
+  65 DPR 380/2001») o stesso nome — la pratica non si aggiunge.
+- **La procura speciale** di ogni pratica telematica (art. 1392 c.c.) nasce
+  nella fase delle firme, e quindi compare in *Firme del cliente*.
+- **Il riepilogo** prima di salvare dice quante sono e quali.
 
-- **Il catalogo** (*Pratiche & Enti → Catalogo pratiche*) è l'elenco delle
-  pratiche che lo studio può aprire: ente, norma, termine in giorni, se serve
-  la procura, quando proporla. Chi tiene l'amministrazione può correggere una
-  voce, toglierla dalle proposte, aggiungerne di proprie, e tornare
-  all'originale. Gli altri lo consultano.
-- **Dopo aver creato la commessa** si apre la finestra *Pratiche di «…»*:
-  le pratiche che il percorso e le condizioni fanno prevedere sono già
-  spuntate, sotto c'è tutto il catalogo con la ricerca. Si toglie quello che non
-  serve, si aggiunge quello che manca, e solo allora le pratiche nascono —
-  ognuna telematica con la sua procura nella fase delle firme. *Non ora* non
-  crea niente: le proposte restano nella scheda *Pratiche & Enti* della
-  commessa, sul pulsante **Dal catalogo** (che dice quante sono).
-- **Aggiornare il percorso** di una commessa non aggiunge e non toglie più
-  pratiche: le eventuali nuove proposte vengono segnalate.
-
-### L'attività che avvia o conclude la pratica
-
-Nel modulo di un'attività c'è **Pratica collegata** con il suo **ruolo**:
-
-- ▶️ **Iniziale** — completata l'attività, la pratica risulta **inviata**, con
-  la data di invio di oggi e la scadenza calcolata dai giorni di legge;
-- 🏁 **Conclusiva** — completata l'attività, la pratica risulta
-  **rilasciata**, con la data di esito.
-
-Il cambiamento è scritto nel diario della pratica («Avviata con l'attività
-…»). Scrivendo il titolo di una **nuova** attività il gestionale propone la
-pratica della commessa a cui si riferisce («Presentazione SCIA antincendio» →
-SCIA antincendio, iniziale; «Ritiro esito…» → conclusiva); su un'attività già
-esistente la proposta resta un suggerimento con il link *Collega*, così
-aprirla per cambiare una data non la collega di nascosto. Nella checklist
-l'attività collegata porta il segno ▶️/🏁 con il nome della pratica, e la
-pratica elenca le sue attività.
-
-### Ordine in *Pratiche & Enti*
-
-- Si apre sulle pratiche **aperte**, raggruppate **per commessa**; concluse e
-  non necessarie stanno sotto *Concluse*, quelle delle commesse archiviate non
-  compaiono più.
-- **Riordina**: se ci sono pratiche nate in automatico e mai toccate (nessun
-  invio, protocollo, responsabile, conversazione o attività collegata) un
-  avviso lo dice; il pulsante le elenca per commessa, tutte spuntate, e le
-  toglie insieme alle procure ancora da firmare che servivano solo a loro.
-  Quelle avviate non compaiono mai nell'elenco.
+Le pratiche aperte prima di questo cambio sono state riportate nelle loro
+commesse: quasi tutte avevano già l'attività equivalente; le due che mancavano
+(una comunicazione di fine lavori strutturali e un APE) sono state aggiunte
+come attività. La tabella `commessa_pratiche` resta nel database per lo
+storico, ma l'app non la carica più; il catalogo delle pratiche resta e
+continua a decidere quali pratiche entrano nelle fasi.
 
 ## Il cliente è uno solo, dappertutto
 
