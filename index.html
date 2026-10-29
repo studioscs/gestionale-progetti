@@ -1537,7 +1537,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.1';
+const VERSIONE = '2026.10.29.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7593,14 +7593,45 @@ const TESTO_PROBLEMA = {
   eccesso: c => 'Gli scaglioni superano il contratto di ' + feuro(c.eccesso),
   finita:  c => 'Commessa completata, ancora da fatturare ' + feuro(c.daFatturare)
 };
+/* LA DESCRIZIONE DEL SALDO: "SALDO - " e poi quello che si fattura, preso
+   dagli scaglioni gia' scritti o dal contratto. Dalle descrizioni si tolgono
+   le diciture di rata ("1^ ACCONTO per", "2°ACCONTO", "_SALDO", "Integrazione
+   n. 2 —"), altrimenti uscirebbe un "SALDO - 1^ ACCONTO ...". */
+const OGGETTO_GENERICO = /^incarico professionale come da (disciplinare|contratto)\.?$/i;
+function pulisciDescrizione(t) {
+  let s = String(t || '').trim(), prima;
+  const rata = '(?:\\d+\\s*[°^ªo]?\\s*)?(?:acconto|anticipo|saldo|rata(?:\\s*n\\.?\\s*\\d+)?|sal(?:\\s*n\\.?\\s*\\d+)?|integrazione(?:\\s*n\\.?\\s*\\d+)?)';
+  do {
+    prima = s;
+    s = s.replace(new RegExp('^' + rata + '\\b\\s*(?:per\\b\\s*|[-–—:,]\\s*)?', 'i'), '').trim();
+    s = s.replace(new RegExp('[\\s_\\-–—,]*' + rata + '\\s*\\d*\\s*%?\\s*$', 'i'), '').trim();
+    s = s.replace(/^\d+\s*%\s*(?:[-–—:,]\s*)?/, '').trim();
+  } while (s !== prima);
+  return s.replace(/^[-–—:,_\s]+|[-–—:,_\s]+$/g, '');
+}
+function descrizioneSaldo(p) {
+  const buona = t => { const x = pulisciDescrizione(t); return x.length >= 8 && !OGGETTO_GENERICO.test(x) ? x : ''; };
+  const atti = contrattiOf(p.id).filter(c => c.stato === 'accettato');
+  const incarico = atti.find(c => c.tipo === 'incarico') || atti[0];
+  /* prima le fatture gia' scritte, dalla piu' recente: e' la dicitura che il
+     committente conosce. Poi l'oggetto del contratto, poi quello del servizio. */
+  const scag = fattureOf(p.id).filter(f => f.stato !== 'annullata' && !/^integrazione/i.test(f.descrizione || '')).reverse();
+  const fonti = scag.map(f => f.descrizione).concat([incarico && incarico.oggetto, p.oggetto_servizio,
+    String(p.description || '').split('\n')[0]]);
+  for (const t of fonti) { const x = buona(t); if (x) return 'SALDO - ' + x; }
+  return 'SALDO';
+}
 /* Lo scaglione di saldo che manca, con un clic: l'importo scoperto */
 async function creaSaldo(pid) {
   const p = byId(S.projects, pid); if (!p) return;
   const c = controlloFatturazione(p);
   if (!(c.scoperto > 0.01)) return toast('Il contratto è già tutto negli scaglioni.', 'success');
-  if (!confirm('Creare lo scaglione «Saldo» da ' + feuro(c.scoperto) + ' per ' + p.name + '?\n\n'
-    + 'Contratto ' + feuro(c.imp) + ', già negli scaglioni ' + feuro(c.piano) + '.')) return;
-  const { error } = await SB.from('commessa_fatture').insert({ project_id: pid, descrizione: 'Saldo',
+  const descr = descrizioneSaldo(p);
+  if (!confirm('Creare lo scaglione di saldo da ' + feuro(c.scoperto) + ' per ' + p.name + '?\n\n'
+    + 'Descrizione: ' + (descr.length > 220 ? descr.slice(0, 220) + '…' : descr) + '\n\n'
+    + 'Contratto ' + feuro(c.imp) + ', già negli scaglioni ' + feuro(c.piano) + '. '
+    + 'La descrizione si può correggere dallo scaglione.')) return;
+  const { error } = await SB.from('commessa_fatture').insert({ project_id: pid, descrizione: descr,
     imponibile: c.scoperto, stato: p.status === 'completato' ? 'pronta' : 'da_emettere',
     ordine: fattureOf(pid).reduce((a, f) => Math.max(a, f.ordine || 0), 0) + 1, created_by: S.me.id });
   if (error) return sbErr(error, 'scaglione di saldo');

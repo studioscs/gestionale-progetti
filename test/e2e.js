@@ -4033,7 +4033,7 @@ function launchOpts(){
       const mk=async(cod,name,amount,status)=>(await SB.from('projects').insert({codice:cod,name,client:'Cliente '+cod,status:status||'attivo',amount}).select().single()).data.id;
       const a=await mk('CF_1','Saldo mancante',10000), b=await mk('CF_2','Senza scaglioni',3000),
             c=await mk('CF_3','Troppi scaglioni',1000), d=await mk('CF_4','Finita non fatturata',2000,'completato'), ok=await mk('CF_5','Tutto a posto',500);
-      await SB.from('commessa_fatture').insert({project_id:a,descrizione:'Acconto 40%',imponibile:4000,stato:'emessa',numero_fattura:'CF/1',data_fattura:'2026-09-01',ordine:1});
+      await SB.from('commessa_fatture').insert({project_id:a,descrizione:'1^ ACCONTO per progetto strutturale del capannone in via Roma',imponibile:4000,stato:'emessa',numero_fattura:'CF/1',data_fattura:'2026-09-01',ordine:1});
       await SB.from('commessa_fatture').insert({project_id:c,descrizione:'Unico',imponibile:1500,stato:'da_emettere',ordine:1});
       await SB.from('commessa_fatture').insert({project_id:d,descrizione:'Unico',imponibile:2000,stato:'da_emettere',ordine:1});
       await SB.from('commessa_fatture').insert({project_id:ok,descrizione:'Unico',imponibile:500,stato:'incassata',numero_fattura:'CF/2',data_fattura:'2026-09-02',ordine:1});
@@ -4057,8 +4057,24 @@ function launchOpts(){
     await p.locator('.card [data-creasaldo="'+CF.a+'"]:visible').first().click(); await p.waitForTimeout(900);
     const g=await p.evaluate(x=>({sc:__DB.commessa_fatture.filter(f=>f.project_id===x.a).map(f=>f.descrizione+':'+Number(f.imponibile)+':'+f.stato),
       ancora:commesseDaControllare().some(y=>y.p.id===x.a)}),CF);
-    must(g.sc.indexOf('Saldo:6000:da_emettere')>=0,'scaglione di saldo: '+JSON.stringify(g.sc));
+    must(g.sc.indexOf('SALDO - progetto strutturale del capannone in via Roma:6000:da_emettere')>=0,'scaglione di saldo: '+JSON.stringify(g.sc));
     must(!g.ancora,'la commessa resta fra quelle da controllare');
+  });
+  await t('la descrizione del saldo viene dalle fatture già scritte (ripulite) o dal contratto',async()=>{
+    const g=await p.evaluate(async x=>{
+      await SB.from('commessa_contratti').insert({project_id:x.b,numero:1,tipo:'incarico',oggetto:'Verifica di vulnerabilità sismica della scuola',importo:3000,stato:'accettato'});
+      await SB.from('commessa_contratti').insert({project_id:x.d,numero:1,tipo:'incarico',oggetto:'Incarico professionale come da disciplinare',importo:2000,stato:'accettato'});
+      await loadAll(true);
+      const {data:e}=await SB.from('projects').insert({codice:'CF_6',name:'Fatture e contratto',status:'attivo',amount:9000}).select().single();
+      await SB.from('commessa_contratti').insert({project_id:e.id,numero:1,tipo:'incarico',oggetto:'Architettonico',importo:9000,stato:'accettato'});
+      await SB.from('commessa_fatture').insert({project_id:e.id,descrizione:'Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE A RECANATI (MC)_1° ACCONTO',imponibile:3000,stato:'emessa',numero_fattura:'CF/6',data_fattura:'2026-09-03',ordine:1});
+      await loadAll(true);
+      return {b:descrizioneSaldo(byId(S.projects,x.b)),d:descrizioneSaldo(byId(S.projects,x.d)),e:descrizioneSaldo(byId(S.projects,e.id)),
+        pul:['1° ACCONTO','2°ACCONTO','Integrazione n. 2 — Progetto impianti','Art. 1 OGGETTO SU IMMOBILE A LORETO_Saldo','Acconto 40% - Rilievo','Salone di bellezza'].map(pulisciDescrizione)}; },CF);
+    must(g.b==='SALDO - Verifica di vulnerabilità sismica della scuola','dal contratto: '+g.b);
+    must(g.e==='SALDO - Art. 1 OGGETTO DEL SERVIZIO SU IMMOBILE A RECANATI (MC)','con fatture già scritte vince la loro dicitura: '+g.e);
+    must(g.d==='SALDO','con contratto generico e scaglione «Unico» resta SALDO: '+g.d);
+    must(JSON.stringify(g.pul)===JSON.stringify(['','','Progetto impianti','Art. 1 OGGETTO SU IMMOBILE A LORETO','Rilievo','Salone di bellezza']),'pulizia: '+JSON.stringify(g.pul));
   });
   await t('nella scheda Fatturazione della commessa l avviso e il pulsante del saldo',async()=>{
     await p.evaluate(x=>goProject(x.b,'fatture'),CF); await p.waitForTimeout(400);

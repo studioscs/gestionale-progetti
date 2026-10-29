@@ -860,8 +860,15 @@ In *Da fatturare*:
   mancanti, «Saldo finale mancante» o «Nessuno scaglione», con l'importo
   scoperto.
 
-**+ Saldo** crea con un clic lo scaglione «Saldo» dell'importo che manca (già
-*pronto da emettere* se la commessa è completata). Lo stesso avviso, con lo
+**+ Saldo** crea con un clic lo scaglione di saldo per l'importo che manca
+(già *pronto da emettere* se la commessa è completata). La descrizione è
+**`SALDO - ` seguito dalla dicitura del lavoro**, presa dall'ultima fattura o
+scaglione già scritto (la frase che il committente conosce) oppure, se non ce
+ne sono, dall'oggetto del contratto. Dalle descrizioni copiate si tolgono le
+diciture di rata — «1^ ACCONTO per», «2°ACCONTO», «…_SALDO», «Integrazione n.
+2 —» — così non esce un «SALDO - 1^ ACCONTO…». Se non c'è niente di utile
+resta «SALDO». La descrizione si vede prima di confermare e si corregge poi
+dallo scaglione. Lo stesso avviso, con lo
 stesso pulsante, compare in testa alla scheda *Fatturazione* della commessa.
 Le commesse archiviate non si controllano.
 
