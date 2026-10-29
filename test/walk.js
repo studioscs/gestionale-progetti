@@ -25,9 +25,9 @@ function launchOpts() {
   return {};
 }
 
-const PAGINE = ['oggi','projects','pratiche','tasks','kanban','timeline','scadenzario',
-                'firme','fatturare','clienti','time','chat','redditivita','users'];
-const SCHEDE = ['avanzamento','pratiche','fatture','contabilita','anagrafica','ore'];
+const PAGINE = ['oggi','projects','tasks','kanban','timeline','scadenzario',
+                'fatturare','clienti','time','chat','redditivita','users'];
+const SCHEDE = ['avanzamento','fatture','contabilita','anagrafica','ore'];
 const MODALI = ['m-proj','m-task','m-prat','m-time','m-user','m-fatt','m-cli','m-sal','m-var','m-del','m-rev','m-chiedi','m-contr'];
 
 (async () => {

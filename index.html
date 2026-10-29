@@ -466,7 +466,6 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Il mio lavoro</span>
       <button class="sn on" data-page="oggi"><span class="snic">&#9788;</span>Oggi<span class="snb" id="b-oggi">0</span></button>
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
-      <button class="sn" data-page="firme" id="sn-firme"><span class="snic">&#9997;</span>Firme cliente<span class="snb" id="b-firme">0</span></button>
       <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Da fatturare<span class="snb" id="b-fatt">0</span></button>
       <button class="sn" data-page="preventivi" id="sn-prev"><span class="snic">&#128221;</span>Preventivi</button>
     </div>
@@ -1543,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.6';
+const VERSIONE = '2026.10.29.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3870,7 +3869,7 @@ async function doLogout() {
 /* ===========================================================================
    ROUTER
    =========================================================================== */
-const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', firme:'Firme del cliente', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
+const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
                  costi:'Costi generali dello studio', preventivi:'Preventivi' };
@@ -3915,7 +3914,7 @@ function render() {
   el('top-act').innerHTML = '';
   closePop();
   const P = {
-    oggi:rOggi, scadenzario:rScadenzario, firme:rFirme, fatturare:rFatturare,
+    oggi:rOggi, scadenzario:rScadenzario, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
     time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, preventivi:rPreventivi, users:rUsers
@@ -3943,11 +3942,6 @@ function updBadges() {
   el('b-fatt').textContent = nfa;
   el('b-fatt').classList.toggle('alert', S.fatture.some(f => f.stato === 'pronta'));
 
-  const nf = firmeAperte().length;
-  el('b-firme').textContent = nf;
-  el('b-firme').classList.toggle('alert', firmeMie().some(t => scadenzaViva(t) && isLate(t.due_date)));
-  /* la sezione la vede solo chi segue almeno una commessa */
-  el('sn-firme').style.display = commesseCheSeguo().size ? '' : 'none';
 
 }
 
@@ -8994,167 +8988,6 @@ function mostraContenuto(id) {
 }
 
 /* ===========================================================================
-   PAGINA: FIRME DEL CLIENTE
-   Raggruppa tutto cio' che il committente deve firmare, per commessa, cosi'
-   da convocarlo una volta sola. La procura speciale vale per una sola pratica:
-   se ne servono cinque, si firmano tutte e cinque nello stesso appuntamento.
-   =========================================================================== */
-/* La firma dell'incarico non e' piu' una firma da raccogliere qui: l'incarico
-   e' il preventivo accettato, che diventa commessa e contratto. Le voci
-   "Preventivo, incarico e privacy" e "Lettera d'incarico" non nascono piu'
-   nei percorsi; quelle delle commesse gia' create non si mostrano. */
-const FIRME_INCARICO = /^(preventivo,\s*incarico|lettera d.incarico)/i;
-const firmaDaRaccogliere = t => t.categoria === 'firma_cliente' && !FIRME_INCARICO.test(String(t.title || '').trim());
-/* LE FIRME LE RACCOGLIE CHI SEGUE LA COMMESSA
-   E' un promemoria operativo: serve a chi incontra il committente. Chi lavora
-   alla commessa e' il responsabile, chi vi ha attivita' assegnate o ne e'
-   responsabile, chi e' responsabile di una fase o di una pratica, chi vi ha
-   registrato ore. NON basta averla creata: l'amministrazione crea le commesse
-   dai preventivi, ma le firme non le raccoglie lei, e trovarsele davanti
-   confondeva. Chi non segue nessuna commessa non vede la sezione. */
-function commesseCheSeguo(uid) {
-  uid = uid || (S.me && S.me.id);
-  const ids = new Set();
-  if (!uid) return ids;
-  S.projects.forEach(p => { if (p.owner_id === uid && !p.archiviato) ids.add(p.id); });
-  S.tasks.forEach(t => { if (t.assignee_id === uid || t.responsabile_id === uid) ids.add(t.project_id); });
-  (S.fasi || []).forEach(f => { if (f.responsabile_id === uid) ids.add(f.project_id); });
-  (S.pratiche || []).forEach(x => { if (x.responsabile_id === uid) ids.add(x.project_id); });
-  (S.time || []).forEach(e => { if (e.operator_id === uid && !eEsterna(e)) ids.add(e.project_id); });
-  S.projects.forEach(p => { if (p.archiviato) ids.delete(p.id); });
-  return ids;
-}
-/* Le firme che riguardano me; con "tutte" (solo amministratori) quelle di tutte le commesse */
-function firmeMie(tutte) {
-  if (tutte && isAd()) return S.tasks.filter(firmaDaRaccogliere);
-  const mie = commesseCheSeguo();
-  return S.tasks.filter(t => firmaDaRaccogliere(t) && (mie.has(t.project_id)
-    || (S.me && (t.assignee_id === S.me.id || t.responsabile_id === S.me.id))));
-}
-function firmeAperte() {
-  /* Stessa regola dello scadenzario: chiusa la fase, quello che conteneva non
-     e' piu' in attesa di firma. */
-  return firmeMie().filter(daFare);
-}
-
-function rFirme() {
-  el('crumb').textContent = 'Le firme da raccogliere nelle commesse che segui: procure, documenti, assensi. L’incarico si firma con il preventivo.';
-  const solo = S.fmProj || '';
-  const mie = commesseCheSeguo(), tutte = !!(S.fmTutte && isAd());
-  el('top-act').innerHTML =
-      '<select class="sel" id="fm-p"><option value="">' + (tutte ? 'Tutte le commesse' : 'Tutte le mie commesse') + '</option>'
-    + S.projects.filter(p => !p.archiviato && (tutte || mie.has(p.id))).map(p => '<option value="' + p.id + '"'
-        + (solo === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
-    + '<label class="row" style="font-size:12px;color:var(--mut);gap:5px">'
-    + '<input type="checkbox" id="fm-all"' + (S.fmAll ? ' checked' : '') + '> mostra anche le firme già raccolte</label>'
-    + (isAd() ? ' <label class="row" style="font-size:12px;color:var(--mut);gap:5px" title="Solo per gli amministratori: '
-        + 'anche le commesse che non segui">'
-        + '<input type="checkbox" id="fm-tutte"' + (S.fmTutte ? ' checked' : '') + '> tutte le commesse</label>' : '');
-  el('fm-p').onchange  = e => { S.fmProj = e.target.value; render(); };
-  if (el('fm-tutte')) el('fm-tutte').onchange = e => { S.fmTutte = e.target.checked; render(); };
-  el('fm-all').onchange = e => { S.fmAll = e.target.checked; render(); };
-
-  let list = firmeMie(tutte);
-  if (!S.fmAll) list = list.filter(isOpen);
-  if (solo) list = list.filter(t => t.project_id === solo);
-
-  if (!list.length) {
-    el('page').innerHTML = '<div class="card"><div class="empty"><i>✍️</i>'
-      + (!mie.size && !tutte
-          ? '<p>Non segui nessuna commessa: qui compaiono solo le firme delle commesse di cui sei responsabile '
-            + 'o in cui hai attività, fasi, pratiche o ore.</p>'
-          : '<p>Nessun documento in attesa di firma' + (tutte ? '.' : ' nelle commesse che segui.') + '</p>')
-      + '<p style="font-size:12px;margin-top:6px">Qui compaiono le <b>procure speciali</b> (una per ogni pratica '
-      + 'telematica aperta), i documenti degli aventi titolo, gli assensi dei comproprietari o del condominio e '
-      + 'le altre firme che servono durante il lavoro. L’incarico non è qui: è il preventivo accettato, che '
-      + 'diventa commessa e contratto dalla sezione Preventivi.</p></div></div>';
-    return;
-  }
-
-  /* Ordine per scadenza: in cima quelle da raccogliere subito. Alcune firme
-     (nomina del DL, contratto d'appalto) maturano solo a lavori avviati e non
-     vanno chieste al primo appuntamento. */
-  const ord = (a, b) => {
-    const A = pd(a.due_date), B = pd(b.due_date);
-    if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
-  };
-  const per = {};
-  list.slice().sort(ord).forEach(t => (per[t.project_id] = per[t.project_id] || []).push(t));
-
-  el('page').innerHTML =
-      '<div class="ibox mb16">L’<b>incarico</b> non si raccoglie qui: è il preventivo accettato, che diventa commessa '
-    + 'e contratto dalla sezione <b>Preventivi</b>.<br>'
-    + 'La <b>procura speciale</b> per la presentazione telematica vale per una '
-    + 'sola pratica (art. 1392 c.c.) e va firmata a mano, con copia del documento d’identità di ogni '
-    + 'sottoscrittore. Raccogliendole tutte in un unico appuntamento il cliente non deve tornare.<br>'
-    + '<b>Attenzione:</b> se dopo la firma cambiano anagrafica o dati catastali, le procure vanno '
-    + 'rigenerate sul portale e fatte rifirmare.</div>'
-    + Object.keys(per).map(pid => {
-        const p = byId(S.projects, pid) || {};
-        const aperte = per[pid].filter(isOpen).length;
-        const late = per[pid].some(t => scadenzaViva(t) && isLate(t.due_date));
-        return '<div class="card mb16">'
-          + '<div class="card-h"><span class="card-t" data-proj="' + pid + '" style="cursor:pointer">'
-            + esc(pn(pid)) + (p.referente ? ' <span style="font-weight:400;color:var(--mut)">— ' + esc(p.referente) + '</span>' : '')
-            + ' <span class="chip' + (late ? ' chip-a' : '') + '">' + aperte + ' da firmare</span></span>'
-          + '<button class="btn btn-sm" data-stampa="' + pid + '">🖨 Stampa distinta</button></div>'
-          + per[pid].map(t => itemRow(t, false)).join('')
-          + '</div>';
-      }).join('');
-}
-
-/* Distinta cartacea da portare all'appuntamento */
-function stampaFirme(pid) {
-  const p = byId(S.projects, pid) || {};
-  const list = S.tasks.filter(t => firmaDaRaccogliere(t) && t.project_id === pid && isOpen(t))
-    .sort((a, b) => {
-      const A = pd(a.due_date), B = pd(b.due_date);
-      if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
-    });
-  if (!list.length) return toast('Nessun documento da firmare per questa commessa.', 'error');
-
-  /* Separa cio' che serve entro un mese da cio' che maturera' piu' avanti:
-     al primo appuntamento non ha senso far firmare la nomina del DL. */
-  const limite = addD(today(), 30);
-  const ora  = list.filter(t => !t.due_date || pd(t.due_date) <= limite);
-  const poi  = list.filter(t => t.due_date && pd(t.due_date) > limite);
-  const riga = t => '<tr><td class="ck"></td><td>' + esc(t.title)
-    + (t.rif_normativo ? '<div class="rif">' + esc(t.rif_normativo) + '</div>' : '')
-    + '</td><td class="dt">' + (t.due_date ? fdate(t.due_date) : '') + '</td><td class="fi"></td></tr>';
-  const righe = ora.map(riga).join('')
-    + (poi.length ? '<tr><td colspan="4" class="sep">Più avanti nel percorso — non necessarie oggi</td></tr>'
-        + poi.map(riga).join('') : '');
-
-  const w = window.open('', '_blank');
-  if (!w) return toast('Il browser ha bloccato la finestra di stampa.', 'error');
-  w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">'
-    + '<title>Distinta firme — ' + esc(p.name || '') + '</title><style>'
-    + 'body{font-family:Helvetica,Arial,sans-serif;font-size:12pt;margin:28px;color:#111}'
-    + 'h1{font-size:15pt;margin:0 0 2px}h2{font-size:11pt;font-weight:400;color:#555;margin:0 0 18px}'
-    + 'table{width:100%;border-collapse:collapse;margin-top:10px}'
-    + 'td{border-bottom:1px solid #ccc;padding:9px 6px;vertical-align:top}'
-    + '.ck{width:26px}.ck:before{content:"";display:block;width:15px;height:15px;border:1.5px solid #333}'
-    + '.fi{width:32%;border-bottom:1px solid #ccc}.dt{width:74px;font-size:9.5pt;color:#666;white-space:nowrap}'
-    + '.sep{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.05em;padding-top:16px;border:none}'
-    + '.rif{font-size:9pt;color:#666;margin-top:2px}'
-    + '.hd{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.06em;border:none;padding-bottom:2px}'
-    + '.nota{margin-top:22px;font-size:9.5pt;color:#444;line-height:1.5;border-top:1px solid #ccc;padding-top:10px}'
-    + '</style></head><body>'
-    + '<h1>Distinta dei documenti da firmare</h1>'
-    + '<h2>' + esc(p.name || '') + (p.client ? ' — ' + esc(p.client) : '')
-    + (p.comune ? ' · ' + esc(p.comune) : '') + '</h2>'
-    + '<table><tr><td class="hd"></td><td class="hd">Documento</td><td class="hd">Entro il</td><td class="hd">Firma</td></tr>'
-    + righe + '</table>'
-    + '<div class="nota"><b>Da ricordare all’appuntamento:</b> copia di un documento d’identità in corso '
-    + 'di validità di <i>ogni</i> sottoscrittore; firma di tutti i comproprietari e dei titolari di altri '
-    + 'diritti reali. Ogni procura speciale vale per una sola pratica.<br><br>'
-    + 'Studio Tecnico SCS S.r.l. tra Professionisti · stampato il ' + fdate(todayISO()) + '</div>'
-    + '</body></html>');
-  w.document.close();
-  setTimeout(() => w.print(), 250);
-}
-
-/* ===========================================================================
    PAGINA: PROGETTI
    =========================================================================== */
 function rProjects() {
@@ -13540,7 +13373,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-proj')))  { return goProject(n.dataset.proj); }
     if ((n = f('data-proj2'))) { return goProject(n.dataset.proj2); }
     if ((n = f('data-ed2')))   { return openTask(n.dataset.ed2); }
-    if ((n = f('data-stampa')))  { e.stopPropagation(); return stampaFirme(n.dataset.stampa); }
     if ((n = f('data-newcontr'))) { e.stopPropagation(); return openContratto(S.projId, null); }
     if ((n = f('data-contr')))   { e.stopPropagation();
       const c = byId(S.contratti, n.dataset.contr);

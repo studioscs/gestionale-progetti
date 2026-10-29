@@ -232,10 +232,9 @@ del cliente* collocata **subito dopo le verifiche preliminari**, che:
 e fatta rifirmare: per questo il congelamento dei dati è la prima attività della
 fase, non un dettaglio.
 
-La pagina **Firme cliente** raggruppa per commessa tutto ciò che aspetta una firma,
-ordinato per scadenza, e stampa una distinta con le caselle da spuntare. Le firme
-che maturano più avanti (nomina del DL, contratto d'appalto) sono separate: al
-primo appuntamento non ha senso chiederle.
+Le firme stanno nella fase **Firme del cliente** della commessa, come attività da
+spuntare. Le firme che maturano più avanti (nomina del DL, contratto d'appalto)
+stanno nelle fasi successive: al primo appuntamento non ha senso chiederle.
 
 ### Sul pubblico, la documentazione per i pareri viene prima
 
@@ -636,7 +635,7 @@ pratiche. Le pratiche stanno **dentro le fasi**, insieme al resto del lavoro.
   articolo della stessa legge (l'art. 93 DPR 380/2001 è coperto da «artt. 93 e
   65 DPR 380/2001») o stesso nome — la pratica non si aggiunge.
 - **La procura speciale** di ogni pratica telematica (art. 1392 c.c.) nasce
-  nella fase delle firme, e quindi compare in *Firme del cliente*.
+  nella fase delle firme della commessa.
 - **Il riepilogo** prima di salvare dice quante sono e quali.
 
 Le pratiche aperte prima di questo cambio sono state riportate nelle loro
@@ -731,32 +730,19 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
   inserisce due volte, e il pulsante sparisce una volta inserito.
 
-## Firme del cliente: senza l'incarico, solo per chi segue la commessa
+## Firme del cliente: niente sezione a parte
 
-L'incarico si firma con il **preventivo accettato**, che diventa commessa e
-contratto dalla sezione *Preventivi*: la sezione *Firme del cliente* non lo
-chiede più. Le voci «Preventivo, incarico e privacy» e «Lettera d'incarico»
-non nascono più nei percorsi di lavoro, e quelle delle commesse già create non
-compaiono più fra le firme da raccogliere né nel contatore (restano nella
-checklist della commessa, dove si possono spuntare o eliminare). Nel percorso
-della sanatoria resta solo l'*informativa scritta sugli esiti possibili*, che
-è un documento a sé.
+Non c'è più la voce *Firme cliente* nel menu. L'incarico si firma con il
+**preventivo accettato**, che diventa commessa e contratto dalla sezione
+*Preventivi*; quello che resta da far firmare — le **procure speciali** (una
+per ogni pratica telematica, art. 1392 c.c.), i documenti degli aventi titolo,
+gli assensi — sono **attività della fase «Firme del cliente»** della commessa,
+dove si spuntano come tutte le altre e compaiono nello scadenzario.
 
-**Chi la vede: solo chi segue la commessa.** Le firme le raccoglie chi
-incontra il committente, non l'amministrazione. Nella sezione (e nel suo
-contatore) compaiono solo le commesse che segui: ne sei il responsabile,
-oppure vi hai attività assegnate o di cui sei responsabile, una fase o una
-pratica a tuo nome, ore registrate. Aver solo creato la commessa (per esempio
-dal preventivo) non basta. Chi non segue nessuna commessa non vede la voce
-nel menu. Un amministratore può comunque spuntare **tutte le commesse** per
-avere il quadro completo.
-
-La sezione resta per quello che il preventivo non copre: le **procure
-speciali** (una per ogni pratica telematica, art. 1392 c.c.), i documenti
-degli aventi titolo, gli assensi dei comproprietari o del condominio,
-l'approvazione della soluzione, le firme che maturano a lavori avviati — tutte
-da raccogliere, possibilmente, in un unico appuntamento con la distinta
-stampata.
+La firma del cliente non si «acquisisce» per riusarla: un'immagine della firma
+apposta dallo studio non è una firma del cliente, nemmeno con la sua
+autorizzazione. Le strade valide sono la procura speciale firmata a mano (o
+digitalmente) e la firma elettronica avanzata o remota del cliente.
 
 ## Note e schede da stampare
 

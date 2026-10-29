@@ -551,70 +551,11 @@ function launchOpts(){
     });
     must(ok,'ordine delle fasi sbagliato');
   });
-  await t('chi non segue nessuna commessa non vede la sezione Firme',async()=>{
-    const g=await p.evaluate(()=>{ render(); return {vis:el('sn-firme').style.display,mie:commesseCheSeguo().size,b:firmeAperte().length}; });
-    must(g.mie===0&&g.vis==='none'&&g.b===0,'amministrazione che non segue commesse: '+JSON.stringify(g));
-  });
-  await t('il responsabile della commessa vede la sezione Firme',async()=>{
-    await p.evaluate(async()=>{ const pr=S.projects.find(x=>/Palazzo Bianchi/.test(x.name));
-      await SB.from('projects').update({owner_id:S.me.id}).eq('id',pr.id); await loadAll(true); render(); });
-    must(await p.isVisible('.sn[data-page="firme"]'),'il responsabile non vede la sezione');
-  });
-  await t('pagina Firme cliente elenca i documenti',async()=>{
-    await p.click('.sn[data-page="firme"]'); await p.waitForTimeout(600);
-    must(await p.locator('#page .card').count()>0,'pagina vuota');
-    const n=await p.locator('#page .it').count();
-    must(n>0,'nessun documento elencato');
-    must(/procura/i.test(await p.textContent('#page')),'nessuna procura in elenco');
-  });
-  await t('badge firma visibile nelle righe',async()=>{
-    must(/✍️/.test(await p.textContent('#page')),'manca il segno di firma');
-  });
-  await t('filtro per commessa nella pagina firme',async()=>{
-    await p.selectOption('#fm-p',{index:1}); await p.waitForTimeout(400);
-    const pid=await p.inputValue('#fm-p');
-    const atteso=await p.evaluate(v=>S.tasks.filter(t=>firmaDaRaccogliere(t)&&t.status!=='completato'&&t.project_id===v).length,pid);
-    must(await p.locator('#page .it').count()===atteso,'filtro incoerente');
-    await p.selectOption('#fm-p',''); await p.waitForTimeout(300);
-  });
-  await t('spuntare una firma la toglie dall elenco',async()=>{
-    const prima=await p.locator('#page .it').count();
-    await p.locator('#page .ck').first().click(); await p.waitForTimeout(700);
-    must(await p.locator('#page .it').count()===prima-1,'elenco non aggiornato');
-  });
-  await t('mostra anche le firme raccolte',async()=>{
-    await p.check('#fm-all'); await p.waitForTimeout(500);
-    must(await p.locator('#page .it.done').count()>0,'le firme raccolte non compaiono');
-    await p.uncheck('#fm-all'); await p.waitForTimeout(400);
-  });
-  await t('badge laterale conta le firme mancanti',async()=>{
-    const b=parseInt(await p.textContent('#b-firme'),10);
-    const g=await p.evaluate(()=>{ const mie=S.projects.filter(x=>x.owner_id===S.me.id).map(x=>x.id);
-      return {atteso:S.tasks.filter(t=>firmaDaRaccogliere(t)&&daFare(t)&&mie.indexOf(t.project_id)>=0).length,
-        tutte:S.tasks.filter(t=>firmaDaRaccogliere(t)&&daFare(t)).length}; });
-    must(b===g.atteso,'badge '+b+' contro '+g.atteso+' delle commesse che seguo');
-    must(g.tutte>g.atteso,'la prova non distingue: tutte '+g.tutte+', mie '+g.atteso);
-  });
-  await t('solo le mie commesse; l amministratore può vederle tutte',async()=>{
-    await p.click('.sn[data-page="firme"]'); await p.waitForTimeout(400);
-    const g=await p.evaluate(()=>{ const prog=new Set([...document.querySelectorAll('#page .card-t[data-proj]')].map(x=>x.dataset.proj));
-      const opz=document.querySelectorAll('#fm-p option').length-1; return {prog:[...prog],opz}; });
-    const mie=await p.evaluate(()=>[...commesseCheSeguo()]);
-    must(g.prog.every(x=>mie.indexOf(x)>=0)&&g.opz===mie.length,'compaiono commesse che non seguo: '+JSON.stringify(g));
-    await p.check('#fm-tutte'); await p.waitForTimeout(400);
-    const n=await p.evaluate(()=>new Set([...document.querySelectorAll('#page .card-t[data-proj]')].map(x=>x.dataset.proj)).size);
-    must(n>g.prog.length,'con «tutte le commesse» non compaiono le altre');
-    await p.uncheck('#fm-tutte'); await p.waitForTimeout(300);
-  });
-  await t('stampa distinta apre la finestra',async()=>{
-    const [nw]=await Promise.all([ p.context().waitForEvent('page',{timeout:6000}),
-      p.locator('[data-stampa]').first().click() ]);
-    await nw.waitForLoadState('domcontentloaded');
-    const txt=await nw.content();
-    must(/Distinta dei documenti da firmare/.test(txt),'intestazione assente');
-    must(/documento d/.test(txt),'promemoria documento identità assente');
-    must(/Entro il/.test(txt),'colonna della scadenza assente');
-    await nw.close();
+  await t('la sezione Firme non c è più: le procure restano nella fase delle firme',async()=>{
+    must(await p.locator('.sn[data-page="firme"]').count()===0,'voce di menu Firme ancora presente');
+    must(await p.evaluate(()=>typeof rFirme==='undefined'),'la pagina Firme esiste ancora');
+    const n=await p.evaluate(()=>S.tasks.filter(t=>/^Procura speciale/.test(t.title)).length);
+    must(n>0,'sparite anche le procure');
   });
   await t('nota operativa di fase mostrata',async()=>{
     /* la commessa del wizard, non "la prima dell'elenco": l'elenco è ordinato
@@ -3977,20 +3918,6 @@ function launchOpts(){
       return {incarico:v.filter(t=>/incarico/i.test(t)),procure:v.filter(t=>/procure/i.test(t)).length}; });
     must(!g.incarico.length,'ancora firme d incarico nei percorsi: '+g.incarico.join(', '));
     must(g.procure>0,'sparite anche le firme delle procure');
-  });
-  await t('in Firme del cliente restano procure e documenti, non l incarico delle commesse già create',async()=>{
-    const g=await p.evaluate(async()=>{
-      const {data:pr}=await SB.from('projects').insert({codice:'FIR_1',name:'Firme prova',status:'attivo',owner_id:S.me.id}).select().single();
-      await SB.from('tasks').insert({project_id:pr.id,title:'Preventivo, incarico e privacy',status:'da_fare',categoria:'firma_cliente',sort_order:1,is_milestone:false,opzionale:false});
-      await SB.from('tasks').insert({project_id:pr.id,title:'Lettera d’incarico',status:'da_fare',categoria:'firma_cliente',sort_order:2,is_milestone:false,opzionale:false});
-      await SB.from('tasks').insert({project_id:pr.id,title:'Procura speciale - SCIA',status:'da_fare',categoria:'firma_cliente',sort_order:3,is_milestone:false,opzionale:false});
-      await loadAll(true); S.fmProj=pr.id; go('firme');
-      const txt=el('page').textContent; S.fmProj='';
-      return {txt,aperte:firmeAperte().filter(t=>t.project_id===pr.id).map(t=>t.title)}; });
-    must(/Procura speciale - SCIA/.test(g.txt),'la procura non compare');
-    must(!/Preventivo, incarico e privacy|Lettera d’incarico/.test(g.txt.replace(/L’incarico non si raccoglie qui[^.]*\./,'')),'compare ancora la firma dell incarico');
-    must(g.aperte.length===1,'conteggio delle firme da raccogliere: '+JSON.stringify(g.aperte));
-    must(/L’incarico non si raccoglie qui/.test(g.txt),'manca la spiegazione');
   });
 
   /* ---------------- PREVENTIVO NEL CONTRATTO DI UNA COMMESSA ESISTENTE ---------------- */
