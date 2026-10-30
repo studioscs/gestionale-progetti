@@ -1221,6 +1221,18 @@ function launchOpts(){
   await t('la proforma dopo prende il numero successivo',async()=>{
     must(/\/002$/.test(await p.evaluate(()=>prossimaProforma())),'il numero non avanza');
   });
+  await t('in testa a Da fatturare l elenco delle proforma emesse',async()=>{
+    await p.evaluate(()=>{ closeAll&&closeAll(); go('fatturare'); }); await p.waitForTimeout(400);
+    const g=await p.evaluate(()=>{ const card=[...document.querySelectorAll('#page .card')].find(c=>/Proforma emesse/.test(c.textContent));
+      const prima=document.querySelector('#page .card'); const f=proformeEmesse(false)[0];
+      return {c:!!card,txt:card?card.textContent:'',num:f&&f.proforma_numero,primaKgrid:!!document.querySelector('#page .kgrid + .card')&&/Proforma emesse/.test(document.querySelector('#page .kgrid + .card').textContent)}; });
+    must(g.c,'riquadro delle proforma assente');
+    must(g.num&&g.txt.includes(g.num),'la proforma '+g.num+' non è elencata');
+    must(g.primaKgrid,'il riquadro non sta in testa alla pagina');
+    await p.click('[data-act="pftutte"]'); await p.waitForTimeout(300);
+    must(/Solo da fatturare/.test(await p.textContent('[data-act="pftutte"]')),'il pulsante non cambia vista');
+    await p.click('[data-act="pftutte"]'); await p.waitForTimeout(200);
+  });
   await t('XML scaricabile una volta compilati i dati',async()=>{
     const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
     await p.evaluate(id=>{

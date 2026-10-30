@@ -1128,6 +1128,16 @@ nella finestra di revisione non conta). Le descrizioni delle righe restano
 com'erano. La finestra di revisione mostra il riferimento sotto le note prima
 di generare.
 
+### L'elenco delle proforma emesse
+
+In testa a **Da fatturare**, subito sotto i numeri di sintesi, il riquadro
+**📄 Proforma emesse** elenca le proforma scaricate: numero, data, commessa e
+cliente, scaglione, totale e stato. Di base mostra quelle **la cui fattura non
+è ancora stata emessa** — le richieste di pagamento in sospeso; il pulsante
+*Anche già fatturate* le mostra tutte, con il numero della fattura in cui sono
+diventate. Un clic sulla riga apre lo scaglione, 📄 riapre la proforma per
+riscaricarla.
+
 ## Costi generali dello studio
 
 Non tutto quello che lo studio paga appartiene a una commessa: la consulenza

@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.30.1';
+const VERSIONE = '2026.10.30.2';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1565,7 +1565,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -7578,6 +7578,51 @@ async function salvaSolleciti() {
 }
 
 /* ---------------------------------------------------------------------------
+   LE PROFORMA EMESSE
+   In testa a Da fatturare: le proforma scaricate (e quindi mandate), con
+   numero e data, per vedere a colpo d'occhio a chi si e' chiesto di pagare.
+   Di base quelle la cui fattura non e' ancora stata emessa; con un clic anche
+   quelle gia' diventate fattura.
+   --------------------------------------------------------------------------- */
+const numProforma = n => { const m = String(n || '').match(/(\d+)\D*$/); return m ? Number(m[1]) : 0; };
+function proformeEmesse(tutte) {
+  return S.fatture.filter(f => f.proforma_numero && (f.proforma_at || f.proforma_data))
+    .filter(f => { const p = byId(S.projects, f.project_id); return p && (tutte || (!p.archiviato && fattAperta(f))); })
+    .sort((a, b) => String(b.proforma_data || '').localeCompare(String(a.proforma_data || ''))
+                 || numProforma(b.proforma_numero) - numProforma(a.proforma_numero));
+}
+function riquadroProforme() {
+  const aperte = proformeEmesse(false), tutte = proformeEmesse(true);
+  if (!tutte.length) return '';
+  const list = S.pfTutte ? tutte : aperte;
+  const tot = r2(list.reduce((a, f) => a + contiScaglione(f).totale, 0));
+  return '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:var(--blue)">&#128196; Proforma emesse '
+      + '<span class="chip">' + list.length + '</span></span>'
+      + '<span class="row" style="gap:10px"><b style="font-size:13px">' + feuro(tot) + '</b>'
+      + '<button class="btn btn-xs" data-act="pftutte">' + (S.pfTutte ? 'Solo da fatturare'
+          : 'Anche già fatturate (' + (tutte.length - aperte.length) + ')') + '</button></span></div>'
+    + '<div class="hint" style="margin:-6px 0 10px">' + (S.pfTutte
+        ? 'Tutte le proforma scaricate, anche quelle già diventate fattura.'
+        : 'Le proforma scaricate e mandate al committente la cui fattura non è ancora stata emessa.') + '</div>'
+    + (list.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Proforma</th><th>Data</th><th>Commessa</th>'
+      + '<th>Scaglione</th><th style="text-align:right">Totale</th><th>Stato</th><th></th></tr></thead><tbody>'
+      + list.map(f => { const c = contiScaglione(f), p = byId(S.projects, f.project_id) || {};
+          return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
+            + '<td><b>' + esc(f.proforma_numero) + '</b></td>'
+            + '<td style="font-size:12px">' + fdate(f.proforma_data || String(f.proforma_at || '').slice(0, 10)) + '</td>'
+            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(p.client || '') + '</div></td>'
+            + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
+            + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
+            + '<td>' + bdg(f.stato, ST_FATT) + (f.numero_fattura && !fattAperta(f)
+                ? '<div style="font-size:11px;color:var(--mut);margin-top:3px">fattura ' + esc(f.numero_fattura) + '</div>' : '') + '</td>'
+            + '<td class="ac">' + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id
+                + '" title="Riapri la proforma (si può riscaricare)">&#128196;</button>' : '') + '</td></tr>'; }).join('')
+      + '</tbody></table></div>'
+      : '<div class="hint" style="margin:0">Nessuna proforma in attesa di fattura.</div>')
+    + '</div>';
+}
+
+/* ---------------------------------------------------------------------------
    REPORT INCASSI E PAGAMENTI ("black list")
    Lo stesso foglio che lo studio teneva a mano: le fatture emesse e non
    ancora pagate, le proforme mandate e non ancora saldate, e quello che lo
@@ -7813,7 +7858,7 @@ function rFatturare() {
   const emesse = S.fatture.filter(f => f.stato === 'emessa');
 
   const daControllare = commesseDaControllare();
-  if (!list.length && !emesse.length && !daControllare.length) {
+  if (!list.length && !emesse.length && !daControllare.length && !proformeEmesse(true).length) {
     /* Nessuna fattura, ma le parcelle degli esterni possono esserci lo stesso:
        sono soldi che escono e vanno visti comunque. */
     el('page').innerHTML = '<div class="card mb16"><div class="empty"><i>💶</i>'
@@ -7880,6 +7925,7 @@ function rFatturare() {
           return m.length ? kpi('In mora con l’avvocato', m.length,
             feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
+    + riquadroProforme()
     + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
@@ -13452,6 +13498,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'genera')   return rigenera(S.projId);
       if (a === 'ripristina') return archiviaProj(S.projId, false);
       if (a === 'prreset')  { S.prQ=''; S.prBucket='aperte'; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
+      if (a === 'pftutte')  { S.pfTutte = !S.pfTutte; return render(); }
       if (a === 'prvista')  { S.prVista = S.prVista === 'catalogo' ? 'pratiche' : 'catalogo'; return render(); }
       if (a === 'riordina') return apriRiordino();
       if (a === 'pcnuova')  return apriVoceCatalogo(null);
