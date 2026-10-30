@@ -4240,6 +4240,20 @@ function launchOpts(){
     must(g.fatt,'non apre lo scaglione da completare');
   });
 
+  await t('scelta l ISA nello scaglione, la proforma parte e si scarica',async()=>{
+    const fid=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Saldo senza ISA',imponibile:800,stato:'pronta',ordine:98}).select().single();
+      await loadAll(true); openRevisione(data.id); return data.id; });
+    await p.waitForSelector('#m-fatt.show',{timeout:4000});
+    await p.evaluate(()=>{ el('fa-isa').value='C06'; el('fa-anno').value=String(today().getFullYear()); });
+    await p.click('#fa-xml');
+    await p.waitForSelector('#m-rev.show',{timeout:4000});
+    must(await p.evaluate(id=>(__DB.commessa_fatture.find(x=>x.id===id)||{}).isa_tipo==='C06',fid),'tipologia non salvata');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#rev-pdf')]);
+    must(dl&&/^Proforma-/.test(dl.suggestedFilename()),'nessuna proforma scaricata');
+    await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
+  });
+
   /* ---------------- PRATICHE: ATTIVITA' DELLE FASI ---------------- */
   await t('creando una commessa le pratiche entrano nelle fasi, con le procure',async()=>{
     const g=await p.evaluate(async()=>{ S.prof.role='admin';

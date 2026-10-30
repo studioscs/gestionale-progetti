@@ -1150,7 +1150,7 @@ tbody tr:hover td { background:#f0f4f9; }
     <div class="mf">
       <span class="left row">
         <button class="btn btn-d" id="fa-del2" style="display:none">Elimina</button>
-        <button class="btn" id="fa-xml">&#128229; Genera XML</button>
+        <button class="btn" id="fa-xml" title="Apre la revisione: da li' proforma PDF o fattura XML">&#128196; Proforma / XML</button>
       </span>
       <button class="btn" data-close="m-fatt">Chiudi</button>
       <button class="btn btn-p" id="fa-save2">Salva</button>
@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.29.7';
+const VERSIONE = '2026.10.30.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8532,6 +8532,27 @@ async function scaglioniStandard(pid) {
    =========================================================================== */
 let REV = null;
 
+/* Dallo scaglione aperto alla proforma o alla fattura: tipologia ISA e anno
+   scelti nella finestra si salvano prima. Senza, la revisione rileggeva lo
+   scaglione dal database, lo trovava ancora non classificato e riapriva la
+   finestra perdendo la scelta: la proforma non partiva mai. */
+async function vaiAllaFattura() {
+  const id = el('fa-id2').value; if (!id) return;
+  const isa = el('fa-isa').value, anno = Number(el('fa-anno').value) || null;
+  const manca = isaMancante({ isa_tipo: isa, anno_competenza: anno });
+  if (manca.length) {
+    el(manca[0] === 'la tipologia ISA' ? 'fa-isa' : 'fa-anno').focus();
+    return toast('Scegli in alto ' + manca.join(' e ') + ', poi genera.', 'error');
+  }
+  const f = byId(S.fatture, id);
+  if (f && (f.isa_tipo !== isa || Number(f.anno_competenza) !== anno)) {
+    const { error } = await SB.from('commessa_fatture').update({ isa_tipo: isa, anno_competenza: anno }).eq('id', id);
+    if (error) return sbErr(error, 'tipologia ISA');
+    Object.assign(f, { isa_tipo: isa, anno_competenza: anno });
+  }
+  closeM('m-fatt');
+  openRevisione(id);
+}
 function openRevisione(id) {
   const f = byId(S.fatture, id); if (!f) return;
   const manca = isaMancante(f);
@@ -13249,7 +13270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
-  el('fa-xml').onclick   = () => { const id = el('fa-id2').value; closeM('m-fatt'); openRevisione(id); };
+  el('fa-xml').onclick   = vaiAllaFattura;
 
   /* Revisione della fattura */
   el('rev-go').onclick    = generaDaRevisione;
