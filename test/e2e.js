@@ -1233,6 +1233,25 @@ function launchOpts(){
     must(/Solo da fatturare/.test(await p.textContent('[data-act="pftutte"]')),'il pulsante non cambia vista');
     await p.click('[data-act="pftutte"]'); await p.waitForTimeout(200);
   });
+  await t('in Fatturazione si cerca una proforma o una fattura',async()=>{
+    must(/Fatturazione/.test(await p.textContent('.sn[data-page="fatturare"]')),'la voce di menu non si chiama Fatturazione');
+    const num=await p.evaluate(()=>proformeEmesse(true)[0].proforma_numero);
+    await p.fill('#fz-q',num); await p.waitForTimeout(250);
+    const g=await p.evaluate(()=>({ris:el('fz-ris').textContent,resto:el('fz-resto').style.display,focus:document.activeElement&&document.activeElement.id}));
+    must(g.ris.includes(num)&&/1 risultat/.test(g.ris),'la proforma non si trova: '+g.ris.slice(0,160));
+    must(g.resto==='none','il resto della pagina non si toglie di mezzo');
+    must(g.focus==='fz-q','la casella perde il cursore mentre si scrive');
+    /* anche una fattura gia' incassata, cercata per numero */
+    const inc=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Vecchia incassata',imponibile:1234,stato:'incassata',
+        numero_fattura:'77/FE',data_fattura:'2025-03-10',isa_tipo:'C05',anno_competenza:2025,ordine:97});
+      await loadAll(true); render(); const r=trovaFatture('77/fe').map(f=>f.descrizione);
+      const v=S.fatture.find(f=>f.numero_fattura==='77/FE'); await SB.from('commessa_fatture').delete().eq('id',v.id);
+      await loadAll(true); return r; });
+    must(inc.includes('Vecchia incassata'),'la fattura incassata non si trova: '+JSON.stringify(inc));
+    await p.fill('#fz-q',''); await p.waitForTimeout(200);
+    must(await p.evaluate(()=>el('fz-resto').style.display==='' && el('fz-ris').textContent===''),'svuotata la ricerca la pagina non torna');
+  });
   await t('XML scaricabile una volta compilati i dati',async()=>{
     const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
     await p.evaluate(id=>{

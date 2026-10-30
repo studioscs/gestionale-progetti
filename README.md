@@ -1130,13 +1130,22 @@ di generare.
 
 ### L'elenco delle proforma emesse
 
-In testa a **Da fatturare**, subito sotto i numeri di sintesi, il riquadro
+In testa a **Fatturazione**, subito sotto i numeri di sintesi, il riquadro
 **📄 Proforma emesse** elenca le proforma scaricate: numero, data, commessa e
 cliente, scaglione, totale e stato. Di base mostra quelle **la cui fattura non
 è ancora stata emessa** — le richieste di pagamento in sospeso; il pulsante
 *Anche già fatturate* le mostra tutte, con il numero della fattura in cui sono
 diventate. Un clic sulla riga apre lo scaglione, 📄 riapre la proforma per
 riscaricarla.
+
+### Cercare una fattura o una proforma
+
+La sezione del menu si chiama ora **Fatturazione** (prima *Da fatturare*). In
+cima c'è una casella **Cerca**: numero di fattura (es. *77/FE*), numero di
+proforma, commessa (nome o codice), cliente, descrizione dello scaglione o dei
+servizi, data, importo. Cerca in **tutti** gli scaglioni, anche quelli già
+incassati e delle commesse archiviate; più parole restringono. Mentre si cerca
+il resto della pagina si toglie di mezzo, svuotata la casella torna.
 
 ## Costi generali dello studio
 

@@ -466,7 +466,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="slbl">Il mio lavoro</span>
       <button class="sn on" data-page="oggi"><span class="snic">&#9788;</span>Oggi<span class="snb" id="b-oggi">0</span></button>
       <button class="sn" data-page="scadenzario"><span class="snic">&#9200;</span>Scadenzario<span class="snb" id="b-scad">0</span></button>
-      <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Da fatturare<span class="snb" id="b-fatt">0</span></button>
+      <button class="sn" data-page="fatturare"><span class="snic">&#128181;</span>Fatturazione<span class="snb" id="b-fatt">0</span></button>
       <button class="sn" data-page="preventivi" id="sn-prev"><span class="snic">&#128221;</span>Preventivi</button>
     </div>
     <div class="ssec">
@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.30.2';
+const VERSIONE = '2026.10.30.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1565,7 +1565,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '',
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -3869,7 +3869,7 @@ async function doLogout() {
 /* ===========================================================================
    ROUTER
    =========================================================================== */
-const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', fatturare:'Da fatturare', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
+const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', fatturare:'Fatturazione', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
                  costi:'Costi generali dello studio', preventivi:'Preventivi' };
@@ -7036,7 +7036,7 @@ function contabilitaPanel(p) {
     + '</div>'
     + (daEmettere > 0
         ? '<div class="wbox mb16"><b>' + feuro(daEmettere) + ' di direzione lavori è maturato e non è ancora stato fatturato.</b> '
-          + 'Lo trovi fra gli scaglioni pronti nella scheda <b>Fatturazione</b> e nella pagina <b>Da fatturare</b>.</div>'
+          + 'Lo trovi fra gli scaglioni pronti nella scheda <b>Fatturazione</b> e nella pagina <b>Fatturazione</b>.</div>'
         : '')
     + '<div class="card mb16"><div class="card-h"><span class="card-t">Stati di avanzamento</span>'
       + '<span class="row">'
@@ -7826,7 +7826,7 @@ function riquadroControlloFatt(elenco) {
 }
 
 function rFatturare() {
-  el('crumb').textContent = 'Quello che è maturato e non è ancora stato fatturato.';
+  el('crumb').textContent = 'Proforma, fatture e quello che è maturato da fatturare.';
   /* Il quadro C del modello ISA si compila una volta l'anno: il pulsante sta
      qui, dove si guardano le fatture, e non in una pagina sua che nessuno
      ricorderebbe di avere. */
@@ -7908,8 +7908,9 @@ function rFatturare() {
         + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>').join('')
     + '</tbody></table></div></div>';
 
-  el('page').innerHTML =
-      '<div class="kgrid">'
+  el('page').innerHTML = barraCercaFatt()
+    + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
+      + '<div class="kgrid">'
       + kpi('Chieste dai tecnici', richieste.length,
             feuro(richieste.reduce((a, f) => a + impFattura(f), 0)),
             richieste.length ? 100 : 0, 'var(--ora)')
@@ -7940,7 +7941,74 @@ function rFatturare() {
     + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
     + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti', null,
         daControllare.filter(x => x.c.problema === 'saldo'))
-    + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)');
+    + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)')
+    + '</div>';
+  collegaCercaFatt();
+}
+
+/* ---------------------------------------------------------------------------
+   CERCA UNA FATTURA O UNA PROFORMA
+   In testa a Fatturazione. Cerca in tutti gli scaglioni, anche quelli gia'
+   incassati e delle commesse archiviate: numero di fattura, numero di
+   proforma, descrizione, commessa (nome e codice), cliente, importo. Mentre si
+   cerca, il resto della pagina si toglie di mezzo; svuotata la casella torna.
+   --------------------------------------------------------------------------- */
+function barraCercaFatt() {
+  return '<div class="card mb16" style="padding:10px 14px"><div class="row" style="gap:8px;align-items:center">'
+    + '<span style="font-size:16px">&#128269;</span>'
+    + '<input class="fc" id="fz-q" style="flex:1" autocomplete="off" '
+      + 'placeholder="Cerca fattura o proforma: numero, commessa, cliente, descrizione, importo" value="' + esc(S.fzQ || '') + '">'
+    + (S.fzQ ? '<button class="btn btn-sm" id="fz-x" title="Svuota">&#10005;</button>' : '')
+    + '</div><div id="fz-ris">' + risultatiCercaFatt() + '</div></div>';
+}
+const normCerca = v => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function trovaFatture(q) {
+  const parole = normCerca(q).split(' ').filter(Boolean);
+  if (!parole.length) return [];
+  return S.fatture.filter(f => {
+    const p = byId(S.projects, f.project_id) || {};
+    const c = contiScaglione(f);
+    const testo = normCerca([f.numero_fattura, f.proforma_numero, f.descrizione, p.name, p.codice, p.client,
+      f.data_fattura, f.proforma_data, fdate(f.data_fattura), fdate(f.proforma_data),
+      c.imponibile.toFixed(2), c.totale.toFixed(2), feuro(c.imponibile), feuro(c.totale),
+      righeFattura(f.id).map(r => r.descrizione).join(' ')].join(' | '));
+    return parole.every(w => testo.indexOf(w) >= 0);
+  }).sort((a, b) => String(b.data_fattura || b.proforma_data || b.data_prevista || '')
+                     .localeCompare(String(a.data_fattura || a.proforma_data || a.data_prevista || '')));
+}
+function risultatiCercaFatt() {
+  const q = S.fzQ || '';
+  if (!normCerca(q)) return '';
+  const r = trovaFatture(q);
+  if (!r.length) return '<div class="hint" style="margin:10px 0 0">Nessuna fattura o proforma trovata per «' + esc(q) + '».</div>';
+  return '<div class="hint" style="margin:10px 0 6px">' + r.length + (r.length === 1 ? ' risultato' : ' risultati') + '</div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Fattura</th><th>Proforma</th><th>Commessa</th><th>Scaglione</th>'
+    + '<th style="text-align:right">Totale</th><th>Stato</th><th></th></tr></thead><tbody>'
+    + r.slice(0, 200).map(f => { const c = contiScaglione(f), p = byId(S.projects, f.project_id) || {};
+        return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
+          + '<td>' + (f.numero_fattura ? '<b>' + esc(f.numero_fattura) + '</b>' : '<span style="color:var(--mut)">—</span>')
+            + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
+          + '<td>' + (f.proforma_numero ? esc(f.proforma_numero) : '<span style="color:var(--mut)">—</span>')
+            + (f.proforma_data ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.proforma_data) + '</div>' : '') + '</td>'
+          + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(p.client || '') + '</div></td>'
+          + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
+          + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
+          + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
+          + '<td class="ac" style="white-space:nowrap">' + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
+            + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>'; }).join('')
+    + '</tbody></table></div>'
+    + (r.length > 200 ? '<div class="hint">Mostrati i primi 200: aggiungi una parola per restringere.</div>' : '');
+}
+/* La casella non si ridisegna mentre si scrive: si aggiornano solo i
+   risultati, cosi' il cursore resta dov'e'. */
+function collegaCercaFatt() {
+  const i = el('fz-q'); if (!i) return;
+  i.oninput = () => {
+    S.fzQ = i.value;
+    el('fz-ris').innerHTML = risultatiCercaFatt();
+    el('fz-resto').style.display = normCerca(S.fzQ) ? 'none' : '';
+  };
+  if (el('fz-x')) el('fz-x').onclick = () => { S.fzQ = ''; render(); };
 }
 
 /* ---------------------------------------------------------------------------
@@ -10035,7 +10103,7 @@ function mailtoAmministrazione(fid) {
     f.richiesta_note ? 'Note: ' + f.richiesta_note : '',
     f.richiesta_note ? '' : '',
     'Richiesta da ' + (S.prof.full_name || '') + ' il ' + fdate(todayISO()) + '.',
-    'Lo scaglione è segnato come «pronta da emettere» nel gestionale, sezione Da fatturare.'
+    'Lo scaglione è segnato come «pronta da emettere» nel gestionale, sezione Fatturazione.'
   ].filter(x => x !== '');
   return 'mailto:' + encodeURIComponent(STUDIO.emailAmministrazione || '')
     + '?subject=' + encodeURIComponent('[' + p.name + '] Da fatturare: ' + f.descrizione)
