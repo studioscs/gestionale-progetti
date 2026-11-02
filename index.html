@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.02.3';
+const VERSIONE = '2026.11.02.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7604,7 +7604,9 @@ async function salvaSolleciti() {
    --------------------------------------------------------------------------- */
 const numProforma = n => { const m = String(n || '').match(/(\d+)\D*$/); return m ? Number(m[1]) : 0; };
 function proformeEmesse(tutte) {
-  return S.fatture.filter(f => f.proforma_numero && (f.proforma_at || f.proforma_data))
+  /* Basta il numero: e' quello che toglie lo scaglione dalle pronte, e una
+     proforma tolta da li' deve comparire qui, sempre. */
+  return S.fatture.filter(f => f.proforma_numero)
     .filter(f => { const p = byId(S.projects, f.project_id); return p && (tutte || (!p.archiviato && fattAperta(f))); })
     .sort((a, b) => String(b.proforma_data || '').localeCompare(String(a.proforma_data || ''))
                  || numProforma(b.proforma_numero) - numProforma(a.proforma_numero));
@@ -7614,13 +7616,13 @@ function riquadroProforme() {
   if (!tutte.length) return '';
   const list = S.pfTutte ? tutte : aperte;
   const tot = r2(list.reduce((a, f) => a + contiScaglione(f).totale, 0));
-  return '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:var(--blue)">&#128196; Proforma emesse '
+  return '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:var(--blue)">&#128196; Proforma emesse in attesa di incasso '
       + '<span class="chip">' + list.length + '</span></span>'
       + '<span class="row" style="gap:10px"><b style="font-size:13px">' + feuro(tot) + '</b>'
       + '<button class="btn btn-xs" data-act="pftutte">' + (S.pfTutte ? 'Solo da fatturare'
           : 'Anche già fatturate (' + (tutte.length - aperte.length) + ')') + '</button></span></div>'
     + '<div class="hint" style="margin:-6px 0 10px">' + (S.pfTutte
-        ? 'Tutte le proforma scaricate, anche quelle già diventate fattura.'
+        ? 'Tutte le proforma scaricate, anche quelle già diventate fattura (non più in attesa).'
         : 'Le proforma scaricate e mandate al committente la cui fattura non è ancora stata emessa.') + '</div>'
     + (list.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Proforma</th><th>Data</th><th>Commessa</th>'
       + '<th>Scaglione</th><th style="text-align:right">Totale</th><th>Stato</th><th></th></tr></thead><tbody>'
@@ -7632,9 +7634,13 @@ function riquadroProforme() {
             + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
             + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
             + '<td>' + bdg(f.stato, ST_FATT) + (f.numero_fattura && !fattAperta(f)
-                ? '<div style="font-size:11px;color:var(--mut);margin-top:3px">fattura ' + esc(f.numero_fattura) + '</div>' : '') + '</td>'
-            + '<td class="ac">' + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id
-                + '" title="Riapri la proforma (si può riscaricare)">&#128196;</button>' : '') + '</td></tr>'; }).join('')
+                ? '<div style="font-size:11px;color:var(--mut);margin-top:3px">fattura ' + esc(f.numero_fattura) + '</div>' : '')
+              + chipSolleciti(f) + '</td>'
+            /* da qui si sollecita, si riprende la proforma e - pagata - si fa la fattura */
+            + '<td class="ac" style="white-space:nowrap">' + (fattAperta(f) ? bottoneSolleciti(f) : '')
+              + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id
+                + '" title="Riapri la proforma (si può riscaricare)">&#128196;</button> '
+                + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Pagata: genera la fattura XML">&#128229;</button>' : '') + '</td></tr>'; }).join('')
       + '</tbody></table></div>'
       : '<div class="hint" style="margin:0">Nessuna proforma in attesa di fattura.</div>')
     + '</div>';
@@ -7955,6 +7961,9 @@ function rFatturare() {
             feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
     + riquadroProforme()
+    /* subito sotto le proforma: le fatture emesse, l'altra meta' di quello
+       che si aspetta di incassare */
+    + tabella(emesse, '📤 Fatture emesse in attesa di incasso', 'var(--blue)')
     + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
@@ -7969,7 +7978,7 @@ function rFatturare() {
     + tabella(kPronte, '💶 Pronte da emettere', 'var(--ora)')
     + tabella(list.filter(f => f.stato !== 'pronta' && senzaProf(f)), '⏳ Matureranno più avanti', null,
         daControllare.filter(x => x.c.problema === 'saldo'))
-    + tabella(kEmesse, '📤 Emesse, in attesa di incasso — fatture e proforma', 'var(--blue)')
+
     + '</div>';
   collegaCercaFatt();
 }

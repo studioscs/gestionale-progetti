@@ -47,6 +47,10 @@ function launchOpts(){
      direttamente nel database li portano, come quelli salvati dal modulo. */
   await p.evaluate(()=>{ window.__conIsa=x=>{ const d={isa_tipo:'C05',anno_competenza:today().getFullYear()};
     return Array.isArray(x)?x.map(r=>Object.assign({},d,r)):Object.assign({},d,x); }; });
+  /* Il primo pulsante di uno scaglione ancora da fatturare: le fatture emesse
+     stanno in alto nella pagina, e il primo pulsante in assoluto sarebbe il loro. */
+  const primaAperta=k=>p.evaluate(k=>{ const b=[...document.querySelectorAll('[data-'+k+']')]
+    .find(x=>{ const f=byId(S.fatture,x.dataset[k]); return f&&fattAperta(f); }); return b?b.dataset[k]:null; },k);
   const isaScelta=()=>p.evaluate(()=>{ if(!el('fa-isa').value) el('fa-isa').value='C05';
     if(!el('fa-anno').value) el('fa-anno').value=String(today().getFullYear()); });
   await p.waitForTimeout(800);
@@ -1106,7 +1110,7 @@ function launchOpts(){
       if(ids.length) await SB.from('commessa_fatture').update({isa_tipo:'C05',anno_competenza:2026}).in('id',ids);
       await loadAll(true); render(); });
     await p.waitForTimeout(300);
-    await p.locator('[data-fxml]').first().click();
+    await p.locator('[data-fxml="'+await primaAperta('fxml')+'"]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000});
     must(await p.isVisible('#m-rev'),'finestra di revisione non aperta');
   });
@@ -1119,7 +1123,7 @@ function launchOpts(){
   });
   /* ---------------- NUMERO SUCCESSIVO AUTOMATICO, SEMPRE MODIFICABILE ---------------- */
   await t('il numero della fattura è proposto e segue l anno della data',async()=>{
-    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    const fid=await primaAperta('fxml');
     const vuoto=await p.evaluate(id=>!byId(S.fatture,id).numero_fattura,fid);
     await p.evaluate(id=>openRevisione(id),fid);
     await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(200);
@@ -1151,7 +1155,7 @@ function launchOpts(){
     await p.evaluate(()=>closeM('m-rev'));
   });
   await t('nello scaglione: emessa senza numero prende il successivo, e c è il pulsante',async()=>{
-    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    const fid=await primaAperta('fxml');
     await p.evaluate(id=>openFatt(id),fid); await p.waitForSelector('#m-fatt.show',{timeout:4000});
     await p.fill('#fa-num','');
     await p.selectOption('#fa-stato2','emessa'); await p.waitForTimeout(150);
@@ -1183,7 +1187,7 @@ function launchOpts(){
   });
   /* ---------------- PROFORMA PDF PRIMA DELLA FATTURA ---------------- */
   await t('lo scaglione ha la proforma, e la revisione il suo numero',async()=>{
-    const fid=await p.locator('[data-fproforma]').first().getAttribute('data-fproforma');
+    const fid=await primaAperta('fproforma');
     await p.evaluate(id=>{
       Object.assign(STUDIO,{denominazione:'Studio Tecnico SCS S.r.l.',piva:'03512340548',
         indirizzo:'Via Mazzini',cap:'06121',comune:'Perugia',provincia:'PG'});
@@ -1193,7 +1197,7 @@ function launchOpts(){
         cliente_prov:'PG',cliente_sdi:'ABCDEF1'});
       if(!f.percentuale && !f.imponibile) f.imponibile=10000;
     },fid);
-    await p.locator('[data-fproforma]').first().click();
+    await p.locator('[data-fproforma="'+await primaAperta('fproforma')+'"]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(300);
     const n=await p.inputValue('[data-rev="proformaNumero"]');
     must(/^\d{4}\/001$/.test(n),'numero di proforma non proposto: '+n);
@@ -1216,7 +1220,7 @@ function launchOpts(){
     const g=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {n:f.proforma_numero,d:f.proforma_data,at:f.proforma_at,stato:f.stato}; },fid);
     must(/\/001$/.test(g.n)&&g.d&&g.at,'la proforma non è registrata sullo scaglione: '+JSON.stringify(g));
     must(g.stato===statoPrima,'la proforma ha cambiato lo stato della fattura: '+g.stato);
-    must(/proforma \d{4}\/001/.test(await p.textContent('#page')),'la lista non dice che la proforma è partita');
+    must(/Proforma emesse in attesa di incasso[\s\S]*\d{4}\/001/.test(await p.textContent('#page')),'la lista non dice che la proforma è partita');
   });
   await t('la proforma dopo prende il numero successivo',async()=>{
     must(/\/002$/.test(await p.evaluate(()=>prossimaProforma())),'il numero non avanza');
@@ -1249,6 +1253,18 @@ function launchOpts(){
     must(g.emKpi===g.em+g.conP,'emesse non incassate '+g.emKpi+' invece di '+(g.em+g.conP)+' (fatture + proforma)');
     must(g.prKpi===g.pronte,'pronte da emettere '+g.prKpi+' invece di '+g.pronte+' (senza le proforma)');
     must(!g.inTabPronte,'uno scaglione con proforma resta nella tabella delle pronte');
+    const h=await p.evaluate(()=>{ const cards=[...document.querySelectorAll('#page .card')];
+      const tit=c=>(c.querySelector('.card-t')||{}).textContent||'';
+      const i=cards.findIndex(c=>/Proforma emesse in attesa di incasso/.test(tit(c)));
+      const conP=S.fatture.filter(f=>f.proforma_numero&&fattAperta(f)).map(f=>f.id);
+      const dentro=re=>{ const c=cards.find(x=>re.test(tit(x))); return c?conP.filter(id=>c.querySelector('[data-fatt="'+id+'"]')).length:0; };
+      return {i,dopo:i>=0&&cards[i+1]?tit(cards[i+1]):'',emesse:S.fatture.filter(f=>f.stato==='emessa').length,
+        mat:dentro(/Matureranno/),rich:dentro(/Chieste dai responsabili/),vecchio:cards.some(c=>/Emesse, in attesa/.test(tit(c)))}; });
+    must(h.i>=0,'manca il riquadro Proforma emesse in attesa di incasso');
+    must(!h.emesse||/Fatture emesse in attesa di incasso/.test(h.dopo),'sotto le proforma non ci sono le fatture emesse: '+h.dopo);
+    must(!h.vecchio,'resta il vecchio riquadro «Emesse, in attesa di incasso»');
+    must(h.mat===0,'scaglioni con proforma fra quelli che matureranno');
+    must(h.rich===0,'scaglioni con proforma fra quelli chiesti dai responsabili');
   });
   await t('in Fatturazione si cerca una proforma o una fattura',async()=>{
     must(/Fatturazione/.test(await p.textContent('.sn[data-page="fatturare"]')),'la voce di menu non si chiama Fatturazione');
@@ -1270,7 +1286,7 @@ function launchOpts(){
     must(await p.evaluate(()=>el('fz-resto').style.display==='' && el('fz-ris').textContent===''),'svuotata la ricerca la pagina non torna');
   });
   await t('XML scaricabile una volta compilati i dati',async()=>{
-    const fid=await p.locator('[data-fxml]').first().getAttribute('data-fxml');
+    const fid=await primaAperta('fxml');
     await p.evaluate(id=>{
       Object.assign(STUDIO,{denominazione:'Studio Tecnico SCS S.r.l.',piva:'03512340548',
         indirizzo:'Via Mazzini',cap:'06121',comune:'Perugia',provincia:'PG'});
@@ -1282,7 +1298,7 @@ function launchOpts(){
       if(!f.percentuale && !f.imponibile) f.imponibile=10000;
     }, fid);
     ultimoDialogo='';
-    await p.locator('[data-fxml]').first().click();
+    await p.locator('[data-fxml="'+await primaAperta('fxml')+'"]').first().click();
     await p.waitForSelector('#m-rev.show',{timeout:4000}); await p.waitForTimeout(400);
     must(!(await p.isDisabled('#rev-go')),'ancora bloccato: '+(await p.textContent('#rev-err')));
     const [dl]=await Promise.all([

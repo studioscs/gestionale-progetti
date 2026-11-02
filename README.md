@@ -1153,7 +1153,7 @@ di generare.
 ### L'elenco delle proforma emesse
 
 In testa a **Fatturazione**, subito sotto i numeri di sintesi, il riquadro
-**📄 Proforma emesse** elenca le proforma scaricate: numero, data, commessa e
+**📄 Proforma emesse in attesa di incasso** elenca le proforma scaricate: numero, data, commessa e
 cliente, scaglione, totale e stato. Di base mostra quelle **la cui fattura non
 è ancora stata emessa** — le richieste di pagamento in sospeso; il pulsante
 *Anche già fatturate* le mostra tutte, con il numero della fattura in cui sono
@@ -1169,9 +1169,11 @@ una richiesta di pagamento in sospeso, come una fattura emessa. Per questo:
   emesse senza fattura (sotto il totale: quante fatture, quante proforma);
 - **Pronte da emettere**, **In attesa di maturare** e **Chieste dai tecnici**
   non le contano più;
-- le stesse regole valgono per le tabelle: lo scaglione con proforma sta in
-  *Emesse, in attesa di incasso — fatture e proforma*, da cui si genera la
-  fattura quando arriva il pagamento.
+- le stesse regole valgono per le tabelle: lo scaglione con proforma non sta
+  più fra le pronte, fra quelle che matureranno né fra quelle chieste dai
+  responsabili, ma in **📄 Proforma emesse in attesa di incasso**, da cui si
+  genera la fattura quando arriva il pagamento (📥) e da cui si fanno i
+  solleciti (🔔). Subito sotto c'è **📤 Fatture emesse in attesa di incasso**.
 
 Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
