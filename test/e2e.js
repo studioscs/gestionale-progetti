@@ -1233,6 +1233,23 @@ function launchOpts(){
     must(/Solo da fatturare/.test(await p.textContent('[data-act="pftutte"]')),'il pulsante non cambia vista');
     await p.click('[data-act="pftutte"]'); await p.waitForTimeout(200);
   });
+  await t('una proforma emessa conta fra le emesse non incassate, non più fra le pronte',async()=>{
+    const g=await p.evaluate(()=>{ go('fatturare');
+      const kv=l=>{ const k=[...document.querySelectorAll('#page .kpi')].find(x=>x.querySelector('.kpi-l').textContent===l);
+        return k?Number(k.querySelector('.kpi-v').textContent):null; };
+      const ap=S.fatture.filter(f=>{ const p=byId(S.projects,f.project_id); return p&&!p.archiviato&&fattAperta(f); });
+      const conP=ap.filter(f=>f.proforma_numero);
+      const pronte=ap.filter(f=>f.stato==='pronta'&&!fattRichiesta(f)&&!f.proforma_numero);
+      const em=S.fatture.filter(f=>f.stato==='emessa').length;
+      const tabPronte=[...document.querySelectorAll('#page .card')].find(c=>/Pronte da emettere/.test(c.querySelector('.card-t')?.textContent||''));
+      return {conP:conP.length,em,emKpi:kv('Emesse non incassate'),prKpi:kv('Pronte da emettere'),pronte:pronte.length,
+        prontaConProf:conP.some(f=>f.stato==='pronta'),
+        inTabPronte:tabPronte?conP.some(f=>tabPronte.querySelector('[data-fatt="'+f.id+'"]')):false}; });
+    must(g.conP>0,'nella prova non ci sono proforma emesse');
+    must(g.emKpi===g.em+g.conP,'emesse non incassate '+g.emKpi+' invece di '+(g.em+g.conP)+' (fatture + proforma)');
+    must(g.prKpi===g.pronte,'pronte da emettere '+g.prKpi+' invece di '+g.pronte+' (senza le proforma)');
+    must(!g.inTabPronte,'uno scaglione con proforma resta nella tabella delle pronte');
+  });
   await t('in Fatturazione si cerca una proforma o una fattura',async()=>{
     must(/Fatturazione/.test(await p.textContent('.sn[data-page="fatturare"]')),'la voce di menu non si chiama Fatturazione');
     const num=await p.evaluate(()=>proformeEmesse(true)[0].proforma_numero);
@@ -4466,6 +4483,29 @@ function launchOpts(){
     must(g.cid&&g.c&&g.c.denominazione==='Cliente Solitario'&&g.c.referente==='Anna Blu','collegamento o dati sbagliati: '+JSON.stringify(g.c));
     must(/collegati alla scheda/.test(await p.textContent('#page')),'dopo il collegamento non lo dice');
   });
+  await t('corretto il nome in Clienti cambiano anche il nome delle commesse, la fatturazione e i preventivi',async()=>{
+    const x=await p.evaluate(async()=>{ S.prof.role='admin';
+      const {data:c}=await SB.from('clienti').insert({denominazione:'MAURIZZIO BERTAZZO'}).select().single();
+      const {data:pr}=await SB.from('projects').insert({codice:'NOM_1',name:'2026_21_MAURIZZIO BERTAZZO_VERIFICA',status:'attivo',
+        cliente_id:c.id,client:c.denominazione}).select().single();
+      await SB.from('commessa_fatture').insert({project_id:pr.id,descrizione:'Acconto',imponibile:100,stato:'pronta',ordine:1,isa_tipo:'C05',anno_competenza:2026});
+      await SB.from('preventivi').insert({anno:2026,progressivo:803,data:'2026-10-16',stato:'accettato',cliente_id:c.id,
+        cliente_nome:c.denominazione,cliente_pec:'x@pec.it',voci:[{descrizione:'x',importo:1,quantita:1}],articoli:[]});
+      await loadAll(true); return {c:c.id,p:pr.id}; });
+    await p.evaluate(id=>{ go('clienti'); openCliente(id); },x.c); await p.waitForSelector('#m-cli.show',{timeout:4000});
+    await p.fill('#cl-den','MAURIZIO BERTAZZO'); await p.click('#cl-save'); await p.waitForTimeout(900);
+    const g=await p.evaluate(x=>{ const pr=byId(S.projects,x.p), pv=S.preventivi.find(v=>v.progressivo===803);
+      go('fatturare'); const pag=el('page').textContent;
+      return {name:pr.name,client:pr.client,pv:pv.cliente_nome,pec:pv.cliente_pec,pag,cerca:trovaFatture('maurizio bertazzo').length}; },x);
+    must(g.client==='MAURIZIO BERTAZZO','il cliente della commessa non è cambiato: '+g.client);
+    must(g.name==='2026_21_MAURIZIO BERTAZZO_VERIFICA','il nome della commessa non segue il cliente: '+g.name);
+    must(g.pv==='MAURIZIO BERTAZZO','il preventivo accettato tiene il nome vecchio');
+    must(g.pec==='x@pec.it','nel preventivo accettato sono cambiati altri dati');
+    must(/MAURIZIO BERTAZZO/.test(g.pag)&&!/MAURIZZIO/.test(g.pag),'in Fatturazione resta il nome vecchio');
+    must(g.cerca===1,'la ricerca in Fatturazione non trova il nome nuovo');
+    await p.evaluate(()=>go('oggi'));
+  });
+
   /* ---------------- SPLIT PAYMENT PER GLI ENTI PUBBLICI ---------------- */
   await t('spuntando «ente pubblico» su una commessa esistente la scissione è proposta',async()=>{
     /* le commesse esistenti hanno split_payment = false di partenza (migrazione 011):

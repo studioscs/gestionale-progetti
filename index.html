@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.02.1';
+const VERSIONE = '2026.11.02.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1757,6 +1757,7 @@ const MIGRAZIONI = {
   '035_solleciti':           ['sollecito_1','sollecito_2','messa_in_mora','avvocato','note_solleciti'],
   '038_contratto_da_preventivo': ['preventivo_id'],
   '040_spese_art15_nei_servizi': ['art15']
+  /* 041_cliente_propaga: solo un trigger, nessuna colonna da controllare */
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -7869,12 +7870,22 @@ function rFatturare() {
   const richieste = list.filter(fattRichiesta)
     .sort((a, b) => String(b.richiesta_at).localeCompare(String(a.richiesta_at)));
   const pronte = list.filter(f => f.stato === 'pronta' && !fattRichiesta(f));
-  const totP = pronte.reduce((a, f) => a + impFattura(f), 0);
-  const totT = list.reduce((a, f) => a + impFattura(f), 0);
   const incassato = S.fatture.filter(f => f.stato === 'incassata')
     .reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0);
   const emesse = S.fatture.filter(f => f.stato === 'emessa');
 
+  /* I NUMERI IN TESTA CONTANO OGNI SOMMA UNA VOLTA SOLA
+     Uno scaglione con la proforma gia' mandata e' stato chiesto al
+     committente: non e' piu' «da emettere» ne' «in attesa», e' una richiesta
+     di pagamento in sospeso come una fattura emessa. Prima compariva sia
+     fra le pronte sia, a parte, come proforma: la stessa somma due volte. */
+  const somma = arr => r2(arr.reduce((a, f) => a + impFattura(f), 0));
+  const conProf = list.filter(f => f.proforma_numero);
+  const senzaProf = f => !f.proforma_numero;
+  const kRich   = richieste.filter(senzaProf);
+  const kPronte = pronte.filter(senzaProf);
+  const kAttesa = list.filter(f => f.stato !== 'pronta' && !fattRichiesta(f) && senzaProf(f));
+  const kEmesse = emesse.concat(conProf);
   const daControllare = commesseDaControllare();
   if (!list.length && !emesse.length && !daControllare.length && !proformeEmesse(true).length) {
     /* Nessuna fattura, ma le parcelle degli esterni possono esserci lo stesso:
@@ -7929,13 +7940,12 @@ function rFatturare() {
   el('page').innerHTML = barraCercaFatt()
     + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
       + '<div class="kgrid">'
-      + kpi('Chieste dai tecnici', richieste.length,
-            feuro(richieste.reduce((a, f) => a + impFattura(f), 0)),
-            richieste.length ? 100 : 0, 'var(--ora)')
-      + kpi('Pronte da emettere', pronte.length, feuro(totP), pronte.length ? 100 : 0, 'var(--yel)')
-      + kpi('In attesa di maturare', list.length - pronte.length, feuro(totT - totP), 60, 'var(--mut2)')
-      + kpi('Emesse non incassate', emesse.length,
-            feuro(emesse.reduce((a, f) => a + impFattura(f), 0)), emesse.length ? 100 : 0, 'var(--blue)')
+      + kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich)), kRich.length ? 100 : 0, 'var(--ora)')
+      + kpi('Pronte da emettere', kPronte.length, feuro(somma(kPronte)), kPronte.length ? 100 : 0, 'var(--yel)')
+      + kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa)), 60, 'var(--mut2)')
+      + kpi('Emesse non incassate', kEmesse.length, feuro(somma(kEmesse))
+            + ' <span style="font-size:11px">· ' + emesse.length + ' fatture, ' + conProf.length + ' proforma</span>',
+            kEmesse.length ? 100 : 0, 'var(--blue)')
       + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
       + (() => { const sz = daControllare.filter(x => x.c.problema === 'saldo');
           return kpi('Senza saldo in fatturazione', sz.length,
@@ -7955,11 +7965,11 @@ function rFatturare() {
           + 'chi l’ha chiesto, quando e con quali riferimenti. La richiesta si chiude da sola quando '
           + 'segni la fattura come <b>emessa</b>.</div>'
         : '')
-    + tabella(richieste, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
-    + tabella(pronte, '💶 Pronte da emettere', 'var(--ora)')
-    + tabella(list.filter(f => f.stato !== 'pronta'), '⏳ Matureranno più avanti', null,
+    + tabella(kRich, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
+    + tabella(kPronte, '💶 Pronte da emettere', 'var(--ora)')
+    + tabella(list.filter(f => f.stato !== 'pronta' && senzaProf(f)), '⏳ Matureranno più avanti', null,
         daControllare.filter(x => x.c.problema === 'saldo'))
-    + tabella(emesse, '📤 Emesse, in attesa di incasso', 'var(--blue)')
+    + tabella(kEmesse, '📤 Emesse, in attesa di incasso — fatture e proforma', 'var(--blue)')
     + '</div>';
   collegaCercaFatt();
 }
@@ -9547,6 +9557,16 @@ const commesseDelCliente = c => S.projects.filter(x => x.cliente_id === c.id
 
 /* Dall'anagrafica alle commesse e ai preventivi in bozza. prima = la scheda
    com'era prima del salvataggio. Ritorna quante commesse sono cambiate. */
+/* Il nome del cliente dentro il nome della commessa («2026_45_ROSSI MARIO_...»):
+   cambiato in anagrafica, cambia anche li'. Una volta, senza badare a
+   maiuscole, e solo per nomi di almeno 4 lettere. Lo fa anche il database
+   (migrazione 041), per le commesse che chi salva non puo' modificare. */
+function nomeCommessaAggiornato(nome, vecchio, nuovo) {
+  nome = String(nome || ''); vecchio = String(vecchio || '').trim();
+  if (vecchio.length < 4 || !nuovo || vecchio === nuovo) return nome;
+  const i = nome.toUpperCase().indexOf(vecchio.toUpperCase());
+  return i < 0 ? nome : nome.slice(0, i) + nuovo + nome.slice(i + vecchio.length);
+}
 async function propagaCliente(c, escludiPid, prima) {
   if (!c || !c.id) return 0;
   let n = 0;
@@ -9560,6 +9580,10 @@ async function propagaCliente(c, escludiPid, prima) {
       else if (valCli(p[kp]) && !daCompletare[kc]) daCompletare[kc] = p[kp];
     });
     if (c.ente_pubblico && !p.ente_pubblico) { agg.ente_pubblico = true; agg.split_payment = c.split_payment !== false; }
+    if (prima && !ugualeCli(prima.denominazione, c.denominazione)) {
+      const nn = nomeCommessaAggiornato(p.name, prima.denominazione, c.denominazione);
+      if (nn !== p.name) agg.name = nn;
+    }
     if (!Object.keys(agg).length) continue;
     const { error } = await SB.from('projects').update(agg).eq('id', p.id);
     if (error) { console.warn('riallineo commessa', error); continue; }
@@ -9571,6 +9595,12 @@ async function propagaCliente(c, escludiPid, prima) {
     if (!error) { Object.assign(c, daCompletare); const sc = byId(S.clienti, c.id); if (sc && sc !== c) Object.assign(sc, daCompletare);
       if (prima !== undefined) n += await propagaCliente(c, escludiPid); }
   }
+  /* nei preventivi gia' mandati o accettati cambia solo il nome, se e' cambiato */
+  if (prima && !ugualeCli(prima.denominazione, c.denominazione))
+    for (const pv of (S.preventivi || []).filter(x => x.cliente_id === c.id && x.stato !== 'bozza' && x.cliente_nome !== c.denominazione)) {
+      const { error } = await SB.from('preventivi').update({ cliente_nome: c.denominazione }).eq('id', pv.id);
+      if (!error) pv.cliente_nome = c.denominazione;
+    }
   for (const pv of (S.preventivi || []).filter(x => x.cliente_id === c.id && x.stato === 'bozza')) {
     const agg = { cliente_nome: c.denominazione, cliente_indirizzo: valCli(c.indirizzo), cliente_cap: valCli(c.cap),
       cliente_comune: valCli(c.comune), cliente_prov: valCli(c.provincia), cliente_cf: valCli(c.cf),

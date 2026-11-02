@@ -58,6 +58,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 37. [`sql/038_contratto_da_preventivo.sql`](sql/038_contratto_da_preventivo.sql) — l'atto del contratto ricorda il preventivo da cui nasce
 38. [`sql/039_commercialista.sql`](sql/039_commercialista.sql) — il commercialista: vede tutto come l'amministrazione, non modifica niente
 39. [`sql/040_spese_art15_nei_servizi.sql`](sql/040_spese_art15_nei_servizi.sql) — spese anticipate scritte fra i servizi: esenti art. 15, fuori dall'imponibile
+40. [`sql/041_cliente_propaga.sql`](sql/041_cliente_propaga.sql) — correggere il cliente in anagrafica corregge commesse (anche il nome) e preventivi
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -731,6 +732,26 @@ compresi, che stanno solo nella scheda e non nella commessa).
 - Ogni atto ricorda il preventivo da cui nasce: lo stesso preventivo non si
   inserisce due volte, e il pulsante sparisce una volta inserito.
 
+### Il nome corretto in Clienti arriva ovunque, anche al nome della commessa
+
+Correggendo nome e cognome (o qualunque altro dato) nella scheda in *Clienti*
+la modifica arriva a:
+
+- tutte le **commesse** del cliente: dati del committente e, se il nome della
+  commessa contiene quello del cliente («2026_21_MAURIZZIO BERTAZZO_VNS»),
+  anche il **nome della commessa**;
+- quindi alla **Fatturazione** (elenchi, ricerca, proforma e fatture che si
+  generano da qui in poi) e ai **Progetti**;
+- ai **preventivi** in bozza (tutti i dati) e a quelli già inviati o accettati
+  (solo il nome: il resto resta quello del documento mandato).
+
+Lo fa il database (migrazione [`sql/041_cliente_propaga.sql`](sql/041_cliente_propaga.sql)),
+non il browser di chi salva: prima un collaboratore che correggeva la scheda
+aggiornava solo le commesse che segue, e le altre restavano con il dato
+vecchio senza avviso. Si copiano solo i campi **cambiati**: un dato scritto
+nella commessa e assente nella scheda non viene cancellato. Le fatture già
+emesse non cambiano: sono documenti già inviati allo SdI.
+
 ## Firme del cliente: niente sezione a parte
 
 Non c'è più la voce *Firme cliente* nel menu. L'incarico si firma con il
@@ -1138,6 +1159,21 @@ cliente, scaglione, totale e stato. Di base mostra quelle **la cui fattura non
 *Anche già fatturate* le mostra tutte, con il numero della fattura in cui sono
 diventate. Un clic sulla riga apre lo scaglione, 📄 riapre la proforma per
 riscaricarla.
+
+### I numeri in testa contano ogni somma una volta sola
+
+Uno scaglione con la **proforma già emessa** e la fattura non ancora fatta è
+una richiesta di pagamento in sospeso, come una fattura emessa. Per questo:
+
+- **Emesse non incassate** comprende le fatture emesse **e** le proforma
+  emesse senza fattura (sotto il totale: quante fatture, quante proforma);
+- **Pronte da emettere**, **In attesa di maturare** e **Chieste dai tecnici**
+  non le contano più;
+- le stesse regole valgono per le tabelle: lo scaglione con proforma sta in
+  *Emesse, in attesa di incasso — fatture e proforma*, da cui si genera la
+  fattura quando arriva il pagamento.
+
+Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
 ### Cercare una fattura o una proforma
 
