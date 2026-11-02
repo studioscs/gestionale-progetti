@@ -57,6 +57,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 36. [`sql/037_funzioni_private.sql`](sql/037_funzioni_private.sql) — **sicurezza: le funzioni del database non si chiamano da fuori** (applicata il 21/10/2026)
 37. [`sql/038_contratto_da_preventivo.sql`](sql/038_contratto_da_preventivo.sql) — l'atto del contratto ricorda il preventivo da cui nasce
 38. [`sql/039_commercialista.sql`](sql/039_commercialista.sql) — il commercialista: vede tutto come l'amministrazione, non modifica niente
+39. [`sql/040_spese_art15_nei_servizi.sql`](sql/040_spese_art15_nei_servizi.sql) — spese anticipate scritte fra i servizi: esenti art. 15, fuori dall'imponibile
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1336,6 +1337,28 @@ riepilogo `N1` ne porta la somma.
 Il modello è la parcella 47 dello studio, che questa riga la fa da anni: un
 controllo confronta la riga che generiamo con la sua — quantità, aliquota,
 natura.
+
+
+#### Anche quando le si scrive fra i servizi dello scaglione
+
+Nella pratica le spese si scrivevano spesso come **servizi** dello scaglione
+(«SPESE DIRITTI DI SEGRETERIA COMUNE … ANTICIPATI PER VS. CONTO»): così
+finivano nell'imponibile, con cassa e IVA. Ora ogni servizio ha la spunta
+**Spesa anticipata per il cliente — esente IVA art. 15 DPR 633/72**, che si
+mette **da sola** quando la descrizione parla di diritti di segreteria, marca
+da bollo, bolli, tributi o diritti catastali, o di spesa «anticipata» (si può
+sempre togliere o mettere a mano). Le righe spuntate:
+
+- non entrano nell'imponibile dello scaglione, né in cassa e IVA, né nel
+  quadro ISA (non chiedono tipologia e anno);
+- in **fattura XML** e in **proforma** vanno fra le spese anticipate, con la
+  dicitura *Spese anticipate esenti IVA art. 15 DPR 633/72* e natura **N1**;
+- si sommano al totale del documento e a quello da incassare.
+
+Migrazione [`sql/040_spese_art15_nei_servizi.sql`](sql/040_spese_art15_nei_servizi.sql):
+aggiunge la spunta, fa sommare all'imponibile solo i compensi e segna le righe
+già scritte che si riconoscono, **solo sugli scaglioni non ancora emessi** — le
+fatture già mandate restano come sono.
 
 ### La premessa: l'oggetto in testa, senza importi
 

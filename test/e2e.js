@@ -4285,6 +4285,43 @@ function launchOpts(){
     await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
   });
 
+  /* ---------------- SPESE ANTICIPATE FRA I SERVIZI: ART. 15 ---------------- */
+  let A15=null;
+  await t('diritti di segreteria e bolli fra i servizi diventano spese art. 15 da soli',async()=>{
+    const pid=await p.evaluate(async()=>{ const {data}=await SB.from('projects').insert({codice:'A15_1',name:'Spese art 15',status:'attivo',
+      client:'Rossi Mario',cliente_cf:'RSSMRA80A01H501U',cliente_indirizzo:'Via Roma 1',cliente_cap:'62019',cliente_comune:'Recanati',
+      cliente_prov:'MC',cliente_sdi:'0000000',amount:1000}).select().single(); await loadAll(true); return data.id; });
+    await p.evaluate(id=>openFatt(null,id),pid); await p.waitForSelector('#m-fatt.show');
+    await p.fill('#fa-desc','Acconto pratica SCIA');
+    for(let i=0;i<3;i++){ await p.click('#fa-addriga'); }
+    const riga=(i,k)=>'#fa-righe [data-frig="'+i+'"][data-fk="'+k+'"]';
+    await p.fill(riga(0,'descrizione'),'Progetto e presentazione SCIA'); await p.fill(riga(0,'importo'),'1000');
+    await p.fill(riga(1,'descrizione'),'Spese diritti di segreteria Comune di Recanati anticipati per vs. conto');
+    await p.press(riga(1,'descrizione'),'Tab'); await p.fill(riga(1,'importo'),'80');
+    await p.fill(riga(2,'descrizione'),'Marca da bollo deposito sismico'); await p.press(riga(2,'descrizione'),'Tab');
+    await p.fill(riga(2,'importo'),'16');
+    const ck=await p.evaluate(()=>FATT_RIGHE.map(r=>!!r.art15));
+    must(JSON.stringify(ck)==='[false,true,true]','riconoscimento automatico: '+JSON.stringify(ck));
+    must(/spese art\. 15 esenti 96,00/.test(await p.textContent('#fa-calc')),'il calcolo non separa le spese: '+await p.textContent('#fa-calc'));
+    await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(900);
+    A15=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.project_id===id); return {id:f.id,imp:Number(f.imponibile),
+      righe:__DB.commessa_fattura_righe.filter(r=>r.fattura_id===f.id).map(r=>[r.descrizione.slice(0,12),!!r.art15,r.isa_tipo||null])}; },pid);
+    must(A15.imp===1000,'imponibile con dentro le spese: '+A15.imp);
+    must(A15.righe.filter(r=>r[1]).length===2&&A15.righe.filter(r=>r[1]).every(r=>!r[2]),'righe art. 15 non salvate: '+JSON.stringify(A15.righe));
+  });
+  await t('in fattura e in proforma vanno esenti con natura N1, fuori da cassa e IVA',async()=>{
+    const g=await p.evaluate(fid=>{ const f=byId(S.fatture,fid); const d=datiFattura(f); numeriProposti(d);
+      d.numero=d.numero||'99/FE'; const x=xmlDaDati(d); const pf=docProforma(d); const c=contiDocumento(pf.voci,pf.spese,pf.opz);
+      return {righe:d.righe.length,spese:d.spese.map(s=>s.descrizione+':'+s.importo),xml:x.xml||'',err:x.errori,antic:c.anticipazioni,
+        imp:c.imponibile,iva:c.iva,cassa:c.cassa,daInc:daIncassareDi(f,false),conti:contiScaglione(f)}; },A15.id);
+    must(g.righe===1,'nei servizi della fattura restano le spese: '+g.righe);
+    must(g.spese.length===2&&g.spese.every(x=>/art\. 15 DPR 633\/72/.test(x)),'spese senza dicitura art. 15: '+JSON.stringify(g.spese));
+    must(!g.err,'XML non generabile: '+JSON.stringify(g.err));
+    must((g.xml.match(/<Natura>N1<\/Natura>/g)||[]).length>=2,'nell XML le spese non hanno natura N1');
+    must(g.antic===96&&g.imp===1000,'proforma: anticipazioni '+g.antic+', imponibile '+g.imp);
+    must(Math.abs(g.conti.totale-(g.conti.imponibile+g.conti.cassa+g.conti.iva+96))<0.01,'il totale dello scaglione non somma le spese esenti');
+  });
+
   /* ---------------- PRATICHE: ATTIVITA' DELLE FASI ---------------- */
   await t('creando una commessa le pratiche entrano nelle fasi, con le procure',async()=>{
     const g=await p.evaluate(async()=>{ S.prof.role='admin';

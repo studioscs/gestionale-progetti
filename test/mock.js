@@ -147,7 +147,8 @@
   function ricalcolaImponibile(fid){
     const rr=DB.commessa_fattura_righe.filter(r=>r.fattura_id===fid);
     if(!rr.length) return;
-    const tot=r2(rr.reduce((a,r)=>a+Number(r.importo||0),0));
+    /* migrazione 040: le anticipazioni art. 15 restano fuori dall'imponibile */
+    const tot=r2(rr.filter(r=>!r.art15).reduce((a,r)=>a+Number(r.importo||0),0));
     const f=DB.commessa_fatture.find(x=>x.id===fid);
     if(f) f.imponibile=tot;
   }

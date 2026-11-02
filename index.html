@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.10.30.3';
+const VERSIONE = '2026.11.02.1';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1755,7 +1755,8 @@ const MIGRAZIONI = {
   '033_catalogo_pratiche':   ['pratiche_catalogo','pratica_ruolo'],
   '034_note_commessa':       ['note_contratti'],
   '035_solleciti':           ['sollecito_1','sollecito_2','messa_in_mora','avvocato','note_solleciti'],
-  '038_contratto_da_preventivo': ['preventivo_id']
+  '038_contratto_da_preventivo': ['preventivo_id'],
+  '040_spese_art15_nei_servizi': ['art15']
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
    eseguite e lo dice in cima alla pagina, una volta sola. Un errore di permessi
@@ -4488,7 +4489,14 @@ function righeFattura(fid) {
   }
   return _MAPRIG[fid] || [];
 }
-const totRighe = rr => r2(rr.reduce((a, r) => a + Number(r.importo || 0), 0));
+/* I servizi che sono SPESE ANTICIPATE (art. 15 DPR 633/72): diritti di
+   segreteria, marche da bollo, tributi catastali. Non sono un compenso: fuori
+   dall'imponibile, da cassa e IVA, in fattura con natura N1. Si riconoscono
+   dalla descrizione (la spunta si puo' sempre togliere o mettere a mano). */
+const ANTICIPO_RE = /(anticipat|diritti\s+di\s+segreteria|marc[ah]\s+(da\s+)?bollo|imposta\s+di\s+bollo|\bbolli\b|(tributi|diritti|spese)\s+(speciali\s+)?catastal)/i;
+const eAnticipazione = descr => ANTICIPO_RE.test(String(descr || ''));
+const totRighe = rr => r2(rr.filter(r => !r.art15).reduce((a, r) => a + Number(r.importo || 0), 0));
+const totAnticipiRighe = rr => r2(rr.filter(r => r.art15).reduce((a, r) => a + Number(r.importo || 0), 0));
 
 /* ---------------------------------------------------------------------------
    SPESE ANTICIPATE PER IL COMMITTENTE (art. 15 DPR 633/72)
@@ -4586,7 +4594,8 @@ function isaVoci(anno) {
   const out = [];
   S.fatture.forEach(f => {
     if (f.stato === 'annullata') return;
-    const rr = righeFattura(f.id);
+    const tutte = righeFattura(f.id), rr = tutte.filter(r => !r.art15);
+    if (tutte.length && !rr.length) return;          // solo anticipazioni: niente compenso
     if (rr.length) {
       rr.forEach(r => out.push({
         tipo: r.isa_tipo || f.isa_tipo || null,
@@ -4741,7 +4750,8 @@ function calcolaFattura(imponibile, spese, split) {
            netto: r2(base + (split ? 0 : iva) + antic - rit) };
 }
 /* I conti di uno scaglione con le regole della sua commessa */
-const contiScaglione = f => calcolaFattura(impFattura(f), 0, !!(byId(S.projects, f.project_id) || {}).split_payment);
+const contiScaglione = f => calcolaFattura(impFattura(f), totAnticipiRighe(righeFattura(f.id)),
+  !!(byId(S.projects, f.project_id) || {}).split_payment);
 /* La cifra da mostrare negli elenchi: con la scissione, quello che arriva davvero */
 const cellaTotale = c => c.split
   ? feuro(c.netto) + '<div style="font-size:10px;color:var(--blue)" title="IVA ' + feuro(c.iva)
@@ -4927,13 +4937,20 @@ function datiFattura(f) {
     causale     : (f.note_fattura || '').trim(),
     /* I servizi elencati nella stessa fattura: uno per riga, con il suo importo.
        Vuoto = fattura a riga unica, come prima. */
-    righe       : righeFattura(f.id).map(r => ({
+    righe       : righeFattura(f.id).filter(r => !r.art15).map(r => ({
                     descrizione: r.descrizione || '', importo: r2(r.importo || 0) })),
     /* Le anticipazioni art. 15 da farsi restituire con questa fattura. */
     spese       : speseDaMettere(f).map(x => ({
                     id: x.id, descrizione: etichettaSpesa(x), importo: r2(x.importo || 0),
                     /* nuova = non ancora agganciata a nessuna fattura */
-                    nuova: !x.fattura_id, fissa: spesaFissa(x), fuori: false })),
+                    nuova: !x.fattura_id, fissa: spesaFissa(x), fuori: false }))
+                  /* ... e quelle scritte fra i servizi dello scaglione, segnate
+                     art. 15: fanno parte dello scaglione, non si tolgono qui. */
+                  .concat(righeFattura(f.id).filter(r => r.art15).map(r => ({
+                    id: 'riga-' + r.id, riga: true, importo: r2(r.importo || 0),
+                    descrizione: /art\.?\s*15/i.test(r.descrizione || '') ? r.descrizione
+                      : DICITURA_SPESE + ' — ' + (r.descrizione || 'spesa anticipata'),
+                    nuova: false, fissa: true, fuori: false }))),
 
     /* Imposte */
     aliquotaIva     : Number(STUDIO.aliquotaIva || 0),
@@ -7418,7 +7435,7 @@ function fatturePanel(pid) {
       + '<td><b>' + esc(f.descrizione) + '</b>'
         + (rr.length ? '<div style="font-size:11px;color:var(--mut);margin-top:2px">'
             + rr.map(r => '· ' + esc(r.descrizione) + ' <span style="color:var(--mut2)">'
-                + feuro(r.importo) + '</span>').join('<br>') + '</div>' : '')
+                + feuro(r.importo) + '</span>' + (r.art15 ? ' <span class="chip" style="font-size:10px">art. 15 esente</span>' : '')).join('<br>') + '</div>' : '')
         + (fa ? '<div style="font-size:11px;color:var(--mut)">matura con: ' + esc(fa.nome) + '</div>' : '')
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600">'
             + '📣 fatturazione chiesta da ' + esc(un(f.richiesta_da)) + ' il '
@@ -7638,7 +7655,8 @@ const intestatarioDi = f => { const p = byId(S.projects, f.project_id) || {};
    come nel PDF della proforma - ma una volta sola, sulla prima. */
 function daIncassareDi(f, conSpeseAperte) {
   const p = byId(S.projects, f.project_id) || {};
-  const spese = totSpese(speseDiFatt(f.id)) + (conSpeseAperte ? totSpese(speseAperte(f.project_id)) : 0);
+  const spese = totSpese(speseDiFatt(f.id)) + (conSpeseAperte ? totSpese(speseAperte(f.project_id)) : 0)
+    + totAnticipiRighe(righeFattura(f.id));
   return calcolaFattura(impFattura(f), spese, !!p.split_payment).netto;
 }
 function datiReportIncassi() {
@@ -8451,7 +8469,8 @@ function openFatt(id, presetPid) {
   el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
   el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
   FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo,
-                                            isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '' }));
+                                            isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
+                                            art15: !!r.art15, art15Mano: true }));
   disegnaRigheFatt();
   openM('m-fatt');
 }
@@ -8476,9 +8495,12 @@ function disegnaRigheFatt() {
             + 'data-fk="importo" placeholder="€" value="' + (r.importo === '' || r.importo === null ? '' : r.importo) + '">'
           + '<button class="btn btn-xs btn-d" type="button" data-frigdel="' + i + '" title="Togli">&#10005;</button>'
         + '</div>'
+        + '<label class="row" style="gap:6px;margin-top:6px;font-size:12px;cursor:pointer' + (r.art15 ? ';color:var(--blue)' : '') + '">'
+          + '<input type="checkbox" data-frig="' + i + '" data-fk="art15"' + (r.art15 ? ' checked' : '') + '>'
+          + 'Spesa anticipata per il cliente — esente IVA art. 15 DPR 633/72 (fuori da imponibile, cassa e IVA)</label>'
         /* Tipologia ISA e anno di competenza: si scelgono adesso, che si sa di
            che lavoro si tratta, non a fine anno rileggendo le fatture. */
-        + '<div class="row" style="gap:8px;margin-top:6px">'
+        + '<div class="row" style="gap:8px;margin-top:6px' + (r.art15 ? ';display:none' : '') + '">'
           + '<select class="fc" style="flex:1;font-size:12px" data-frig="' + i + '" data-fk="isa_tipo">'
             + isaOpzioni(r.isa_tipo || '') + '</select>'
           + '<select class="fc" style="width:150px;font-size:12px" data-frig="' + i + '" data-fk="anno_competenza">'
@@ -8487,6 +8509,8 @@ function disegnaRigheFatt() {
         + '</div>').join('')
       + '<div class="spread" style="font-size:13px;padding-top:6px;border-top:1px solid var(--bord)">'
         + '<span>Totale dei servizi</span><b>' + feuro(totRighe(FATT_RIGHE)) + '</b></div>'
+      + (totAnticipiRighe(FATT_RIGHE) ? '<div class="spread" style="font-size:12.5px;color:var(--blue)">'
+        + '<span>Spese anticipate art. 15 (esenti IVA)</span><b>' + feuro(totAnticipiRighe(FATT_RIGHE)) + '</b></div>' : '')
     : '<div class="hint" style="margin:0">Nessun servizio elencato: la fattura esce a voce unica, '
       + 'con la descrizione qui sopra.</div>';
 
@@ -8503,18 +8527,20 @@ function aggiornaCalcolo() {
   const fisso = parseFloat(el('fa-imp').value);
   const perc  = parseFloat(el('fa-perc').value);
   let imp = 0;
+  const antic = FATT_RIGHE.length ? totAnticipiRighe(FATT_RIGHE) : 0;
   if (FATT_RIGHE.length) imp = totRighe(FATT_RIGHE);
   else if (!isNaN(fisso) && fisso > 0) imp = fisso;
   else if (!isNaN(perc) && p.amount) imp = r2(Number(p.amount) * perc / 100);
-  if (!imp) { el('fa-calc').textContent = FATT_RIGHE.length
+  if (!imp && !antic) { el('fa-calc').textContent = FATT_RIGHE.length
       ? 'I servizi elencati sommano zero: indica gli importi.'
       : p.amount
         ? 'Importo di commessa: ' + feuro(p.amount) + '. Indica una percentuale, un importo fisso o i servizi.'
         : 'La commessa non ha un importo: usa un valore fisso o elenca i servizi.'; return; }
-  const c = calcolaFattura(imp, 0, !!p.split_payment);
+  const c = calcolaFattura(imp, antic, !!p.split_payment);
   el('fa-calc').innerHTML = 'Imponibile <b>' + feuro(c.imponibile) + '</b>'
     + (c.cassa ? ' · cassa ' + STUDIO.aliquotaCassa + '% ' + feuro(c.cassa) : '')
     + ' · IVA ' + STUDIO.aliquotaIva + '% ' + feuro(c.iva)
+    + (antic ? ' · spese art. 15 esenti ' + feuro(antic) : '')
     + (c.ritenuta ? ' · ritenuta −' + feuro(c.ritenuta) : '')
     + ' → totale <b>' + feuro(c.totale) + '</b>'
     + (c.split ? ' · <b>da incassare ' + feuro(c.netto) + '</b> (scissione dei pagamenti: l’IVA la versa l’ente)' : '')
@@ -8532,7 +8558,7 @@ async function saveFatt() {
   if (senzaNome) return toast(senzaNome === 1
     ? 'Un servizio è senza descrizione: scrivila o togli la riga.'
     : senzaNome + ' servizi sono senza descrizione: scrivile o togli le righe.', 'error');
-  if (FATT_RIGHE.length && !totRighe(FATT_RIGHE))
+  if (FATT_RIGHE.length && !totRighe(FATT_RIGHE) && !totAnticipiRighe(FATT_RIGHE))
     return toast('I servizi elencati sommano zero: indica gli importi.', 'error');
   if (!FATT_RIGHE.length && !perc && !imp)
     return toast('Indica una percentuale, un importo fisso, oppure elenca i servizi.', 'error');
@@ -8591,8 +8617,9 @@ async function salvaRigheFatt(fid) {
     const r = FATT_RIGHE[i];
     const riga = { descrizione: String(r.descrizione).trim(),
                    importo: Number(r.importo) || 0, ordine: i,
-                   isa_tipo: r.isa_tipo || null,
-                   anno_competenza: Number(r.anno_competenza) || null };
+                   isa_tipo: r.art15 ? null : (r.isa_tipo || null),
+                   anno_competenza: r.art15 ? null : (Number(r.anno_competenza) || null),
+                   art15: !!r.art15 };
     const { error } = r.id
       ? await SB.from('commessa_fattura_righe').update(riga).eq('id', r.id)
       : await SB.from('commessa_fattura_righe')
@@ -8955,7 +8982,8 @@ function speseRevisione(d) {
         + (x.fissa ? 'default' : 'pointer') + (x.fuori ? ';color:var(--mut);text-decoration:line-through' : '') + '">'
         + '<span><input type="checkbox" data-revspesa="' + x.id + '"' + (x.fuori ? '' : ' checked')
           + (x.fissa ? ' disabled' : '') + ' style="margin-right:6px">' + esc(x.descrizione)
-          + (x.nuova ? '' : ' <span style="color:var(--grn);font-size:11px">già in questa fattura</span>')
+          + (x.riga ? ' <span style="color:var(--mut);font-size:11px">dai servizi dello scaglione</span>'
+             : x.nuova ? '' : ' <span style="color:var(--grn);font-size:11px">già in questa fattura</span>')
         + '</span><b style="white-space:nowrap">' + feuro(x.importo) + '</b></label>').join('')
     + '</div><div class="hint">'
     + (nuoveDopo
@@ -13451,7 +13479,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* I servizi della fattura. Scrivendo si aggiorna solo il totale e non si
      ridisegna l'elenco: ridisegnarlo farebbe perdere il cursore a ogni tasto. */
   el('fa-addriga').onclick = () => {
-    FATT_RIGHE.push({ descrizione:'', importo:'' });
+    FATT_RIGHE.push({ descrizione:'', importo:'', art15:false });
     disegnaRigheFatt();
     const campi = el('fa-righe').querySelectorAll('[data-fk="descrizione"]');
     if (campi.length) campi[campi.length - 1].focus();
@@ -13460,9 +13488,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const i = e.target.dataset.frig; if (i === undefined) return;
     const r = FATT_RIGHE[Number(i)]; if (!r) return;
     const k = e.target.dataset.fk;
+    if (k === 'art15') {                       // scelta a mano: da qui in poi vale quella
+      if (e.type !== 'change') return;
+      r.art15 = e.target.checked; r.art15Mano = true; return disegnaRigheFatt();
+    }
     r[k] = (k === 'importo' || k === 'anno_competenza')
       ? (e.target.value === '' ? '' : Number(e.target.value))
       : e.target.value;
+    /* Scrivendo «diritti di segreteria», «marca da bollo», «anticipata per vs.
+       conto»... la riga diventa da sola una spesa anticipata art. 15. */
+    if (k === 'descrizione' && !r.art15Mano && e.type === 'change' && eAnticipazione(r.descrizione) !== !!r.art15) {
+      r.art15 = eAnticipazione(r.descrizione); return disegnaRigheFatt();
+    }
     const tot = el('fa-righe').querySelector('.spread b');
     if (tot) tot.textContent = feuro(totRighe(FATT_RIGHE));
     aggiornaCalcolo();
