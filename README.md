@@ -1177,6 +1177,15 @@ una richiesta di pagamento in sospeso, come una fattura emessa. Per questo:
 
 Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
+### L'ordine della pagina Fatturazione
+
+Dall'alto: la ricerca e i numeri di sintesi, poi **📄 Proforma emesse in
+attesa di incasso**, **📤 Fatture emesse in attesa di incasso** (solo le
+fatture: le proforma stanno sopra), le **richieste dei responsabili**, le
+**pronte da emettere** e quelle che **matureranno più avanti** (queste ultime
+tre solo per gli scaglioni senza proforma né fattura). In fondo il controllo
+contratto/fatturazione e le parcelle degli esterni.
+
 ### Cercare una fattura o una proforma
 
 La sezione del menu si chiama ora **Fatturazione** (prima *Da fatturare*). In
@@ -1661,6 +1670,25 @@ I dati fiscali del committente (partita IVA o codice fiscale, sede, codice
 destinatario SDI o PEC) si compilano nella scheda della commessa.
 
 ---
+
+
+#### Fatture di sole spese, privati senza codice SDI
+
+- Uno scaglione fatto **solo di spese anticipate** (il rimborso dei diritti di
+  segreteria, per esempio) si fattura e si mette in proforma: nessuna riga di
+  compenso a zero, solo le spese esenti con natura N1.
+- Nel riepilogo IVA delle spese esenti c'è il riferimento normativo
+  *Escluse ex art. 15 DPR 633/72*.
+- Un **privato senza partita IVA**, senza codice SDI né PEC, non blocca più la
+  fattura: parte con codice destinatario **0000000** e lo SdI la mette
+  nell'area riservata del cliente; la revisione ricorda di mandargli una copia
+  di cortesia. Per chi ha la partita IVA codice o PEC restano obbligatori.
+
+Verificato generando, sui dati reali, XML e proforma di tutti gli scaglioni
+aperti e validandoli con lo **schema ufficiale FatturaPA 1.2.2**: tutti quelli
+con i dati completi sono validi e i totali di XML e proforma coincidono. Per
+ripetere la verifica: `XSD_FATTURAPA=/percorso/Schema_del_file_xml_FatturaPA_v1.2.2.xsd node test/fattura.js`
+(lo schema importa `xmldsig-core-schema.xsd`, da tenere nella stessa cartella).
 
 ## Da iPad e da iPhone
 

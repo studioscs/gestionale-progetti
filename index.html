@@ -1542,7 +1542,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.02.4';
+const VERSIONE = '2026.11.02.6';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4674,6 +4674,7 @@ const DICITURA_SPESE = 'Spese anticipate esenti IVA art. 15 DPR 633/72';
 /* Natura N1 = escluse ex art. 15. E' quella che il tracciato pretende su una
    riga ad aliquota zero di questo tipo. */
 const NATURA_SPESE = 'N1';
+const RIF_SPESE = 'Escluse ex art. 15 DPR 633/72';
 
 const speseDi      = pid => S.spese.filter(x => x.project_id === pid);
 const speseAperte  = pid => speseDi(pid).filter(x => !x.fattura_id);
@@ -5045,7 +5046,12 @@ function validaFattura(d) {
     if (!d.oggetto)
       e.push('Manca l’oggetto del servizio: l’ente si aspetta di rileggerlo come nell’incarico.');
   } else {
-    if (!d.destinatario && !d.pec)
+    /* Un privato senza partita IVA non ha codice destinatario: si usa
+       «0000000» e lo SdI mette la fattura nella sua area riservata
+       dell'Agenzia delle Entrate (al cliente se ne da' una copia). Bloccarla
+       fermava venti commesse senza motivo. Chi ha la partita IVA un codice o
+       una PEC li ha, e vanno chiesti. */
+    if (!d.destinatario && !d.pec && d.clientePiva)
       e.push('Serve il codice destinatario SDI oppure la PEC del committente.');
     if (d.destinatario && !/^[A-Z0-9]{7}$/.test(String(d.destinatario).toUpperCase()))
       e.push('Il codice destinatario SDI dev’essere di 7 caratteri: ' + d.destinatario);
@@ -5053,7 +5059,10 @@ function validaFattura(d) {
 
   if (!d.numero) e.push('Manca il numero della fattura.');
   if (!d.data)   e.push('Manca la data della fattura.');
-  if (!(Number(d.imponibile) > 0)) e.push('L’imponibile è zero.');
+  /* Una fattura di sole spese anticipate (il rimborso dei diritti di
+     segreteria, per esempio) ha imponibile zero ed e' legittima. */
+  if (!(Number(d.imponibile) > 0) && !totSpese(speseNelFile(d)))
+    e.push('L’imponibile è zero e non ci sono spese anticipate da rimborsare.');
 
   /* L'IBAN non è obbligatorio per lo SdI, ma se c'è dev'essere giusto: una
      cifra sbagliata su una fattura già trasmessa si corregge solo con una nota. */
@@ -5092,10 +5101,13 @@ function xmlDaDati(d) {
      e' gia' la somma delle righe, ma se qualcuno lo forza a mano in revisione
      lo scarto lo si mette sull'ultima riga invece di lasciar partire un
      documento che non quadra. */
-  const linee = (d.righe && d.righe.length)
+  /* Solo spese anticipate: nessuna riga di compenso (sarebbe una riga a zero
+     con IVA 22%, e un riepilogo IVA vuoto da giustificare). */
+  const soloSpese = !(c.imponibile > 0) && c.anticipazioni > 0;
+  const linee = soloSpese ? [] : (d.righe && d.righe.length)
     ? d.righe.map(r => ({ descrizione: r.descrizione || d.descrizione, importo: r2(r.importo || 0) }))
     : [{ descrizione: d.oggetto || d.descrizione, importo: c.imponibile }];
-  const scarto = r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0)));
+  const scarto = linee.length ? r2(c.imponibile - r2(linee.reduce((a, r) => a + r.importo, 0))) : 0;
   if (scarto) linee[linee.length - 1].importo = r2(linee[linee.length - 1].importo + scarto);
 
   /* LA PREMESSA: LA DESCRIZIONE DELLO SCAGLIONE, IN TESTA AL DOCUMENTO
@@ -5119,7 +5131,9 @@ function xmlDaDati(d) {
      stampa lo stesso - e sporca i totali con righe di esenzione IVA che non
      c'entrano. Non rifarla. */
   const premessa = premessaDa(d);
-  if (premessa) linee.unshift({ descrizione: premessa, premessa: true, importo: 0 });
+  /* con sole spese la premessa prende la loro natura: un'aliquota 22% su una
+     riga sola obbligherebbe a un riepilogo al 22% che non esiste */
+  if (premessa) linee.unshift({ descrizione: premessa, premessa: true, importo: 0, spesa: soloSpese });
 
   /* Le anticipazioni per conto del cliente chiudono il documento, dopo i
      compensi: e' l'ordine in cui le legge chi riceve, e tiene separato quello
@@ -5252,17 +5266,19 @@ function xmlDaDati(d) {
           + el2('AliquotaIVA', n2(r.spesa ? 0 : d.aliquotaIva))
           + (r.spesa ? el2('Natura', NATURA_SPESE) : '')
           + '</DettaglioLinee>').join('')
-    +   '<DatiRiepilogo>'
+    +   (soloSpese ? '' : '<DatiRiepilogo>'
     +     el2('AliquotaIVA', n2(d.aliquotaIva))
     +     el2('ImponibileImporto', n2(c.base)) + el2('Imposta', n2(c.iva))
     +     el2('EsigibilitaIVA', d.split ? 'S' : 'I')
-    +   '</DatiRiepilogo>'
+    +   '</DatiRiepilogo>')
     /* Ogni combinazione di aliquota e natura usata nelle righe deve comparire
        nel riepilogo: se mancasse, il Sistema di Interscambio scarterebbe. */
     +   (c.anticipazioni
+        /* senza esigibilita' (non c'e' imposta) e con il riferimento di legge,
+           che le specifiche chiedono quando c'e' la natura */
         ? '<DatiRiepilogo>' + el2('AliquotaIVA', n2(0)) + el2('Natura', NATURA_SPESE)
           + el2('ImponibileImporto', n2(c.anticipazioni)) + el2('Imposta', n2(0))
-          + el2('EsigibilitaIVA', d.split ? 'S' : 'I')
+          + el2('RiferimentoNormativo', RIF_SPESE)
           + '</DatiRiepilogo>' : '')
     +   '</DatiBeniServizi>'
     +   '<DatiPagamento>' + el2('CondizioniPagamento', d.condizioni)
@@ -7960,25 +7976,25 @@ function rFatturare() {
           return m.length ? kpi('In mora con l’avvocato', m.length,
             feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
-    + riquadroProforme()
-    /* subito sotto le proforma: le fatture emesse, l'altra meta' di quello
-       che si aspetta di incassare */
-    + tabella(emesse, '📤 Fatture emesse in attesa di incasso', 'var(--blue)')
-    + riquadroControlloFatt(daControllare)
-    + esterniRiepilogo()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
-    + (richieste.length
+    /* L'ORDINE DELLA PAGINA: prima quello che si aspetta di incassare (le
+       proforma mandate, poi le fatture emesse), poi quello da fare (le
+       richieste, le pronte), poi quello che verra'. In fondo i controlli. */
+    + riquadroProforme()
+    + tabella(emesse, '📤 Fatture emesse in attesa di incasso', 'var(--blue)')
+    + (kRich.length
         ? '<div class="ibox mb16" style="font-size:12.5px"><b>Richieste dall’area tecnica.</b> '
           + 'Qualcuno ha dichiarato che questi scaglioni si possono emettere: sotto ciascuno trovi '
           + 'chi l’ha chiesto, quando e con quali riferimenti. La richiesta si chiude da sola quando '
-          + 'segni la fattura come <b>emessa</b>.</div>'
+          + 'emetti la proforma o la fattura.</div>'
         : '')
     + tabella(kRich, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
     + tabella(kPronte, '💶 Pronte da emettere', 'var(--ora)')
     + tabella(list.filter(f => f.stato !== 'pronta' && senzaProf(f)), '⏳ Matureranno più avanti', null,
         daControllare.filter(x => x.c.problema === 'saldo'))
-
+    + riquadroControlloFatt(daControllare)
+    + esterniRiepilogo()
     + '</div>';
   collegaCercaFatt();
 }
@@ -8797,7 +8813,8 @@ function prossimaProforma(anno, escludi) {
    manda al committente; quando paga, dallo stesso scaglione si genera l'XML.
    Il sistema di fatturazione non cambia: la proforma ci si mette davanti. */
 function docProforma(d) {
-  const voci = (d.righe && d.righe.length)
+  const soloSpese = !(Number(d.imponibile) > 0) && totSpese(speseNelFile(d)) > 0;
+  const voci = soloSpese ? [] : (d.righe && d.righe.length)
     ? d.righe.map(r => ({ descrizione: r.descrizione || d.descrizione, importo: r.importo, quantita: 1 }))
     : [{ descrizione: d.oggetto || d.descrizione, importo: d.imponibile, quantita: 1 }];
   const quando = d.proformaData || todayISO();
@@ -9034,13 +9051,18 @@ function aggiornaTotali() {
   const dF = numeroDoppio('numero_fattura', 'data_fattura', d.numero, annoDi(d.data), d.fattId);
   const dP = numeroDoppio('proforma_numero', 'proforma_data', d.proformaNumero, annoDi(d.proformaData), d.fattId);
   const desc = f => '«' + (f.descrizione || '') + '» di ' + pn(f.project_id);
+  if (!d.pa && !d.destinatario && !d.pec && !d.clientePiva)
+    el('rev-err').innerHTML += '<div class="ibox mb16" style="font-size:12.5px">Privato senza codice SDI né PEC: '
+      + 'la fattura parte con codice destinatario <b>0000000</b> e lo SdI la mette nell’area riservata del cliente '
+      + 'sul sito dell’Agenzia delle Entrate. <b>Mandagli una copia di cortesia</b> (il PDF).</div>';
   el('rev-err').innerHTML += (dF ? '<div class="wbox mb16">Attenzione: la fattura n. <b>' + esc(d.numero)
       + '</b> esiste già (' + esc(desc(dF)) + ').</div>' : '')
     + (dP ? '<div class="wbox mb16">Attenzione: la proforma n. <b>' + esc(d.proformaNumero)
       + '</b> esiste già (' + esc(desc(dP)) + ').</div>' : '');
   /* Alla proforma basta sapere a chi va e quanto chiede: i dati per lo SdI
      servono alla fattura, non al PDF. */
-  el('rev-pdf').disabled = !String(d.cliente || '').trim() || !(c.imponibile > 0) || !String(d.proformaNumero || '').trim();
+  el('rev-pdf').disabled = !String(d.cliente || '').trim() || !(c.imponibile > 0 || c.anticipazioni > 0)
+    || !String(d.proformaNumero || '').trim();
 
   const riga = (l, v, forte) => '<div class="spread" style="font-size:13px;padding:3px 0'
     + (forte ? ';border-top:1px solid var(--bord);margin-top:5px;padding-top:7px' : '') + '">'

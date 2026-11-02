@@ -13,7 +13,7 @@ const ctx={btoa,atob,unescape,encodeURIComponent,console,setTimeout,clearInterva
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,dellaSerie,serieFattura,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,dellaSerie,serieFattura,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo,contiScaglione,totAnticipiRighe,eAnticipazione,daIncassareDi,DICITURA_SPESE});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -820,6 +820,101 @@ console.log('— RIFERIMENTO ALLA PROFORMA NELLE NOTE DELLA FATTURA —');
   const senza=Object.assign({},dR,{causale:'',proformaFatta:false,proformaNumero:'2026/099',proformaData:'2026-09-01'});
   const r3=ctx.xmlDaDati(senza);
   t('senza proforma fatta non si scrive niente (neanche il numero solo proposto)',!/proforma/i.test(r3.xml)&&!/<Causale>/.test(r3.xml),null);
+}
+
+console.log('— SPESE ANTICIPATE ART. 15 FRA I SERVIZI: XML E PROFORMA —');
+{
+  const xsdOk=(nome,xml)=>{ fs.writeFileSync('/tmp/'+nome,xml); let out='';
+    try{out=execSync('xmllint --noout --schema '+XSD+' /tmp/'+nome+' 2>&1').toString();}catch(e){out=(e.stdout||'')+(e.stderr||'');}
+    return {ok:haXsd?/validates/.test(out):true,out:out.slice(0,700)}; };
+  const tag=(x,n)=>(x.match(new RegExp('<'+n+'>([^<]*)</'+n+'>','g'))||[]).map(v=>v.replace(/<[^>]+>/g,''));
+  const num=v=>Number(v);
+  const SALVA2={projects:ctx.S.projects,fatture:ctx.S.fatture,righe:ctx.S.fattRighe,spese:ctx.S.spese};
+  ctx.S.projects=[
+    {id:'pX',name:'2026_50_ROSSI MARIO_SCIA',client:'ROSSI MARIO',cliente_cf:'RSSMRA80A01H501U',cliente_indirizzo:'Via Roma 1',
+     cliente_cap:'62019',cliente_comune:'Recanati',cliente_prov:'MC',cliente_sdi:'0000000',amount:5000},
+    {id:'pY',name:'2026_51_COMUNE DI JESI_DL',client:'COMUNE DI JESI',cliente_piva:'00135880425',cliente_indirizzo:'Piazza Indipendenza 1',
+     cliente_cap:'60035',cliente_comune:'Jesi',cliente_prov:'AN',ente_pubblico:true,split_payment:true,codice_ufficio:'UFABCD',
+     cig:'Z1234567AB',rif_incarico:'Det. 45',rif_incarico_data:'2026-03-01',rif_incarico_tipo:'contratto',amount:20000}];
+  const FX={id:'fX',project_id:'pX',descrizione:'Acconto SCIA',imponibile:1000,stato:'pronta'};
+  const FS={id:'fS',project_id:'pX',descrizione:'Rimborso spese',imponibile:0,stato:'pronta'};
+  const FY={id:'fY',project_id:'pY',descrizione:'SAL 1',imponibile:5000,stato:'pronta'};
+  ctx.S.fatture=[FX,FS,FY];
+  ctx.S.fattRighe=[
+    {id:'x1',fattura_id:'fX',ordine:0,descrizione:'Progetto e presentazione SCIA',importo:1000},
+    {id:'x2',fattura_id:'fX',ordine:1,descrizione:'Spese diritti di segreteria Comune anticipati per vs. conto',importo:80,art15:true},
+    {id:'x3',fattura_id:'fX',ordine:2,descrizione:'Marca da bollo deposito sismico',importo:16,art15:true},
+    {id:'s1',fattura_id:'fS',ordine:0,descrizione:'Diritti di segreteria',importo:50,art15:true},
+    {id:'y1',fattura_id:'fY',ordine:0,descrizione:'Direzione lavori - SAL 1',importo:5000},
+    {id:'y2',fattura_id:'fY',ordine:1,descrizione:'Imposta di bollo anticipata',importo:16,art15:true}];
+  ctx.S.spese=[{id:'sp1',project_id:'pX',tipo:'catasto',descrizione:'visura',importo:50,data_spesa:'2026-10-01',fattura_id:null}];
+
+  t('la descrizione riconosce le anticipazioni',ctx.eAnticipazione('SPESA MARCA BOLLO ANTICIPATA')&&!ctx.eAnticipazione('C. Aggiornamento catastale DOCFA'),null);
+  t('l imponibile dello scaglione e solo il compenso',ctx.impFattura(FX)===1000,ctx.impFattura(FX));
+
+  // A: privato con servizi + spese art. 15 fra i servizi + spesa registrata
+  const dX=ctx.datiFattura(FX); dX.numero='70/FE'; dX.data='2026-11-02'; dX.progressivo=70;
+  t('servizi in fattura: solo il compenso',dX.righe.length===1,dX.righe.length);
+  t('spese in fattura: la registrata e le due dei servizi',dX.spese.length===3,dX.spese.map(x=>x.descrizione));
+  t('con la dicitura art. 15',dX.spese.every(x=>x.descrizione.indexOf(ctx.DICITURA_SPESE)===0),dX.spese.map(x=>x.descrizione));
+  const rX=ctx.xmlDaDati(dX);
+  t('A) l XML si genera',!rX.errori,rX.errori);
+  if(!rX.errori){
+    const v=xsdOk('fatt-art15.xml',rX.xml); t('A) VALIDO secondo lo schema ufficiale',v.ok,v.out);
+    const nat=tag(rX.xml,'Natura'); t('A) le tre spese con natura N1 (righe e riepilogo)',nat.filter(n=>n==='N1').length>=4&&nat.every(n=>n==='N1'),nat);
+    t('A) riferimento normativo nel riepilogo N1',/<RiferimentoNormativo>[^<]*15[^<]*633/.test(rX.xml),tag(rX.xml,'RiferimentoNormativo'));
+    const tot=num(tag(rX.xml,'ImportoTotaleDocumento')[0]);
+    const atteso=ctx.r2(1000+40+(1040*0.22)+146);
+    t('A) totale documento = compenso + cassa + IVA + spese esenti',tot===atteso,[tot,atteso]);
+    const imp22=tag(rX.xml,'ImponibileImporto').map(num);
+    t('A) imponibile IVA 22% senza le spese',imp22.includes(1040)&&imp22.includes(146),imp22);
+    t('A) importo da pagare = totale (nessuna ritenuta)',num(tag(rX.xml,'ImportoPagamento')[0])===tot,tag(rX.xml,'ImportoPagamento'));
+    const pf=ctx.docProforma(dX), c=ctx.contiDocumento(pf.voci,pf.spese,pf.opz);
+    t('A) la proforma dice lo stesso totale della fattura',c.totale===tot,[c.totale,tot]);
+    t('A) e lo stesso imponibile e le stesse spese',c.imponibile===1000&&c.anticipazioni===146,[c.imponibile,c.anticipazioni]);
+    let pdfOk=true; try{ ctx.pdfDefinizione(pf); }catch(e){ pdfOk=String(e.message); }
+    t('A) il PDF della proforma si compone senza errori',pdfOk===true,pdfOk);
+    t('A) conti dello scaglione coerenti (senza la spesa registrata)',ctx.contiScaglione(FX).totale===ctx.r2(1000+40+228.8+96),ctx.contiScaglione(FX));
+  }
+
+  // B: scaglione di sole spese anticipate
+  const dS=ctx.datiFattura(FS); dS.numero='71/FE'; dS.data='2026-11-02'; dS.progressivo=71;
+  dS.spese=dS.spese.filter(x=>x.riga);           // la spesa registrata e' gia' andata nella fattura A
+  const rS=ctx.xmlDaDati(dS);
+  if(rS.errori) t('B) sole spese: o si genera o lo dice chiaramente',rS.errori.every(e=>/compens|importo|spese/i.test(e)),rS.errori);
+  else {
+    const v=xsdOk('fatt-solespese.xml',rS.xml); t('B) sole spese: VALIDO secondo lo schema',v.ok,v.out);
+    t('B) sole spese: nessuna riga di compenso a zero con IVA',!/<AliquotaIVA>22\.00<\/AliquotaIVA>[\s\S]*?<PrezzoTotale>0\.00</.test(rS.xml)
+      &&!(tag(rS.xml,'AliquotaIVA').includes('22.00')),tag(rS.xml,'AliquotaIVA'));
+    t('B) sole spese: totale = spese',num(tag(rS.xml,'ImportoTotaleDocumento')[0])===50,tag(rS.xml,'ImportoTotaleDocumento'));
+    const pS=ctx.docProforma(dS), cS=ctx.contiDocumento(pS.voci,pS.spese,pS.opz);
+    let okS=true; try{ ctx.pdfDefinizione(pS); }catch(e){ okS=String(e.message); }
+    t('B) sole spese: la proforma si compone, senza voce di compenso a zero',okS===true&&pS.voci.length===0&&cS.totale===50,[okS,pS.voci.length,cS.totale]);
+  }
+
+  // C: ente pubblico con scissione e spesa art. 15
+  const dY=ctx.datiFattura(FY); dY.numero='12/PA'; dY.data='2026-11-02'; dY.progressivo=72;
+  const rY=ctx.xmlDaDati(dY);
+  t('C) PA: l XML si genera',!rY.errori,rY.errori);
+  if(!rY.errori){
+    const v=xsdOk('fatt-pa-art15.xml',rY.xml); t('C) PA: VALIDO secondo lo schema ufficiale',v.ok,v.out);
+    t('C) PA: formato FPA12 e codice ufficio',/versione="FPA12"/.test(rY.xml)&&/<CodiceDestinatario>UFABCD</.test(rY.xml),null);
+    t('C) PA: scissione dei pagamenti sul 22%',/<EsigibilitaIVA>S</.test(rY.xml),tag(rY.xml,'EsigibilitaIVA'));
+    const tot=num(tag(rY.xml,'ImportoTotaleDocumento')[0]), iva=ctx.r2(5200*0.22);
+    t('C) PA: totale = compenso + cassa + IVA + bollo',tot===ctx.r2(5200+iva+16),[tot]);
+    t('C) PA: da pagare senza l IVA',num(tag(rY.xml,'ImportoPagamento')[0])===ctx.r2(tot-iva),tag(rY.xml,'ImportoPagamento'));
+    t('C) PA: CIG nel documento',/<CodiceCIG>Z1234567AB</.test(rY.xml),null);
+  }
+  // D: privato senza codice SDI ne' PEC: 0000000, area riservata
+  const dP=ctx.datiFattura(FX); dP.numero='73/FE'; dP.data='2026-11-02'; dP.progressivo=73; dP.destinatario=''; dP.pec='';
+  const rP=ctx.xmlDaDati(dP);
+  t('D) privato senza SDI né PEC: si genera',!rP.errori,rP.errori);
+  if(!rP.errori){ t('D) con codice destinatario 0000000',/<CodiceDestinatario>0000000</.test(rP.xml),null);
+    const v=xsdOk('fatt-privato.xml',rP.xml); t('D) VALIDO secondo lo schema',v.ok,v.out); }
+  const dI=Object.assign({},dP,{clientePiva:'02345670541'});
+  const rI=ctx.xmlDaDati(dI);
+  t('D) con partita IVA il codice o la PEC restano obbligatori',!!rI.errori&&rI.errori.some(e=>/codice destinatario SDI oppure la PEC/.test(e)),rI.errori);
+  ctx.S.projects=SALVA2.projects; ctx.S.fatture=SALVA2.fatture; ctx.S.fattRighe=SALVA2.righe; ctx.S.spese=SALVA2.spese;
 }
 
 console.log(fail?'\n'+fail+' FALLITI':'\nTUTTI I CONTROLLI PASSATI');

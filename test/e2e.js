@@ -2618,6 +2618,14 @@ function launchOpts(){
     must(/Richieste dall’area tecnica/.test(h),'manca la spiegazione');
     must(/Chieste dai tecnici/.test(h),'manca il riquadro di riepilogo');
     must(/SAL n. 1/.test(h),'la nota non è visibile a chi fattura');
+    /* l'ordine: proforma, fatture emesse, richieste, pronte, matureranno, poi i controlli */
+    const ord=await p.evaluate(()=>[...document.querySelectorAll('#page .card .card-t')].map(x=>x.textContent));
+    const pos=re=>ord.findIndex(x=>re.test(x));
+    const seq=[/Proforma emesse in attesa/,/Fatture emesse in attesa/,/Chieste dai responsabili/,/Pronte da emettere/,/Matureranno/]
+      .map(pos).filter(i=>i>=0);
+    must(seq.every((v,i)=>!i||seq[i-1]<v),'ordine dei riquadri: '+ord.join(' | '));
+    const ctl=pos(/Contratto e fatturazione non tornano|Parcelle|esterni/i), mat=pos(/Matureranno/);
+    must(ctl<0||mat<0||ctl>mat,'i controlli non stanno in fondo: '+ord.join(' | '));
   });
   await t('uno scaglione non previsto si crea e si chiede in un colpo solo',async()=>{
     const g=await p.evaluate(async pid=>{
