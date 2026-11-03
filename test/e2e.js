@@ -4486,7 +4486,7 @@ function launchOpts(){
         entro:v('Di competenza '+y+' · da fatturare nel '+y)===feuro(sm(n.compEntro.filter(fattAperta))),
         inc:v('Di competenza '+y+' · fatturato e incassato')===feuro(sm(n.compEntro.concat(n.compDopo).filter(f=>f.stato==='incassata'))),
         em:v('Di competenza '+y+' · fatturato, non incassato')===feuro(sm(n.compEntro.concat(n.compDopo).filter(f=>f.stato==='emessa'))),
-        dopo:v('Di competenza '+y+' · da fatturare nel '+(y+1))===feuro(sm(n.compDopo.filter(fattAperta))),
+        dopo:v('Di competenza '+y+' · da fatturare nel '+(y+1)+' o dopo')===feuro(sm(n.compDopo.filter(fattAperta))),
         pross:v('Di competenza '+(y+1))===feuro(sm(S.fatture.filter(f=>f.stato!=='annullata'&&annoCompScaglione(f)===y+1))),
         dentro:['AF entro','AF dopo'].every(d=>{ const f=S.fatture.find(x=>x.descrizione===d);
           return d==='AF entro'?n.compEntro.includes(f):n.compDopo.includes(f); })};
@@ -4632,7 +4632,7 @@ function launchOpts(){
     await p.click('#fa-save2'); await p.waitForTimeout(900);
     const g=await p.evaluate(y=>{ go('fatturare');
       const card=re=>[...document.querySelectorAll('#page .card')].find(c=>re.test((c.querySelector('.card-t')||{}).textContent||''));
-      const dopo=card(/dal \d{4} o senza data/), entro=card(/entro il 31\/12/);
+      const dopo=card(/Matureranno più avanti — dal \d{4}/), entro=card(/entro il 31\/12/);
       const f=S.fatture.find(x=>x.descrizione==='Saldo previsto anno prossimo');
       const na=numeriAnno(y);
       return {inDopo:!!(dopo&&dopo.querySelector('[data-fatt="'+f.id+'"]')),inEntro:!!(entro&&entro.querySelector('[data-fatt="'+f.id+'"]')),
