@@ -339,6 +339,18 @@
       resetPasswordForEmail:(em,o)=>{ window.__RESET={email:em,opts:o}; return Promise.resolve({data:{},error:null}); },
       signOut:()=>Promise.resolve({error:null})
     },
+    /* La funzione «ipa» (Indice PA) con un solo ufficio inventato: TSTU01.
+       __IPAGIU simula l'IPA irraggiungibile. */
+    functions:{invoke:(nome,o)=>{
+      window.__IPACHIAMATE=(window.__IPACHIAMATE||0)+1;
+      if(nome!=='ipa') return Promise.resolve({data:null,error:{message:'funzione sconosciuta: '+nome}});
+      if(window.__IPAGIU) return Promise.resolve({data:null,error:{message:'IPA non raggiungibile'}});
+      const c=String((o&&o.body&&o.body.codice)||'').toUpperCase();
+      const u={codice_univoco:'TSTU01',denominazione:'Comune di Prova',ufficio:'Uff_eFatturaPA',cf:'00000000001',
+        piva:'00000000001',indirizzo:'Piazza del Municipio 1',cap:'62100',comune:'Prova',provincia:'MC',
+        pec:'protocollo@pec.comune.prova.it',categoria:'Comuni e loro Consorzi e Associazioni'};
+      return Promise.resolve({data:{uffici:c==='TSTU01'?[u]:[]},error:null});
+    }},
     storage:{from:()=>({
       list:(prefix)=>Promise.resolve({data:(window.__STORAGE||[]).filter(x=>x.startsWith(prefix+'/'))
               .map(x=>({name:x.split('/').slice(1).join('/')})),error:null}),

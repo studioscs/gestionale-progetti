@@ -1695,12 +1695,32 @@ rispetto a una fattura fra privati:
 | CIG e CUP | non previsti | **CIG obbligatorio**, CUP se il progetto ne ha uno |
 | IVA | incassata da noi | **scissione dei pagamenti**: la versa l'ente |
 
-**Il Codice Univoco Ufficio è la chiave.** Digitandolo, se quell'ufficio è già
-nel registro, denominazione, codice fiscale, indirizzo, CAP, comune, provincia e
-PEC del committente si ricompilano da soli. Il registro **si popola da sé**: ogni
-commessa pubblica salvata ci lascia dentro il suo ufficio, quindi dalla seconda
-commessa con lo stesso ente non si digita più nulla. Se il codice non è in
-archivio lo si compila una volta e resta.
+**Il Codice Univoco Ufficio è la chiave.** Digitandolo, denominazione, codice
+fiscale, partita IVA, indirizzo, CAP, comune, provincia e PEC del committente si
+compilano da soli:
+
+1. prima si guarda nel **registro dello studio** (gli uffici già usati);
+2. se non c'è, si chiede all'**Indice della PA** (IPA, AgID — dati pubblici,
+   licenza CC-BY 4.0) e l'ufficio trovato entra nel registro.
+
+Si riempiono i campi **vuoti**. Se un campo è già scritto e l'IPA dice
+altro (es. una PEC diversa), un riquadro lo segnala e il pulsante **Usa i dati
+dell'ente** lo sostituisce: chi ha scritto a mano decide. Se il codice non
+esiste nell'IPA lo si dice; se l'IPA non risponde si compila a mano.
+
+Funziona in tre punti:
+- **Nuova / Modifica commessa**, campo *Codice Univoco Ufficio*;
+- **Nuova / Modifica commessa**, campo *Codice destinatario SDI*: un codice
+  di **6** caratteri è di un ufficio pubblico (quelli dei privati ne hanno 7),
+  quindi si spunta da sola «ente pubblico», il codice passa al suo campo e
+  l'ente si compila;
+- **Clienti**, campo *Codice SDI*: con 6 caratteri la scheda si compila.
+
+Il browser non può interrogare l'IPA direttamente: lo fa la piccola funzione
+`ipa` su Supabase ([`supabase/functions/ipa/index.ts`](supabase/functions/ipa/index.ts)),
+riservata agli utenti collegati, in sola lettura, senza chiavi né segreti.
+Per ripubblicarla: `supabase functions deploy ipa` (con la verifica del login
+attiva, che è l'impostazione predefinita).
 
 Il codice identifica l'*ufficio*, non l'ente: lo stesso comune ha spesso più
 uffici con codici diversi, ed è per questo che va chiesto insieme all'incarico.

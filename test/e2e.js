@@ -1655,6 +1655,44 @@ function launchOpts(){
     must(/Comune di Recanati/.test(await p.textContent('#w-uff-h')),'il riscontro non nomina l ente');
     await p.keyboard.press('Escape');
   });
+  await t('codice ufficio sconosciuto allo studio: i dati arrivano dall Indice PA',async()=>{
+    await p.evaluate(()=>closeM('m-proj'));
+    await p.click('.sn[data-page="projects"]'); await p.waitForTimeout(300);
+    await p.click('[data-act="newproj"]'); await p.waitForSelector('#m-proj.show');
+    await p.fill('#w-cpec','mia@pec.it');
+    /* scritto per sbaglio nel campo SDI: va al suo posto e segna l ente pubblico */
+    await p.fill('#w-csdi','tstu01'); await p.press('#w-csdi','Tab'); await p.waitForTimeout(700);
+    must(await p.isChecked('#w-pa'),'ente pubblico non segnato');
+    must((await p.inputValue('#w-uff'))==='TSTU01','codice non spostato nel codice ufficio');
+    must((await p.inputValue('#w-csdi'))==='','il codice resta nel campo SDI');
+    must((await p.inputValue('#w-cli'))==='Comune di Prova','denominazione non compilata');
+    must((await p.inputValue('#w-ccom'))==='Prova'&&(await p.inputValue('#w-cprov'))==='MC','comune/provincia non compilati');
+    must((await p.inputValue('#w-ccf'))==='00000000001','codice fiscale non compilato');
+    const h=await p.textContent('#w-uff-h');
+    must(/Indice della PA/.test(h),'non dice da dove vengono i dati: '+h);
+    /* la PEC scritta a mano non si tocca: si segnala e si sostituisce solo a richiesta */
+    must((await p.inputValue('#w-cpec'))==='mia@pec.it','PEC scritta a mano sovrascritta');
+    must(/PEC/.test(h)&&await p.isVisible('#w-ipa-usa'),'differenza non segnalata');
+    await p.click('#w-ipa-usa'); await p.waitForTimeout(200);
+    must((await p.inputValue('#w-cpec'))==='protocollo@pec.comune.prova.it','PEC non sostituita');
+    must(await p.evaluate(()=>!!__DB.enti_pa.find(x=>x.codice_univoco==='TSTU01'&&x.comune==='Prova')),'ufficio non memorizzato nel registro');
+    await p.keyboard.press('Escape');
+  });
+  await t('anche in Clienti il codice ufficio compila la scheda dell ente',async()=>{
+    const r=await p.evaluate(async()=>{ closeM('m-proj'); openCliente(null);
+      el('cl-sdi').value='tstu01'; el('cl-sdi').dispatchEvent(new Event('change'));
+      await new Promise(x=>setTimeout(x,300));
+      const o={den:el('cl-den').value,cap:el('cl-cap').value,pec:el('cl-pec').value,sdi:el('cl-sdi').value,box:el('cl-ipa').textContent};
+      /* IPA irraggiungibile: lo si dice, i campi restano a mano */
+      window.__IPAGIU=true; openCliente(null);
+      el('cl-sdi').value='ZZZZ99'; el('cl-sdi').dispatchEvent(new Event('change'));
+      await new Promise(x=>setTimeout(x,300));
+      o.giu=el('cl-ipa').textContent; o.denGiu=el('cl-den').value;
+      window.__IPAGIU=false; closeM('m-cli'); return o; });
+    must(r.den==='Comune di Prova'&&r.cap==='62100'&&r.pec==='protocollo@pec.comune.prova.it','scheda non compilata: '+JSON.stringify(r));
+    must(r.sdi==='TSTU01','codice non normalizzato');
+    must(/non raggiungibile/.test(r.giu)&&r.denGiu==='','IPA giù non segnalato: '+r.giu);
+  });
   await t('la scheda Anagrafica separa CIG e CUP',async()=>{
     await p.evaluate(()=>{const x=__DB.projects.find(y=>y.name==='Consolidamento scuola primaria');
       S.projId=x.id; S.tab='anagrafica'; go('project');});

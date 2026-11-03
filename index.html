@@ -555,8 +555,11 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="fg3">
         <div class="fg"><label class="fl">Partita IVA</label><input class="fc" id="cl-piva"></div>
         <div class="fg"><label class="fl">Codice fiscale</label><input class="fc" id="cl-cf"></div>
-        <div class="fg"><label class="fl">Codice SDI</label><input class="fc" id="cl-sdi" placeholder="7 caratteri"></div>
+        <div class="fg"><label class="fl">Codice SDI</label><input class="fc" id="cl-sdi" placeholder="7 caratteri; ente pubblico: 6"></div>
       </div>
+      <div class="hint" style="margin:-8px 0 10px">Ente pubblico: scrivi il <b>codice univoco ufficio</b> (6 caratteri)
+        e i dati dell&rsquo;ente si compilano da soli dall&rsquo;Indice della PA.</div>
+      <div id="cl-ipa"></div>
       <div class="fg"><label class="fl">PEC</label><input class="fc" id="cl-pec" placeholder="se non c&rsquo;&egrave; il codice SDI"></div>
       <div class="fg"><label class="fl">Indirizzo</label><input class="fc" id="cl-ind"></div>
       <div class="fg3">
@@ -1561,7 +1564,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.11';
+const VERSIONE = '2026.11.03.12';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -9797,6 +9800,7 @@ function openCliente(id, presetNome) {
   el('cl-piva').value  = c ? (c.piva || '') : '';
   el('cl-cf').value    = c ? (c.cf || '') : '';
   el('cl-sdi').value   = c ? (c.sdi || '') : '';
+  el('cl-ipa').innerHTML = ''; IPA_ULTIMO.cl = null;
   el('cl-pec').value   = c ? (c.pec || '') : '';
   el('cl-ind').value   = c ? (c.indirizzo || '') : '';
   el('cl-cap').value   = c ? (c.cap || '') : '';
@@ -12248,7 +12252,7 @@ function drawWizard() {
         + '<option value="persona"' + (tipoCli === 'persona' ? ' selected' : '') + '>Persona fisica</option></select></div>'
       + '</div><div class="fg3">'
       + fld('Partita IVA', 'w-cpiva', d.cliente_piva) + fld('Codice fiscale', 'w-ccf', d.cliente_cf)
-      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri')
+      + fld('Codice destinatario SDI', 'w-csdi', d.cliente_sdi, '7 caratteri; ente pubblico: 6')
       + '</div><div class="fg2">'
       + fld('PEC', 'w-cpec', d.cliente_pec, 'se non c’è il codice SDI')
       + fld('Indirizzo (sede o residenza)', 'w-cind', d.cliente_indirizzo)
@@ -12489,22 +12493,92 @@ function enteHint(cod) {
       + 'alla prossima commessa per questo ente basterà digitare il codice.';
 }
 
-/* Riempie i campi del committente dai dati dell'ufficio in registro */
-function applicaEnte(cod) {
+/* L'ANAGRAFICA DELL'ENTE DAL CODICE UFFICIO
+   Il Codice Univoco Ufficio (6 caratteri) identifica un ufficio della PA
+   nell'Indice dei domicili digitali (IPA, AgID): da li' vengono denominazione,
+   codice fiscale, indirizzo, CAP, comune, provincia e PEC. Prima si guarda nel
+   registro dello studio (enti_pa), poi si chiede all'IPA tramite la funzione
+   «ipa» di Supabase (il browser non puo' interrogarla direttamente); l'ufficio
+   trovato entra nel registro, cosi' la volta dopo non serve chiedere.
+   Si compilano i campi vuoti; quelli gia' scritti e diversi si mostrano, e
+   un pulsante li sostituisce: chi ha scritto a mano decide. */
+const IPA_CACHE = {}, IPA_ULTIMO = { w: null, cl: null };
+const CAMPI_ENTE = {
+  w:  { denominazione:'w-cli', cf:'w-ccf', piva:'w-cpiva', indirizzo:'w-cind', cap:'w-ccap', comune:'w-ccom', provincia:'w-cprov', pec:'w-cpec' },
+  cl: { denominazione:'cl-den', cf:'cl-cf', piva:'cl-piva', indirizzo:'cl-ind', cap:'cl-cap', comune:'cl-com', provincia:'cl-prov', pec:'cl-pec' }
+};
+const NOMI_CAMPI_ENTE = { denominazione:'denominazione', cf:'codice fiscale', piva:'partita IVA', indirizzo:'indirizzo',
+                          cap:'CAP', comune:'comune', provincia:'provincia', pec:'PEC' };
+
+async function ufficioDaCodice(cod) {
+  const c = String(cod || '').toUpperCase().trim();
+  if (!/^[A-Z0-9]{6}$/.test(c)) return null;
+  const loc = (S.enti || []).find(x => x.codice_univoco === c);
+  if (loc) return Object.assign({ fonte: 'registro' }, loc);
+  if (c in IPA_CACHE) return IPA_CACHE[c];
+  if (!SB.functions) return null;
+  const { data, error } = await SB.functions.invoke('ipa', { body: { codice: c } });
+  if (error) throw error;
+  const u = data && data.uffici && data.uffici[0] ? Object.assign({ fonte: 'ipa' }, data.uffici[0]) : null;
+  IPA_CACHE[c] = u;
+  if (u) salvaEnteIpa(u);
+  return u;
+}
+/* L'ufficio trovato nell'IPA entra nel registro dello studio. E' solo una
+   memoria: se non si riesce (permessi, rete) non cambia nulla per chi compila. */
+async function salvaEnteIpa(u) {
+  if ((S.enti || []).some(x => x.codice_univoco === u.codice_univoco)) return;
+  const riga = { codice_univoco: u.codice_univoco, denominazione: u.denominazione, ufficio: u.ufficio || null,
+    cf: u.cf || null, piva: u.piva || null, indirizzo: u.indirizzo || null, cap: u.cap || null,
+    comune: u.comune || null, provincia: u.provincia || null, pec: u.pec || null,
+    created_by: S.me ? S.me.id : null };
+  try {
+    const { data, error } = await SB.from('enti_pa').insert(riga).select().single();
+    if (!error && data) (S.enti = S.enti || []).push(data);
+  } catch (e) { /* memoria facoltativa */ }
+}
+const stessoValore = (a, b) => String(a || '').trim().toLowerCase().replace(/\s+/g, ' ')
+                            === String(b || '').trim().toLowerCase().replace(/\s+/g, ' ');
+/* Riempie i vuoti, restituisce i campi scritti che l'IPA dice diversi */
+function compilaDaEnte(u, dove, tutto) {
+  const diversi = [];
+  Object.entries(CAMPI_ENTE[dove]).forEach(([k, id]) => {
+    const campo = el(id), v = u[k];
+    if (!campo || !v) return;
+    if (tutto || !campo.value.trim()) campo.value = v;
+    else if (!stessoValore(campo.value, v)) diversi.push(k);
+  });
+  return diversi;
+}
+function boxEnte(u, diversi, idBottone) {
+  return '<div class="ibox mb16" style="font-size:12.5px">✓ <b>' + esc(u.denominazione) + '</b>'
+    + (u.ufficio ? ' — ' + esc(u.ufficio) : '') + (u.comune ? ' (' + esc(u.comune) + ')' : '')
+    + (u.fonte === 'ipa' ? ' — dati dall’<b>Indice della PA</b>' : ' — dati dal registro degli enti')
+    + (diversi.length
+        ? '<div style="margin-top:6px">Diversi da quelli già scritti: <b>' + diversi.map(k => NOMI_CAMPI_ENTE[k]).join(', ')
+          + '</b>. <button class="btn btn-xs btn-p" type="button" id="' + idBottone + '">Usa i dati dell’ente</button></div>'
+        : '') + '</div>';
+}
+const boxEnteNonTrovato = c => '<div class="wbox mb16" style="font-size:12.5px">Il codice <b>' + esc(c)
+  + '</b> non risulta fra gli uffici di fatturazione dell’Indice della PA: controllalo su '
+  + '<a href="https://indicepa.gov.it" target="_blank" rel="noopener">indicepa.gov.it</a>.</div>';
+const boxEnteErrore = () => '<div class="wbox mb16" style="font-size:12.5px">Indice della PA non raggiungibile in questo momento: '
+  + 'compila i dati a mano o riprova più tardi.</div>';
+
+/* Cerca il codice e scrive l'esito nel riquadro; dove = 'w' (commessa) o 'cl' (cliente) */
+async function cercaEnte(cod, dove, box, ancoraValido) {
   const c = String(cod || '').toUpperCase();
-  const e = (S.enti || []).find(x => x.codice_univoco === c);
-  if (!e) return false;
-  const set = (id, v) => { if (el(id) && v) el(id).value = v; };
-  set('w-cli',   e.denominazione);
-  set('w-ccf',   e.cf);
-  set('w-cpiva', e.piva);
-  set('w-cind',  e.indirizzo);
-  set('w-ccap',  e.cap);
-  set('w-ccom',  e.comune);
-  set('w-cprov', e.provincia);
-  set('w-cpec',  e.pec);
-  if (el('w-split')) el('w-split').value = e.split_payment === false ? '0' : '1';
-  return true;
+  if (!el(box)) return null;
+  el(box).innerHTML = '<div class="hint" style="margin:0 0 10px">Cerco ' + esc(c) + ' nell’Indice della PA…</div>';
+  let u = null;
+  try { u = await ufficioDaCodice(c); }
+  catch (e) { if (ancoraValido() && el(box)) el(box).innerHTML = boxEnteErrore(); return null; }
+  if (!ancoraValido() || !el(box)) return null;
+  if (!u) { el(box).innerHTML = boxEnteNonTrovato(c); return null; }
+  IPA_ULTIMO[dove] = u;
+  const diversi = compilaDaEnte(u, dove, false);
+  el(box).innerHTML = boxEnte(u, diversi, dove + '-ipa-usa');
+  return u;
 }
 
 /* Dopo il salvataggio di una commessa pubblica, l'ufficio entra nel registro:
@@ -13698,6 +13772,20 @@ document.addEventListener('DOMContentLoaded', () => {
   el('va-save').onclick = salvaVar;
   el('va-del').onclick  = () => delVar(el('va-id').value);
   el('cl-save').onclick = saveCliente;
+  /* Codice ufficio di un ente pubblico (6 caratteri): i dati dall'Indice PA */
+  el('cl-sdi').addEventListener('change', () => {
+    const c = el('cl-sdi').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (c.length !== 6) { el('cl-ipa').innerHTML = ''; return; }
+    el('cl-sdi').value = c;
+    el('cl-tipo').value = 'societa';
+    cercaEnte(c, 'cl', 'cl-ipa', () => el('cl-sdi').value === c);
+  });
+  el('cl-ipa').addEventListener('click', e => {
+    if (e.target.id !== 'cl-ipa-usa' || !IPA_ULTIMO.cl) return;
+    compilaDaEnte(IPA_ULTIMO.cl, 'cl', true);
+    el('cl-ipa').innerHTML = boxEnte(IPA_ULTIMO.cl, [], '');
+    toast('Dati dell’ente compilati', 'success');
+  });
   el('cl-stampa').onclick = () => { const c = clienteDalModulo();
     if (!c.denominazione) return toast('Scrivi prima la denominazione.', 'error');
     apriStampa(schedaCliente(c), nomeFilePdf('Scheda-cliente', c.denominazione)); };
@@ -13753,10 +13841,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.id !== 'w-uff') return;
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     if (el('w-uff-h')) el('w-uff-h').innerHTML = enteHint(e.target.value);
-    if (e.target.value.length === 6 && applicaEnte(e.target.value))
-      toast('Dati del committente ricompilati dal registro uffici');
+    if (e.target.value.length !== 6) return;
+    const c = e.target.value;
+    if (el('w-uff-h')) el('w-uff-h').innerHTML = '';
+    cercaEnte(c, 'w', 'w-uff-h', () => el('w-uff') && el('w-uff').value === c).then(u => {
+      if (u && u.split_payment === false && el('w-split')) el('w-split').value = '0';
+    });
+  });
+  /* Un codice di 6 caratteri nel campo SDI e' quello di un ufficio pubblico:
+     si segna l'ente pubblico, il codice va al suo posto e si cerca l'ente. */
+  el('mp-body').addEventListener('change', e => {
+    if (e.target.id !== 'w-csdi') return;
+    const c = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (c.length !== 6) return;
+    e.target.value = '';
+    if (el('w-pa') && !el('w-pa').checked) {
+      el('w-pa').checked = true;
+      el('w-pa').dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (el('w-uff')) {
+      el('w-uff').value = c;
+      el('w-uff').dispatchEvent(new Event('input', { bubbles: true }));
+      el('w-uff').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    toast('Codice di 6 caratteri: è un ufficio pubblico. Spostato in «Codice Univoco Ufficio»', 'info');
   });
   el('mp-body').addEventListener('click', e => {
+    if (e.target.id === 'w-ipa-usa' && IPA_ULTIMO.w) {
+      compilaDaEnte(IPA_ULTIMO.w, 'w', true);
+      el('w-uff-h').innerHTML = boxEnte(IPA_ULTIMO.w, [], '');
+      return toast('Dati dell’ente compilati', 'success');
+    }
     if (e.target.id === 'w-pa-si' && el('w-pa')) {
       el('w-pa').checked = true;
       el('w-pa').dispatchEvent(new Event('change', { bubbles: true }));
