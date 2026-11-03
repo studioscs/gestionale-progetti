@@ -1251,6 +1251,23 @@ fatture: le proforma stanno sopra), le **richieste dei responsabili**, le
 tre solo per gli scaglioni senza proforma né fattura). In fondo il controllo
 contratto/fatturazione e le parcelle degli esterni.
 
+### Dalla fatturazione alla commessa e all'anagrafica
+
+Fatturando ci si accorge che manca il CAP, la P.IVA o il codice SDI. Per
+correggerlo senza cercare la commessa:
+
+- nelle tabelle di Fatturazione, accanto al nome della commessa, il pulsante
+  **📁** apre la commessa (scheda Fatturazione); se compare **📁!** al
+  committente mancano dati (passandoci sopra si vede quanti);
+- nella scheda dello scaglione e nella revisione Proforma/XML, in basso, ci
+  sono **📁 Commessa** e **✏️ Anagrafica**. Nello scaglione, se mancano dati,
+  un riquadro in alto li elenca con **Completa l'anagrafica**.
+
+*Anagrafica* apre la scheda del cliente in **Clienti** (la correzione passa da
+sola a tutte le sue commesse e fatture); se la commessa non è collegata a un
+cliente dell'anagrafica, apre **Modifica commessa**. Dopo aver salvato si
+riapre lo scaglione o la proforma: i dati sono quelli corretti.
+
 ### Cercare una fattura o una proforma
 
 La sezione del menu si chiama ora **Fatturazione** (prima *Da fatturare*). In

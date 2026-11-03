@@ -763,6 +763,8 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="left row">
         <button class="btn" id="rev-reset">Ripristina i dati della commessa</button>
         <button class="btn" id="rev-ant">&#128065; Anteprima XML</button>
+        <button class="btn" id="rev-goproj" type="button" title="Apri la commessa di questa fattura">&#128193; Commessa</button>
+        <button class="btn" id="rev-anag" type="button" title="Correggi i dati del cliente: valgono per tutte le fatture">&#9999;&#65039; Anagrafica</button>
       </span>
       <button class="btn" data-close="m-rev">Annulla</button>
       <button class="btn" id="rev-pdf" title="PDF da mandare al committente prima della fattura">&#128196; Proforma PDF</button>
@@ -1090,6 +1092,7 @@ tbody tr:hover td { background:#f0f4f9; }
   <div class="modal">
     <div class="mh"><h3 id="mfa-t">Scaglione di fatturazione</h3><button class="mx" data-close="m-fatt">&#10005;</button></div>
     <div class="mb">
+      <div id="fa-anagr"></div>
       <div class="fg"><label class="fl">Descrizione *</label><input class="fc" id="fa-desc" placeholder="Es. Acconto 30% alla sottoscrizione dell'incarico"></div>
       <div class="fg2">
         <div class="fg"><label class="fl">Tipologia ISA *
@@ -1165,6 +1168,8 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="left row">
         <button class="btn btn-d" id="fa-del2" style="display:none">Elimina</button>
         <button class="btn" id="fa-xml" title="Apre la revisione: da li' proforma PDF o fattura XML">&#128196; Proforma / XML</button>
+        <button class="btn" id="fa-goproj" type="button" title="Apri la commessa di questo scaglione">&#128193; Commessa</button>
+        <button class="btn" id="fa-anag" type="button" title="Correggi i dati del cliente (indirizzo, CAP, P.IVA, SDI, PEC...)">&#9999;&#65039; Anagrafica</button>
       </span>
       <button class="btn" data-close="m-fatt">Chiudi</button>
       <button class="btn btn-p" id="fa-save2">Salva</button>
@@ -1556,7 +1561,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.10';
+const VERSIONE = '2026.11.03.11';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7689,6 +7694,16 @@ function proformeEmesse(tutte) {
     .sort((a, b) => String(b.proforma_data || '').localeCompare(String(a.proforma_data || ''))
                  || numProforma(b.proforma_numero) - numProforma(a.proforma_numero));
 }
+/* Il pulsante 📁 accanto al nome della commessa, nelle tabelle della
+   fatturazione: il clic sulla riga apre lo scaglione, quello sul pulsante la
+   commessa (dove si correggono anche i dati del committente). */
+function bottoneCommessa(pid) {
+  if (!pid) return '';
+  const m = datiMancantiCommessa(pid).length;
+  return ' <button class="btn btn-xs" data-projfatt="' + pid + '" title="Vai alla commessa'
+    + (m ? ' — al committente mancano ' + m + (m === 1 ? ' dato' : ' dati') : '') + '">&#128193;'
+    + (m ? '<span style="color:var(--ora);font-weight:700">!</span>' : '') + '</button>';
+}
 function riquadroProforme() {
   const aperte = proformeEmesse(false), tutte = proformeEmesse(true);
   if (!tutte.length) return '';
@@ -7708,7 +7723,7 @@ function riquadroProforme() {
           return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
             + '<td><b>' + esc(f.proforma_numero) + '</b></td>'
             + '<td style="font-size:12px">' + fdate(f.proforma_data || String(f.proforma_at || '').slice(0, 10)) + '</td>'
-            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(intestatarioDi(f))
+            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b>' + bottoneCommessa(f.project_id) + '<div style="color:var(--mut)">' + esc(intestatarioDi(f))
               + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
             + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
             + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
@@ -8084,7 +8099,7 @@ function rFatturare() {
     const c = contiScaglione(f);
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
-      + '<td style="font-size:12px"><b>' + esc(pn(f.project_id)) + '</b>'
+      + '<td style="font-size:12px"><b>' + esc(pn(f.project_id)) + '</b>' + bottoneCommessa(f.project_id)
         + '<div style="color:var(--mut)">' + esc((byId(S.projects, f.project_id) || {}).client || '') + '</div></td>'
       + '<td>' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
@@ -8212,7 +8227,7 @@ function risultatiCercaFatt() {
             + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
           + '<td>' + (f.proforma_numero ? esc(f.proforma_numero) : '<span style="color:var(--mut)">—</span>')
             + (f.proforma_data ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.proforma_data) + '</div>' : '') + '</td>'
-          + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(intestatarioDi(f))
+          + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b>' + bottoneCommessa(f.project_id) + '<div style="color:var(--mut)">' + esc(intestatarioDi(f))
               + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
           + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
           + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
@@ -8729,9 +8744,55 @@ function openFatt(id, presetPid) {
                                             art15: !!r.art15, art15Mano: true }));
   disegnaRigheFatt();
   aggiornaIncasso();
+  el('fa-goproj').style.display = pid ? 'inline-flex' : 'none';
+  el('fa-anag').style.display   = pid && canW() ? 'inline-flex' : 'none';
+  el('fa-anagr').innerHTML      = avvisoAnagrafica(pid, 'fa-anagr-fix');
   openM('m-fatt');
 }
 let FATT_PID = null;
+
+/* DALLA FATTURAZIONE ALLA COMMESSA E ALL'ANAGRAFICA
+   Fatturando ci si accorge che manca il CAP o il codice SDI: si va a
+   correggerlo con un clic, senza cercare la commessa o il cliente. Se la
+   commessa e' collegata a un cliente dell'anagrafica si apre la sua scheda
+   (la correzione arriva da sola a tutte le sue commesse e fatture); se no
+   la modifica della commessa, dove i dati del committente stanno scritti. */
+function clienteDellaCommessa(pid) {
+  const p = byId(S.projects, pid);
+  return p && p.cliente_id ? byId(S.clienti, p.cliente_id) : null;
+}
+function datiMancantiCommessa(pid) {
+  const p = byId(S.projects, pid); if (!p) return [];
+  const c = clienteDellaCommessa(pid);
+  if (c) return datiMancantiCliente(c);
+  const v = k => String(p[k] || '').trim(), m = [];
+  if (!v('cliente_cf') && !v('cliente_piva')) m.push('codice fiscale o partita IVA');
+  if (!v('cliente_indirizzo')) m.push('indirizzo');
+  if (!v('cliente_cap')) m.push('CAP');
+  if (!v('cliente_comune')) m.push('comune');
+  if (!v('cliente_sdi') && !v('cliente_pec')) m.push('codice SDI o PEC');
+  return m;
+}
+function avvisoAnagrafica(pid, idBottone) {
+  const m = pid ? datiMancantiCommessa(pid) : [];
+  if (!m.length) return '';
+  return '<div class="wbox mb16 spread" style="font-size:12.5px;gap:8px;flex-wrap:wrap"><span>Al committente mancano: <b>'
+    + esc(m.join(', ')) + '</b>.</span>'
+    + (canW() ? '<button class="btn btn-sm btn-p" type="button" id="' + idBottone + '">&#9999;&#65039; Completa l’anagrafica</button>' : '')
+    + '</div>';
+}
+function vaiAllaCommessa(pid, modale) {
+  if (!pid) return;
+  closeM(modale);
+  goProject(pid, 'fatture');
+}
+function apriAnagrafica(pid, modale) {
+  if (!pid) return;
+  closeM(modale);
+  const c = clienteDellaCommessa(pid);
+  if (c) return openCliente(c.id);
+  openEditProj(pid);
+}
 
 /* L'INCASSO: DATA E IMPORTO DA SOLI, IL MOTIVO SE CAMBIA
    Segnando «incassata» si mettono la data di oggi e l'importo da incassare
@@ -9000,10 +9061,13 @@ function openRevisione(id) {
     return;
   }
   REV = datiFattura(f);
+  REV_PID = f.project_id;
   numeriProposti(REV);
   disegnaRevisione();
+  el('rev-anag').style.display = canW() ? 'inline-flex' : 'none';
   openM('m-rev');
 }
+let REV_PID = null;
 
 /* IL NUMERO SUCCESSIVO, SEMPRE PROPOSTO E SEMPRE MODIFICABILE
    Fattura e proforma vuote ricevono il numero dopo l'ultimo usato nell'anno
@@ -13772,6 +13836,11 @@ document.addEventListener('DOMContentLoaded', () => {
   el('fa-incimp').addEventListener('input', () => aggiornaIncasso());
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
   el('fa-xml').onclick   = vaiAllaFattura;
+  el('fa-goproj').onclick = () => vaiAllaCommessa(FATT_PID, 'm-fatt');
+  el('fa-anag').onclick   = () => apriAnagrafica(FATT_PID, 'm-fatt');
+  el('fa-anagr').onclick  = e => { if (e.target.closest('#fa-anagr-fix')) apriAnagrafica(FATT_PID, 'm-fatt'); };
+  el('rev-goproj').onclick = () => vaiAllaCommessa(REV_PID, 'm-rev');
+  el('rev-anag').onclick   = () => apriAnagrafica(REV_PID, 'm-rev');
 
   /* Revisione della fattura */
   el('rev-go').onclick    = generaDaRevisione;

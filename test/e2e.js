@@ -4381,6 +4381,27 @@ function launchOpts(){
     await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
   });
 
+  await t('dallo scaglione e dalla revisione si va alla commessa e all anagrafica',async()=>{
+    const g=await p.evaluate(async()=>{ const pr=S.projects[0], pid=pr.id;
+      const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Vai alla commessa',imponibile:300,
+        stato:'pronta',ordine:95,isa_tipo:'C05',anno_competenza:2026}).select().single();
+      await loadAll(true);
+      const r={};
+      openFatt(data.id); r.bottoni=el('fa-goproj').offsetParent!==null && el('fa-anag').offsetParent!==null;
+      el('fa-goproj').click(); r.pagina=S.page; r.proj=S.projId===pid; r.tab=S.tab; r.chiusa=!el('m-fatt').classList.contains('show');
+      openRevisione(data.id); el('rev-anag').click();
+      r.anag=pr.cliente_id ? el('m-cli').classList.contains('show') : el('m-proj').classList.contains('show');
+      r.revChiusa=!el('m-rev').classList.contains('show');
+      closeM('m-cli'); closeM('m-proj');
+      S.page='fatturare'; render();
+      r.riga=!!document.querySelector('tr[data-fatt="'+data.id+'"] [data-projfatt="'+pid+'"]');
+      await SB.from('commessa_fatture').delete().eq('id',data.id); await loadAll(true); render(); return r; });
+    must(g.bottoni,'pulsanti Commessa/Anagrafica non visibili nello scaglione');
+    must(g.pagina==='project'&&g.proj&&g.tab==='fatture'&&g.chiusa,'non porta alla commessa: '+JSON.stringify(g));
+    must(g.anag&&g.revChiusa,'non apre l anagrafica dalla revisione');
+    must(g.riga,'manca il pulsante 📁 sulla riga della fatturazione');
+  });
+
   await t('intestata alla moglie: la modifica resta rigenerando la stessa proforma',async()=>{
     const fid=await p.evaluate(async()=>{ const pid=S.projects[0].id;
       const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Acconto intestato ad altri',imponibile:900,
