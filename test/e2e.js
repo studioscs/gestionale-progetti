@@ -4376,6 +4376,28 @@ function launchOpts(){
     await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
   });
 
+  await t('intestata alla moglie: la modifica resta rigenerando la stessa proforma',async()=>{
+    const fid=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Acconto intestato ad altri',imponibile:900,
+        stato:'pronta',ordine:96,isa_tipo:'C05',anno_competenza:2026}).select().single();
+      await loadAll(true); openRevisione(data.id); return data.id; });
+    await p.waitForSelector('#m-rev.show',{timeout:4000});
+    const prima=await p.inputValue('[data-rev="cliente"]');
+    await p.fill('[data-rev="cliente"]','BIANCHI ANNA'); await p.fill('[data-rev="clienteCf"]','BNCNNA80A41H501X');
+    await p.waitForTimeout(200);
+    must(await p.isVisible('#rev-intest-reset'),'nessun avviso di intestatario diverso');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#rev-pdf')]);
+    must(dl,'la proforma non si scarica'); await p.waitForTimeout(600);
+    const sal=await p.evaluate(id=>__DB.commessa_fatture.find(x=>x.id===id).intestatario,fid);
+    must(sal&&sal.cliente==='BIANCHI ANNA'&&sal.clienteCf==='BNCNNA80A41H501X'&&Object.keys(sal).length===2,'salvato: '+JSON.stringify(sal));
+    await p.evaluate(id=>openRevisione(id),fid); await p.waitForSelector('#m-rev.show',{timeout:4000});
+    must(await p.inputValue('[data-rev="cliente"]')==='BIANCHI ANNA','riaprendo torna il committente');
+    must(await p.evaluate(()=>intestatarioDi(byId(S.fatture,REV.fattId)))==='BIANCHI ANNA','la lista debitori non riporta chi paga');
+    await p.click('#rev-intest-reset'); await p.waitForTimeout(200);
+    must(await p.inputValue('[data-rev="cliente"]')===prima,'«Torna al committente» non riporta il nome');
+    await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
+  });
+
   /* ---------------- SPESE ANTICIPATE FRA I SERVIZI: ART. 15 ---------------- */
   let A15=null;
   await t('diritti di segreteria e bolli fra i servizi diventano spese art. 15 da soli',async()=>{

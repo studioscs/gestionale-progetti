@@ -1550,7 +1550,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.7';
+const VERSIONE = '2026.11.03.8';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1765,7 +1765,8 @@ const MIGRAZIONI = {
   '035_solleciti':           ['sollecito_1','sollecito_2','messa_in_mora','avvocato','note_solleciti'],
   '038_contratto_da_preventivo': ['preventivo_id'],
   '040_spese_art15_nei_servizi': ['art15'],
-  '042_costi_ricorrenti':    ['ricorrente','scadenza','origine_id']
+  '042_costi_ricorrenti':    ['ricorrente','scadenza','origine_id'],
+  '043_intestatario_fattura': ['intestatario']
   /* 041_cliente_propaga: solo un trigger, nessuna colonna da controllare */
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
@@ -4918,7 +4919,30 @@ function anteprimaCausale(d) {
    di produrre il file. Modificare la fattura e generarla passano dalla stessa
    struttura, quindi non possono divergere.
    -------------------------------------------------------------------------- */
+/* INTESTATARIO DIVERSO DAL COMMITTENTE (migrazione 043)
+   Se paga la moglie, la sorella, la societa' del committente, nella revisione
+   si correggono nome, codice fiscale, indirizzo. Sullo scaglione si salvano
+   SOLO i campi che differiscono dal committente della commessa, e solo quando
+   differiscono: rigenerando la stessa proforma o fattura tornano quelli, senza
+   toccare la commessa ne' l'anagrafica. */
+const CAMPI_INTESTATARIO = ['cliente', 'clientePiva', 'clienteCf', 'clienteInd', 'clienteCap',
+                            'clienteCom', 'clienteProv', 'destinatario', 'pec'];
 function datiFattura(f) {
+  const d = datiFatturaCommessa(f);
+  const x = f && f.intestatario && typeof f.intestatario === 'object' ? f.intestatario : null;
+  if (x) CAMPI_INTESTATARIO.forEach(k => { if (x[k] !== undefined) d[k] = x[k]; });
+  return d;
+}
+/* i campi del documento che non sono quelli del committente: null se nessuno */
+function intestatarioDiverso(d, f) {
+  const base = datiFatturaCommessa(f || {}), out = {};
+  CAMPI_INTESTATARIO.forEach(k => {
+    if (String(d[k] == null ? '' : d[k]).trim() !== String(base[k] == null ? '' : base[k]).trim())
+      out[k] = String(d[k] == null ? '' : d[k]).trim();
+  });
+  return Object.keys(out).length ? out : null;
+}
+function datiFatturaCommessa(f) {
   const p  = byId(S.projects, f.project_id) || {};
   const pa = !!p.ente_pubblico;
   const pg = STUDIO.pagamento || {};
@@ -7676,7 +7700,8 @@ function riquadroProforme() {
           return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
             + '<td><b>' + esc(f.proforma_numero) + '</b></td>'
             + '<td style="font-size:12px">' + fdate(f.proforma_data || String(f.proforma_at || '').slice(0, 10)) + '</td>'
-            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(p.client || '') + '</div></td>'
+            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(intestatarioDi(f))
+              + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
             + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
             + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
             + '<td>' + bdg(f.stato, ST_FATT) + (f.numero_fattura && !fattAperta(f)
@@ -7701,6 +7726,7 @@ function riquadroProforme() {
    --------------------------------------------------------------------------- */
 const annoDiData = d => d ? String(d).slice(0, 4) : '';
 const intestatarioDi = f => { const p = byId(S.projects, f.project_id) || {};
+  if (f.intestatario && f.intestatario.cliente) return f.intestatario.cliente;
   return p.client || ((p.cliente_id && byId(S.clienti, p.cliente_id)) || {}).denominazione || pn(f.project_id); };
 /* Quanto il committente deve versare per questo documento: imponibile, cassa,
    IVA (non in scissione dei pagamenti), spese anticipate, meno la ritenuta.
@@ -8085,6 +8111,7 @@ function trovaFatture(q) {
     const p = byId(S.projects, f.project_id) || {};
     const c = contiScaglione(f);
     const testo = normCerca([f.numero_fattura, f.proforma_numero, f.descrizione, p.name, p.codice, p.client,
+      f.intestatario && f.intestatario.cliente,
       f.data_fattura, f.proforma_data, fdate(f.data_fattura), fdate(f.proforma_data),
       c.imponibile.toFixed(2), c.totale.toFixed(2), feuro(c.imponibile), feuro(c.totale),
       righeFattura(f.id).map(r => r.descrizione).join(' ')].join(' | '));
@@ -8106,7 +8133,8 @@ function risultatiCercaFatt() {
             + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
           + '<td>' + (f.proforma_numero ? esc(f.proforma_numero) : '<span style="color:var(--mut)">—</span>')
             + (f.proforma_data ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.proforma_data) + '</div>' : '') + '</td>'
-          + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(p.client || '') + '</div></td>'
+          + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b><div style="color:var(--mut)">' + esc(intestatarioDi(f))
+              + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
           + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
           + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
           + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
@@ -8945,7 +8973,8 @@ async function generaProforma() {
   if (!ok) return;
   const { error } = await SB.from('commessa_fatture').update({
     proforma_numero: d.proformaNumero, proforma_data: d.proformaData || todayISO(),
-    proforma_at: new Date().toISOString() }).eq('id', d.fattId);
+    proforma_at: new Date().toISOString(),
+    intestatario: intestatarioDiverso(d, byId(S.fatture, d.fattId)) }).eq('id', d.fattId);
   if (error) return sbErr(error, 'proforma');
   closeM('m-rev'); await loadAll(true); render();
   toast('Proforma ' + d.proformaNumero + ' scaricata: mandala al committente. '
@@ -9173,6 +9202,12 @@ function aggiornaTotali() {
   const dF = numeroDoppio('numero_fattura', 'data_fattura', d.numero, annoDi(d.data), d.fattId);
   const dP = numeroDoppio('proforma_numero', 'proforma_data', d.proformaNumero, annoDi(d.proformaData), d.fattId);
   const desc = f => '«' + (f.descrizione || '') + '» di ' + pn(f.project_id);
+  const fRev = byId(S.fatture, d.fattId), diverso = fRev ? intestatarioDiverso(d, fRev) : null;
+  if (diverso)
+    el('rev-err').innerHTML += '<div class="ibox mb16" style="font-size:12.5px">&#128100; Intestato a <b>'
+      + esc(d.cliente || '') + '</b>, non al committente della commessa (<b>' + esc(datiFatturaCommessa(fRev).cliente || '') + '</b>). '
+      + 'Generando proforma o fattura <b>la modifica resta su questo documento</b>; la commessa e l’anagrafica non cambiano. '
+      + '<button class="btn btn-xs" type="button" id="rev-intest-reset" style="margin-left:4px">Torna al committente</button></div>';
   if (!d.pa && !d.destinatario && !d.pec && !d.clientePiva)
     el('rev-err').innerHTML += '<div class="ibox mb16" style="font-size:12.5px">Privato senza codice SDI né PEC: '
       + 'la fattura parte con codice destinatario <b>0000000</b> e lo SdI la mette nell’area riservata del cliente '
@@ -9270,7 +9305,8 @@ async function generaDaRevisione() {
     if (error) sbErr(error, 'spese tolte dalla fattura');
   }
 
-  const patch = { xml_generato_at: new Date().toISOString() };
+  const patch = { xml_generato_at: new Date().toISOString(),
+                  intestatario: intestatarioDiverso(REV, byId(S.fatture, REV.fattId)) };
   const f = byId(S.fatture, REV.fattId);
   if (f && REV.numero && REV.numero !== f.numero_fattura) patch.numero_fattura = REV.numero;
   if (f && REV.data   && REV.data   !== f.data_fattura)   patch.data_fattura   = REV.data;
@@ -13665,6 +13701,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (/^[A-Z0-9]{7}$/.test(String(REV.destinatario || ''))) REV.destinatario = '';   /* il codice SDI dei privati non vale per la PA */
     disegnaRevisione();
     toast('Ente pubblico con scissione dei pagamenti: completa il codice univoco ufficio e il CIG', 'success');
+  });
+  /* intestatario: si torna ai dati del committente della commessa */
+  el('m-rev').addEventListener('click', e => {
+    if (e.target.id !== 'rev-intest-reset' || !REV) return;
+    const base = datiFatturaCommessa(byId(S.fatture, REV.fattId) || {});
+    CAMPI_INTESTATARIO.forEach(k => { REV[k] = base[k]; });
+    disegnaRevisione();
+    toast('Intestatario riportato al committente della commessa', 'success');
   });
   el('rev-body').addEventListener('input',  revIn);
   el('rev-body').addEventListener('change', revIn);

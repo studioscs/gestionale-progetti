@@ -13,7 +13,7 @@ const ctx={btoa,atob,unescape,encodeURIComponent,console,setTimeout,clearInterva
  window:{location:{href:''},innerWidth:1200,innerHeight:800},localStorage:{getItem:()=>null,setItem:noop},
  document:{getElementById:elStub,querySelector:elStub,querySelectorAll:()=>[],addEventListener:noop,createElement:elStub,body:elStub(),hidden:false}};
 ctx.globalThis=ctx; vm.createContext(ctx);
-vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,dellaSerie,serieFattura,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo,contiScaglione,totAnticipiRighe,eAnticipazione,daIncassareDi,DICITURA_SPESE});',ctx);
+vm.runInContext(blocks.slice(0,5).join('\n;\n')+'\n;Object.assign(globalThis,{STUDIO,S,xmlFattura,xmlDaDati,datiFattura,calcolaDa,validaFattura,calcolaFattura,impFattura,ibanDi,ibanValido,ibanLeggibile,latin,ascii,causaleSpezzata,spezza,anteprimaCausale,premessaDa,speseDi,speseAperte,speseDaMettere,totSpese,etichettaSpesa,righeFattura,totRighe,byId,pd,iso,addD,esc,feuro,r2,contiDocumento,ripartisci,pdfDefinizione,docProforma,speseNelFile,MODELLI_BASE,compilaTesto,docPreventivo,modelliPreventivo,euroPdf,lettera,totalePreventivo,numeroPreventivo,prossimoPreventivo,numeroSuccessivo,contatoreDi,prossimoNumero,prossimaProforma,dellaSerie,serieFattura,numeroDoppio,emlBozza,TESTO_MAIL_PREVENTIVO,oggettoMailPreventivo,contiScaglione,totAnticipiRighe,eAnticipazione,daIncassareDi,DICITURA_SPESE,intestatarioDiverso,datiFatturaCommessa});',ctx);
 
 let fail=0; const t=(n,c,g)=>{ if(!c){fail++;console.log('  ✗',n,'→',JSON.stringify(g))} else console.log('  ✓',n); };
 
@@ -914,6 +914,19 @@ console.log('— SPESE ANTICIPATE ART. 15 FRA I SERVIZI: XML E PROFORMA —');
   const dI=Object.assign({},dP,{clientePiva:'02345670541'});
   const rI=ctx.xmlDaDati(dI);
   t('D) con partita IVA il codice o la PEC restano obbligatori',!!rI.errori&&rI.errori.some(e=>/codice destinatario SDI oppure la PEC/.test(e)),rI.errori);
+  // E: intestatario diverso dal committente, salvato solo come differenza
+  const dE=ctx.datiFattura(FX); dE.cliente='ROSSI ANNA'; dE.clienteCf='RSSNNA82B41H501Z';
+  const diff=ctx.intestatarioDiverso(dE,FX);
+  t('E) si salvano solo i campi cambiati',JSON.stringify(diff)==='{"cliente":"ROSSI ANNA","clienteCf":"RSSNNA82B41H501Z"}',diff);
+  t('E) intestato al committente: niente da salvare',ctx.intestatarioDiverso(ctx.datiFattura(FX),FX)===null,null);
+  const FXi=Object.assign({},FX,{intestatario:diff}); ctx.S.fatture=ctx.S.fatture.map(f=>f.id==='fX'?FXi:f);
+  const dR2=ctx.datiFattura(FXi);
+  t('E) rigenerando, il documento resta intestato a chi paga',dR2.cliente==='ROSSI ANNA'&&dR2.clienteCf==='RSSNNA82B41H501Z'&&dR2.clienteInd==='Via Roma 1',[dR2.cliente,dR2.clienteCf,dR2.clienteInd]);
+  t('E) la commessa resta del committente',ctx.datiFatturaCommessa(FXi).cliente==='ROSSI MARIO',ctx.datiFatturaCommessa(FXi).cliente);
+  dR2.numero='74/FE'; dR2.data='2026-11-03'; dR2.progressivo=74;
+  const rE=ctx.xmlDaDati(dR2);
+  t('E) nell XML c e chi paga',!rE.errori&&/ROSSI|ANNA/.test(rE.xml)&&/RSSNNA82B41H501Z/.test(rE.xml)&&!/RSSMRA80A01H501U/.test(rE.xml),rE.errori);
+  if(!rE.errori){ const v=xsdOk('fatt-intest.xml',rE.xml); t('E) VALIDO secondo lo schema',v.ok,v.out); }
   ctx.S.projects=SALVA2.projects; ctx.S.fatture=SALVA2.fatture; ctx.S.fattRighe=SALVA2.righe; ctx.S.spese=SALVA2.spese;
 }
 

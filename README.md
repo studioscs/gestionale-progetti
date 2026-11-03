@@ -60,6 +60,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 39. [`sql/040_spese_art15_nei_servizi.sql`](sql/040_spese_art15_nei_servizi.sql) — spese anticipate scritte fra i servizi: esenti art. 15, fuori dall'imponibile
 40. [`sql/041_cliente_propaga.sql`](sql/041_cliente_propaga.sql) — correggere il cliente in anagrafica corregge commesse (anche il nome) e preventivi
 41. [`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql) — costi che si ripetono ogni anno, con la loro scadenza
+42. [`sql/043_intestatario_fattura.sql`](sql/043_intestatario_fattura.sql) — fattura o proforma intestata a chi paga, se non è il committente
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1168,6 +1169,21 @@ la proforma non è stata fatta non si scrive niente (il numero solo *proposto*
 nella finestra di revisione non conta). Le descrizioni delle righe restano
 com'erano. La finestra di revisione mostra il riferimento sotto le note prima
 di generare.
+
+### Intestata a chi paga, se non è il committente
+
+Se paga la moglie, la sorella o la società del committente, nella finestra di
+revisione si correggono nome, codice fiscale, indirizzo (o codice SDI, PEC):
+un riquadro avvisa che il documento è intestato a una persona diversa dal
+committente. Generando la proforma o la fattura **la modifica resta su quello
+scaglione**: rigenerando lo stesso documento si ritrova, e chi paga compare
+anche nella lista debitori e nella ricerca. La commessa e l'anagrafica del
+cliente non cambiano; il pulsante **Torna al committente** annulla.
+
+Per non appesantire il database si salvano **solo i campi che differiscono**
+dal committente, in una colonna che resta vuota quando la fattura è intestata
+a lui, cioè quasi sempre (migrazione
+[`sql/043_intestatario_fattura.sql`](sql/043_intestatario_fattura.sql)).
 
 ### L'elenco delle proforma emesse
 
