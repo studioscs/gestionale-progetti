@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.18';
+const VERSIONE = '2026.11.03.19';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7537,7 +7537,7 @@ function fatturePanel(pid) {
       + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + (f.data_prevista || !fattAperta(f) ? fdate(f.data_prevista)
-          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da indicare</span>') + '</td>'
+          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da inserire</span>') + '</td>'
       + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f)
         + (canW() && fattAperta(f)
             ? '<button class="btn btn-xs" data-chiedi="' + f.id + '" title="Dì all’amministrazione che si può fatturare">&#128227;</button> ' : '')
@@ -7850,11 +7850,13 @@ const annoDi4 = d => Number(String(d || '').slice(0, 4)) || null;
 const fineAnno = y => y + '-12-31';
 /* Uno scaglione aperto si fattura entro il 31/12 dell'anno y se la proforma
    e' gia' partita, o se la data prevista cade entro l'anno (anche passata:
-   e' in ritardo). «Pronta» senza data conta nell'anno; ma se la data
-   prevista c'e' decide lei: uno scaglione pronto con la data a giugno
-   dell'anno dopo si fattura l'anno dopo. */
-const siFatturaEntro = (f, y) => !!(f.proforma_numero
-  || (f.data_prevista ? f.data_prevista <= fineAnno(y) : f.stato === 'pronta'));
+   e' in ritardo). Decide la data, anche per i «pronti»: uno scaglione
+   pronto con la data a giugno dell'anno dopo si fattura l'anno dopo.
+   SENZA DATA PREVISTA non si indovina: lo scaglione aperto senza proforma
+   e senza data sta a parte, «data prevista da inserire», finche' qualcuno
+   non scrive quando maturera'. */
+const siFatturaEntro = (f, y) => !!(f.proforma_numero || (f.data_prevista && f.data_prevista <= fineAnno(y)));
+const senzaDataPrevista = f => fattAperta(f) && !f.proforma_numero && !f.data_prevista;
 const annoCompScaglione = f => Number(f.anno_competenza) || annoDi4(f.data_fattura) || annoDi4(f.data_prevista) || null;
 function numeriAnno(y) {
   y = Number(y) || today().getFullYear();
@@ -7866,14 +7868,16 @@ function numeriAnno(y) {
   const somma = (arr, fn) => r2(arr.reduce((a, f) => a + fn(f), 0));
   const comp = vive.filter(f => annoCompScaglione(f) === y);
   const entro = f => fattAperta(f) ? siFatturaEntro(f, y) : (annoDi4(f.data_fattura) || y) <= y;
-  const compEntro = comp.filter(entro), compDopo = comp.filter(f => !entro(f));
+  const compEntro = comp.filter(entro), compSenza = comp.filter(senzaDataPrevista),
+        compDopo = comp.filter(f => !entro(f) && !senzaDataPrevista(f));
   return { anno: y,
     fatturato: { n: fatturate.length, imponibile: somma(fatturate, impFattura), lordo: somma(fatturate, lordo) },
     incassato: { n: incassate.length, importo: somma(incassate, incasso),
                  senzaData: incassate.filter(f => !f.data_incasso).length },
-    compEntro, compDopo,
+    compEntro, compDopo, compSenza,
     totEntro: { imponibile: somma(compEntro, impFattura), lordo: somma(compEntro, lordo) },
-    totDopo:  { imponibile: somma(compDopo, impFattura), lordo: somma(compDopo, lordo) } };
+    totDopo:  { imponibile: somma(compDopo, impFattura), lordo: somma(compDopo, lordo) },
+    totSenza: { imponibile: somma(compSenza, impFattura), lordo: somma(compSenza, lordo) } };
 }
 /* IL FATTURATO PER ANNO: QUELLO DI QUEST'ANNO E QUELLO DEGLI ANNI A VENIRE
    Per anno della fattura (non di competenza):
@@ -7948,9 +7952,9 @@ function riquadroAnnoFiscale() {
   const incassate = n.compEntro.concat(n.compDopo).filter(f => f.stato === 'incassata');
   const emesse = n.compEntro.concat(n.compDopo).filter(f => f.stato === 'emessa');
   const dopo = n.compDopo.filter(fattAperta);
-  const senzaData = dopo.filter(f => !f.data_prevista).length;
+  const senza = n.compSenza;
   const prossimo = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id) && annoCompScaglione(f) === y + 1);
-  const tutto = incassate.concat(emesse, daFatt, dopo);
+  const tutto = incassate.concat(emesse, daFatt, dopo, senza);
   const totY = somma(tutto), giaFatt = r2(somma(incassate) + somma(emesse));
   const pc = v => totY ? v / totY * 100 : 0;
   const nn = a => a.length + (a.length === 1 ? ' scaglione' : ' scaglioni');
@@ -7963,7 +7967,8 @@ function riquadroAnnoFiscale() {
     entro:  { arr: daFatt,    tit: 'Di competenza ' + y + ' da fatturare nel ' + y },
     inc:    { arr: incassate, tit: 'Di competenza ' + y + ' fatturato e incassato' },
     em:     { arr: emesse,    tit: 'Di competenza ' + y + ' fatturato e non incassato' },
-    dopo:   { arr: dopo,      tit: 'Di competenza ' + y + ' da fatturare nel ' + (y + 1) },
+    dopo:   { arr: dopo,      tit: 'Di competenza ' + y + ' da fatturare nel ' + (y + 1) + ' o dopo' },
+    senza:  { arr: senza,     tit: 'Di competenza ' + y + ' senza data prevista: da inserire' },
     pross:  { arr: prossimo,  tit: 'Di competenza ' + (y + 1) }
   };
   const sel = gruppi[S.afFiltro] ? S.afFiltro : null;
@@ -7976,14 +7981,16 @@ function riquadroAnnoFiscale() {
       + '<button class="btn btn-xs" data-act="annofisc+" title="Anno dopo">&#9654;</button></span></div>'
     + '<div class="kgrid" style="margin-bottom:0">'
     + casella('tutto', kpi('Totale di competenza ' + y, feuro(totY),
-          'già fatturato ' + feuro(giaFatt) + ' + da fatturare ' + feuro(r2(somma(daFatt) + somma(dopo))) + ' · ' + nn(tutto),
+          'già fatturato ' + feuro(giaFatt) + ' + da fatturare ' + feuro(r2(somma(daFatt) + somma(dopo) + somma(senza))) + ' · ' + nn(tutto),
           tutto.length ? 100 : 0, 'var(--navy)'))
     + casella('entro', kpi('Di competenza ' + y + ' · da fatturare nel ' + y, feuro(somma(daFatt)),
           nn(daFatt) + ' · da fatturare e incassare', pc(somma(daFatt)), 'var(--ora)'))
     + casella('inc', kpi('Di competenza ' + y + ' · fatturato e incassato', feuro(somma(incassate)), nn(incassate), pc(somma(incassate)), 'var(--grn)'))
     + casella('em', kpi('Di competenza ' + y + ' · fatturato, non incassato', feuro(somma(emesse)), nn(emesse), pc(somma(emesse)), 'var(--blue)'))
-    + casella('dopo', kpi('Di competenza ' + y + ' · da fatturare nel ' + (y + 1), feuro(somma(dopo)),
-          nn(dopo) + (senzaData ? ' · ' + senzaData + ' senza data prevista' : ''), pc(somma(dopo)), 'var(--mut2)'))
+    + casella('dopo', kpi('Di competenza ' + y + ' · da fatturare nel ' + (y + 1) + ' o dopo', feuro(somma(dopo)),
+          nn(dopo) + ' · con la data prevista', pc(somma(dopo)), 'var(--mut2)'))
+    + casella('senza', kpi('Di competenza ' + y + ' · data prevista da inserire', feuro(somma(senza)),
+          nn(senza) + (senza.length ? ' · indica quando matureranno' : ''), pc(somma(senza)), senza.length ? 'var(--red)' : 'var(--grn)'))
     + casella('pross', kpi('Di competenza ' + (y + 1), feuro(somma(prossimo)), nn(prossimo) + ' · anno fiscale successivo',
           prossimo.length ? 100 : 0, 'var(--vio)'))
     + '</div>'
@@ -8011,7 +8018,8 @@ function elencoAnnoFiscale(titolo, arr) {
             + voci.map(f => '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
               + '<td style="padding-left:22px">' + esc(f.descrizione || '') + '</td>'
               + '<td style="font-size:12px">' + (annoCompScaglione(f) || '—') + '</td>'
-              + '<td style="font-size:12px">' + bdg(f.stato, ST_FATT) + ' <span style="color:var(--mut)">' + esc(quandoScaglione(f)) + '</span></td>'
+              + '<td style="font-size:12px">' + bdg(f.stato, ST_FATT) + ' <span style="' + (senzaDataPrevista(f)
+                  ? 'color:var(--red);font-weight:600' : 'color:var(--mut)') + '">' + esc(quandoScaglione(f)) + '</span></td>'
               + '<td style="text-align:right"><b>' + feuro(impFattura(f)) + '</b></td>'
               + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(contiScaglione(f)) + '</td></tr>').join(''); }).join('')
       + '</tbody></table></div>'
@@ -8025,7 +8033,7 @@ function quandoScaglione(f) {
   if (f.stato === 'emessa') return 'fattura ' + (f.numero_fattura || '') + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '');
   if (f.proforma_numero) return 'proforma ' + f.proforma_numero;
   if (f.data_prevista) return 'prevista ' + fdate(f.data_prevista);
-  return 'data prevista da indicare';
+  return 'data prevista da inserire';
 }
 function reportIncassi(saldo) {
   const d = datiReportIncassi();
@@ -8072,7 +8080,9 @@ function reportIncassi(saldo) {
         ['Incassato ' + y, feuro(na.incassato.importo) + '  (' + na.incassato.n + (na.incassato.n === 1 ? ' fattura' : ' fatture')
           + (na.incassato.senzaData ? '; per ' + na.incassato.senzaData + ' senza data d’incasso vale l’anno della fattura' : '') + ')'],
         ['Competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile) + ' imponibile · ' + feuro(na.totEntro.lordo) + ' lordo'],
-        ['Competenza ' + y + ' fatturata l’anno dopo', feuro(na.totDopo.imponibile) + ' imponibile · ' + feuro(na.totDopo.lordo) + ' lordo']]
+        ['Competenza ' + y + ' fatturata dal ' + (y + 1), feuro(na.totDopo.imponibile) + ' imponibile · ' + feuro(na.totDopo.lordo) + ' lordo'],
+        ['Competenza ' + y + ' senza data prevista (da inserire)', feuro(na.totSenza.imponibile) + ' imponibile · ' + feuro(na.totSenza.lordo)
+          + ' lordo  (' + na.compSenza.length + (na.compSenza.length === 1 ? ' scaglione)' : ' scaglioni)')]]
         .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
           + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
@@ -8091,15 +8101,20 @@ function reportIncassi(saldo) {
                                     feuro(fpa.senzaData.totale), feuro(fpa.senzaData.lordo)]] : []),
           vuoto: 'Niente di fatturato o da fatturare.' } },
       { titolo: 'Competenza ' + y + ' — emessa e incassata entro il 31/12/' + y
-          + ' (già fatturata, in proforma, pronta o prevista entro l’anno)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          + ' (già fatturata, in proforma o con la data prevista entro l’anno)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
           righe: ordina(na.compEntro).map(rigaComp),
           tot: na.compEntro.length ? [['Totale competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile), feuro(na.totEntro.lordo)]] : null,
           vuoto: 'Nessuno scaglione di competenza ' + y + '.' } },
       { titolo: 'Competenza ' + y + ' — si fatturerà e incasserà dal ' + (y + 1)
-          + ' (data prevista oltre il ' + y + ' o da indicare)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          + ' (data prevista oltre il ' + y + ')', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
           righe: ordina(na.compDopo).map(rigaComp),
           tot: na.compDopo.length ? [['Totale competenza ' + y + ' dal ' + (y + 1), feuro(na.totDopo.imponibile), feuro(na.totDopo.lordo)]] : null,
           vuoto: 'Niente di competenza ' + y + ' rimandato al ' + (y + 1) + '.' } },
+      { titolo: 'Competenza ' + y + ' — DATA PREVISTA DA INSERIRE (non si sa ancora in che anno si fatturerà)',
+          tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          righe: ordina(na.compSenza).map(rigaComp),
+          tot: na.compSenza.length ? [['Totale competenza ' + y + ' senza data', feuro(na.totSenza.imponibile), feuro(na.totSenza.lordo)]] : null,
+          vuoto: 'Tutti gli scaglioni di competenza ' + y + ' hanno la data prevista.' } },
       { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
           righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
           tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
@@ -8306,7 +8321,7 @@ function rFatturare() {
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + (f.data_prevista || !fattAperta(f) ? fdate(f.data_prevista)
-          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da indicare</span>') + '</td>'
+          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da inserire</span>') + '</td>'
       + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f)
         + (canW() && f.stato === 'emessa' ? '<button class="btn btn-xs btn-p" data-incassa="' + f.id + '" title="Segna incassata: oggi, per l’importo da incassare (modificabili)">&#10003; Incassata</button> ' : '')
         + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
@@ -8377,7 +8392,8 @@ function rFatturare() {
         const entro = mat.filter(f => f.data_prevista && f.data_prevista <= fineAnno(y));
         return tabella(entro, '⏳ Matureranno più avanti — entro il 31/12/' + y, null,
                  daControllare.filter(x => x.c.problema === 'saldo'))
-          + tabella(mat.filter(f => entro.indexOf(f) < 0), '📅 Matureranno più avanti — dal ' + (y + 1) + ' o senza data prevista', null); })()
+          + tabella(mat.filter(f => entro.indexOf(f) < 0 && f.data_prevista), '📅 Matureranno più avanti — dal ' + (y + 1), null)
+          + tabella(mat.filter(f => !f.data_prevista), '❓ Senza data prevista — da inserire', 'var(--red)'); })()
     + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + '</div>';

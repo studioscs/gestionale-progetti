@@ -897,9 +897,9 @@ parziale…), che resta scritto sullo scaglione (migrazione
 **La previsione si indica sullo scaglione**: nel campo *Data prevista* la data
 concordata con il cliente o, se si sa solo l'anno, un clic su *Entro fine
 2026* / *Nel 2027* / *Nel 2028* (mette il 31/12 di quell'anno). In
-*Fatturazione* quello che maturerà è diviso in **entro il 31/12** e **dal
-prossimo anno o senza data prevista**; dove la data manca la colonna dice *da
-indicare*.
+*Fatturazione* quello che maturerà è diviso in **entro il 31/12**, **dal
+prossimo anno** e **❓ senza data prevista — da inserire**; dove la data
+manca la colonna dice *da inserire*.
 
 La colonna *Solleciti* riporta i solleciti segnati nel gestionale (vedi
 sotto); nel riepilogo compaiono anche le posizioni **in mora con
@@ -1248,9 +1248,10 @@ Dall'alto: la ricerca e i numeri di sintesi, poi **📄 Proforma emesse in
 attesa di incasso**, **📤 Fatture emesse in attesa di incasso** (solo le
 fatture: le proforma stanno sopra), le **richieste dei responsabili**, poi
 quello che resta da fatturare diviso per anno: **⏳ entro il 31/12 dell'anno
-in corso** e **📅 dall'anno prossimo o senza data prevista** (solo scaglioni
-senza proforma né fattura). Non c'è più una sezione «Pronte da emettere»: gli
-scaglioni pronti stanno in queste due, secondo la loro data prevista, e lo
+in corso**, **📅 dall'anno prossimo** e **❓ senza data prevista — da
+inserire** (solo scaglioni senza proforma né fattura). Non c'è più una
+sezione «Pronte da emettere»: gli scaglioni pronti stanno in queste tre,
+secondo la loro data prevista, e lo
 stato **Pronta** nella riga dice che si possono già emettere (il numero in
 testa «Pronte da emettere» resta). In fondo il controllo
 contratto/fatturazione e le parcelle degli esterni.
@@ -1259,19 +1260,24 @@ contratto/fatturazione e le parcelle degli esterni.
 
 Sotto i numeri di sintesi c'è il riquadro **📅 Anno fiscale** (quello in
 corso; con ◀ ▶ si passa all'anno prima o dopo). Divide gli scaglioni per
-**anno di competenza** — lo stesso dell'ISA — in cinque caselle, con
+**anno di competenza** — lo stesso dell'ISA — in sette caselle, con
 l'imponibile e quanti sono:
 
-1. **di competenza dell'anno, da fatturare nell'anno**: non ancora
+1. **totale di competenza dell'anno** (vedi sotto);
+2. **di competenza dell'anno, da fatturare nell'anno**: non ancora
    fatturati, ma con la proforma mandata o con la data prevista entro il
-   31/12 (i pronti senza data contano qui) — da fatturare e quindi da
-   incassare. **La data prevista decide**: uno scaglione «pronto» con la
-   data a giugno dell'anno dopo sta nella casella dell'anno dopo;
-2. **di competenza dell'anno, fatturato e incassato**;
-3. **di competenza dell'anno, fatturato e non ancora incassato**;
-4. **di competenza dell'anno, da fatturare l'anno dopo**: data prevista
-   oltre il 31/12 o non ancora indicata (si dice quanti sono senza data);
-5. **di competenza dell'anno successivo**, tutto.
+   31/12 — da fatturare e quindi da incassare. **La data prevista decide**,
+   anche per gli scaglioni «pronti»: uno pronto con la data a giugno
+   dell'anno dopo sta nella casella dell'anno dopo;
+3. **di competenza dell'anno, fatturato e incassato**;
+4. **di competenza dell'anno, fatturato e non ancora incassato**;
+5. **di competenza dell'anno, da fatturare l'anno dopo o più avanti**: con la
+   data prevista oltre il 31/12;
+6. **di competenza dell'anno, data prevista da inserire**: aperti, senza
+   proforma e **senza data prevista** (pronti compresi). Non si indovina in
+   che anno cadranno: la casella è rossa finché ce n'è, e il suo elenco dice
+   quali completare;
+7. **di competenza dell'anno successivo**, tutto.
 
 La prima casella, **Totale di competenza dell'anno**, mette insieme tutto
 quello dell'anno: già fatturato (incassato e non) più da fatturare, entro
@@ -1294,13 +1300,14 @@ venire,
 - **già fatturato**: fatture emesse o incassate con la data nell'anno;
 - **da fatturare (previsto)**: nell'anno in corso gli scaglioni con la
   proforma mandata o con la data prevista entro il 31/12 (anche passata:
-  sono in ritardo, restano qui), più i pronti senza data; negli anni dopo
-  quelli con la data prevista in quell'anno (anche se già pronti);
+  sono in ritardo, restano qui); negli anni dopo quelli con la data
+  prevista in quell'anno (anche se già pronti);
 - **totale** imponibile e lordo.
 
-Gli scaglioni aperti senza data prevista (né pronti né in proforma) sono in
-una riga a parte, «Senza data prevista»: finché non si indica la data non
-si sa in che anno cadranno. Nel riepilogo del report c'è anche la riga
+Gli scaglioni aperti senza data prevista e senza proforma (anche se pronti)
+sono in una riga a parte, «Senza data prevista»: finché non si indica la
+data non si sa in che anno cadranno. Nel report c'è anche la tabella
+«Competenza dell'anno — data prevista da inserire». Nel riepilogo del report c'è anche la riga
 «Fatturato totale dell'anno (emesso + da emettere entro il 31/12)».
 
 ### Raggruppate per commessa

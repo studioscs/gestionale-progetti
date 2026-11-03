@@ -1271,7 +1271,7 @@ function launchOpts(){
         inTabPronte:tabPronte?conP.some(f=>tabPronte.querySelector('[data-fatt="'+f.id+'"]')):false,
         tabPronte:!!tabPronte,
         /* le pronte stanno fra quelle che matureranno, secondo la data */
-        pronteInMat:pronte.every(f=>[...document.querySelectorAll('#page .card')].some(c=>/Matureranno/.test(c.querySelector('.card-t')?.textContent||'')
+        pronteInMat:pronte.every(f=>[...document.querySelectorAll('#page .card')].some(c=>/Matureranno|Senza data prevista/.test(c.querySelector('.card-t')?.textContent||'')
           &&c.querySelector('[data-fatt="'+f.id+'"]')))}; });
     must(g.conP>0,'nella prova non ci sono proforma emesse');
     must(g.emKpi===g.em+g.conP,'emesse non incassate '+g.emKpi+' invece di '+(g.em+g.conP)+' (fatture + proforma)');
@@ -4513,7 +4513,7 @@ function launchOpts(){
       r.totale=!!tot&&/Totale di competenza/.test(tot.textContent)&&/già fatturato/.test(tot.textContent);
       /* il totale e' la somma delle quattro caselle dell'anno */
       const n=numeriAnno(y), sm=a=>r2(a.reduce((x,f)=>x+impFattura(f),0));
-      r.somma=tot.querySelector('.kpi-v').textContent===feuro(sm(n.compEntro.concat(n.compDopo)));
+      r.somma=tot.querySelector('.kpi-v').textContent===feuro(sm(n.compEntro.concat(n.compDopo,n.compSenza)));
       card().querySelector('[data-annofilt="inc"]').click();
       const el1=document.querySelector('#af-elenco');
       r.inc=!!el1&&/CL incassata/.test(el1.textContent)&&!/CL entro/.test(el1.textContent);
@@ -4539,17 +4539,20 @@ function launchOpts(){
       const b=(await ins({descrizione:'PR senza data',imponibile:800,stato:'pronta'})).data;
       await loadAll(true);
       const n=numeriAnno(y), fa=S.fatture.find(x=>x.id===a.id), fb=S.fatture.find(x=>x.id===b.id), d=fatturatoPerAnno();
-      const r={aDopo:n.compDopo.includes(fa)&&!n.compEntro.includes(fa), bEntro:n.compEntro.includes(fb),
+      const r={aDopo:n.compDopo.includes(fa)&&!n.compEntro.includes(fa), bEntro:n.compSenza.includes(fb)&&!n.compEntro.includes(fb)&&!n.compDopo.includes(fb),
         anno:(d.anni.find(x=>x.anno===y+1)||{nPrev:0}).nPrev>0};
       S.afFiltro='entro'; S.annoFisc=null; S.page='fatturare'; render();
-      r.elenco=!/PR anno dopo/.test(document.querySelector('#af-elenco').textContent)&&/PR senza data/.test(document.querySelector('#af-elenco').textContent);
+      r.elenco=!/PR anno dopo/.test(document.querySelector('#af-elenco').textContent)&&!/PR senza data/.test(document.querySelector('#af-elenco').textContent);
+      S.afFiltro='senza'; render();
+      r.senza=/PR senza data/.test(document.querySelector('#af-elenco').textContent)&&/data prevista da inserire/.test(document.querySelector('#af-elenco').textContent);
       S.afFiltro=null;
       await SB.from('commessa_fatture').delete().eq('id',a.id); await SB.from('commessa_fatture').delete().eq('id',b.id);
       await loadAll(true); render(); return r; });
     must(g.aDopo,'il pronto con data l anno dopo conta nell anno');
-    must(g.bEntro,'il pronto senza data non conta nell anno');
+    must(g.bEntro,'il pronto senza data non sta fra quelli con la data da inserire');
+    must(g.senza,'la casella «data prevista da inserire» non lo elenca');
     must(g.anno,'nel fatturato per anno il pronto non va nell anno della sua data');
-    must(g.elenco,'l elenco della casella mostra il pronto dell anno dopo');
+    must(g.elenco,'l elenco «da fatturare nell anno» mostra il pronto dell anno dopo o quello senza data');
   });
   await t('fatturato per anno: quest anno e quelli a venire, nel riquadro e nel report',async()=>{
     const g=await p.evaluate(async()=>{
@@ -4573,9 +4576,9 @@ function launchOpts(){
       for(const id of mk) await SB.from('commessa_fatture').delete().eq('id',id);
       await loadAll(true); render(); return r; });
     must(g.fatt===1000,'già fatturato quest anno: '+g.fatt);
-    must(g.prev===5000,'previsto quest anno (pronta + in ritardo): '+g.prev);
+    must(g.prev===3000,'previsto quest anno (solo quello in ritardo): '+g.prev);
     must(g.due===4000,'previsto fra due anni: '+g.due);
-    must(g.senza===5000,'senza data: '+g.senza);
+    must(g.senza===7000,'senza data (pronta senza data + da emettere senza data): '+g.senza);
     const y=new Date().getFullYear();
     const an=g.anni.split(',').map(Number);
     must(an[0]===y&&[y,y+1,y+2].every(a=>an.includes(a))&&an.every((a,i)=>!i||a===an[i-1]+1),'anni elencati: '+g.anni);
@@ -4589,7 +4592,7 @@ function launchOpts(){
       const ins=(pid,d,o)=>SB.from('commessa_fatture').insert({project_id:pid,descrizione:d,imponibile:100,stato:'pronta',ordine:o,isa_tipo:'C05',anno_competenza:2026});
       await ins(a.id,'Z-saldo',2); await ins(b.id,'A-acconto',1); await ins(a.id,'Z-acconto',1); await ins(b.id,'A-saldo',2);
       await loadAll(true); S.page='fatturare'; render();
-      const card=[...document.querySelectorAll('.card')].find(c=>/Matureranno più avanti — dal/.test(c.querySelector('.card-t')?.textContent||''));
+      const card=[...document.querySelectorAll('.card')].find(c=>/Senza data prevista — da inserire/.test(c.querySelector('.card-t')?.textContent||''));
       const righe=card?[...card.querySelectorAll('tbody tr')].map(tr=>tr.classList.contains('riga-gruppo')?'#'+tr.textContent.trim():tr.cells[0].textContent.trim()):[];
       return {righe:righe.filter(x=>/ordinamento|^[AZ]-/.test(x)).map(x=>x.startsWith('#')?(/Alfa/.test(x)?'#A':'#Z'):x.slice(0,9)),ids:[a.id,b.id]}; });
     must(JSON.stringify(g.righe)===JSON.stringify(['#A','A-acconto','A-saldo','#Z','Z-acconto','Z-saldo']),'ordine/raggruppamento: '+JSON.stringify(g.righe));
