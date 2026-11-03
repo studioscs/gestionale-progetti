@@ -4601,6 +4601,22 @@ function launchOpts(){
     must(!g.kpi,'c è ancora «Pronte da emettere» in testa');
     must(!/pronta/.test(g.opz),'«Pronta» si può ancora scegliere: '+g.opz);
   });
+  await t('proforma emessa e fattura ancora da emettere: il riferimento è verde',async()=>{
+    const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const f=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'PF verde',imponibile:100,stato:'da_emettere',isa_tipo:'C05',
+        anno_competenza:2026,ordine:99,proforma_numero:'2026/990',proforma_data:'2026-10-01'}).select().single()).data;
+      await loadAll(true);
+      const x=S.fatture.find(z=>z.id===f.id), h=rifProformaHtml(x);
+      x.stato='emessa'; const h2=rifProformaHtml(x); x.stato='da_emettere';
+      S.projId=pid; S.tab='fatture'; go('project');
+      const riga=document.querySelector('tr[data-fatt="'+f.id+'"]');
+      const r={verde:/var\(--grn\)/.test(h)&&/emessa/.test(h), dopo:!/var\(--grn\)/.test(h2),
+        scheda:!!riga&&/2026\/990/.test(riga.textContent)&&!!riga.querySelector('[style*="--grn"]')};
+      await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); go('fatturare'); return r; });
+    must(g.verde,'il riferimento della proforma emessa non è verde');
+    must(g.dopo,'fatturata, il riferimento resta verde');
+    must(g.scheda,'nella scheda della commessa non è verde');
+  });
   await t('fase riaperta o scaglione staccato: la richiesta automatica sparisce, quella di una persona resta',async()=>{
     const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
       const fa=(await SB.from('commessa_fasi').insert({project_id:pid,fase_key:'t47',nome:'Verifica',stato:'in_corso',ordine:98}).select().single()).data;

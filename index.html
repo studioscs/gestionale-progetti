@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.23';
+const VERSIONE = '2026.11.03.24';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7546,8 +7546,7 @@ function fatturePanel(pid) {
             + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut)">' + esc(f.richiesta_note) + '</div>' : '')
           : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
-            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '') + chipSolleciti(f) + '</td>'
+      + '<td>' + bdg(f.stato, ST_FATT) + rifProformaHtml(f) + chipSolleciti(f) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b>'
         + (f.percentuale ? '<div style="font-size:11px;color:var(--mut)">' + f.percentuale + '%</div>' : '') + '</td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
@@ -8036,12 +8035,26 @@ function elencoAnnoFiscale(titolo, arr) {
               + '<td style="padding-left:22px">' + esc(f.descrizione || '') + '</td>'
               + '<td style="font-size:12px">' + (annoCompScaglione(f) || '—') + '</td>'
               + '<td style="font-size:12px">' + bdg(f.stato, ST_FATT) + ' <span style="' + (senzaDataPrevista(f)
-                  ? 'color:var(--red);font-weight:600' : 'color:var(--mut)') + '">' + esc(quandoScaglione(f)) + '</span></td>'
+                  ? 'color:var(--red);font-weight:600' : f.proforma_numero && fattAperta(f) ? 'color:var(--grn);font-weight:700'
+                  : 'color:var(--mut)') + '">' + (f.proforma_numero && fattAperta(f) ? '&#10003; ' : '') + esc(quandoScaglione(f)) + '</span></td>'
               + '<td style="text-align:right"><b>' + feuro(impFattura(f)) + '</b></td>'
               + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(contiScaglione(f)) + '</td></tr>').join(''); }).join('')
       + '</tbody></table></div>'
       : '<div class="hint" style="margin:0">Nessuno scaglione.</div>')
     + '</div>';
+}
+
+/* IL RIFERIMENTO ALLA PROFORMA, IN VERDE QUANDO E' GIA' PARTITA
+   Scaglione ancora da fatturare ma con la proforma emessa: e' gia' stato
+   chiesto al committente, e il verde lo distingue a colpo d'occhio da quelli
+   per cui non e' partito ancora niente. Fatturato, torna un riferimento. */
+function rifProformaHtml(f) {
+  if (!f.proforma_numero) return '';
+  const aperta = fattAperta(f);
+  return '<div style="font-size:11px;margin-top:3px;color:' + (aperta ? 'var(--grn);font-weight:700' : 'var(--mut)') + '"'
+    + (aperta ? ' title="Proforma già emessa: la fattura è ancora da emettere"' : '') + '>'
+    + (aperta ? '&#10003; ' : '') + '📄 proforma ' + esc(f.proforma_numero)
+    + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + (aperta ? ' — emessa' : '') + '</div>';
 }
 
 /* com'e' messo lo scaglione: fatturato, in proforma, previsto, da prevedere */
@@ -8369,8 +8382,7 @@ function rFatturare() {
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
       + '<td style="padding-left:22px">' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
-            + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '')
+      + '<td>' + bdg(f.stato, ST_FATT) + rifProformaHtml(f)
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
             + '📣 ' + esc(un(f.richiesta_da)) + ' · ' + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
