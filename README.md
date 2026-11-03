@@ -61,6 +61,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 40. [`sql/041_cliente_propaga.sql`](sql/041_cliente_propaga.sql) — correggere il cliente in anagrafica corregge commesse (anche il nome) e preventivi
 41. [`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql) — costi che si ripetono ogni anno, con la loro scadenza
 42. [`sql/043_intestatario_fattura.sql`](sql/043_intestatario_fattura.sql) — fattura o proforma intestata a chi paga, se non è il committente
+43. [`sql/044_motivo_incasso.sql`](sql/044_motivo_incasso.sql) — il motivo di un incasso diverso dal dovuto
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -870,6 +871,35 @@ studio teneva a mano:
   L'anno di un costo è quello della scadenza, se c'è, altrimenti quello di
   competenza: restano fuori le rate già preparate per l'anno dopo e i costi
   degli anni passati.
+
+**Segnare l'incasso.** Sulle fatture emesse c'è il pulsante **✓ Incassata**
+(o, nella finestra dello scaglione, lo stato *Incassata*): si compilano da
+soli la **data di oggi** e l'**importo da incassare** (con la scissione dei
+pagamenti senza l'IVA). Si possono cambiare; se l'importo è diverso da quello
+atteso il gestionale chiede il **motivo** (abbuono, trattenuta, pagamento
+parziale…), che resta scritto sullo scaglione (migrazione
+[`sql/044_motivo_incasso.sql`](sql/044_motivo_incasso.sql)).
+
+**I numeri dell'anno solare** (quello della data di stampa), nel riepilogo:
+
+- **Fatturato fino a oggi**: fatture emesse o incassate con data nell'anno,
+  imponibile e lordo;
+- **Incassato**: fatture incassate con data d'incasso nell'anno (per quelle in
+  cui la data d'incasso non è stata segnata vale l'anno della fattura, e il
+  report dice quante sono: conviene compilarla);
+- due tabelle **ragionate per competenza, come l'ISA**:
+  - **Competenza dell'anno — emessa e incassata entro il 31/12**: già
+    fatturata, con la proforma mandata, pronta da emettere o con la data
+    prevista entro l'anno;
+  - **Competenza dell'anno — si fatturerà e incasserà dall'anno dopo**: data
+    prevista oltre l'anno, o non ancora indicata.
+
+**La previsione si indica sullo scaglione**: nel campo *Data prevista* la data
+concordata con il cliente o, se si sa solo l'anno, un clic su *Entro fine
+2026* / *Nel 2027* / *Nel 2028* (mette il 31/12 di quell'anno). In
+*Fatturazione* quello che maturerà è diviso in **entro il 31/12** e **dal
+prossimo anno o senza data prevista**; dove la data manca la colonna dice *da
+indicare*.
 
 La colonna *Solleciti* riporta i solleciti segnati nel gestionale (vedi
 sotto); nel riepilogo compaiono anche le posizioni **in mora con

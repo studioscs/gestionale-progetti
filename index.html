@@ -1123,7 +1123,10 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="hint" id="fa-calc" style="margin:-8px 0 14px"></div>
       <div class="fg2">
         <div class="fg"><label class="fl">Matura alla chiusura della fase</label><select class="fc" id="fa-fase"></select></div>
-        <div class="fg"><label class="fl">Data prevista</label><input type="date" class="fc" id="fa-prev"></div>
+        <div class="fg"><label class="fl">Data prevista</label><input type="date" class="fc" id="fa-prev">
+          <div class="row" style="gap:6px;margin-top:5px;flex-wrap:wrap" id="fa-prev-anni"></div>
+          <div class="hint" style="margin:4px 0 0">La data concordata con il cliente o, se si sa solo l&rsquo;anno, un clic:
+            serve a prevedere cosa si fatturer&agrave; entro l&rsquo;anno.</div></div>
       </div>
       <div class="fg"><label class="fl">Stato</label>
         <select class="fc" id="fa-stato2">
@@ -1141,7 +1144,10 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Data fattura</label><input type="date" class="fc" id="fa-data"></div>
         <div class="fg"><label class="fl">Data incasso</label><input type="date" class="fc" id="fa-inc"></div>
       </div>
-      <div class="fg"><label class="fl">Importo incassato €</label><input type="number" class="fc" id="fa-incimp" step="0.01"></div>
+      <div class="fg"><label class="fl">Importo incassato €</label><input type="number" class="fc" id="fa-incimp" step="0.01">
+        <div class="hint" id="fa-inc-h" style="margin:4px 0 0"></div></div>
+      <div class="fg" id="fa-motbox" style="display:none"><label class="fl">Motivo dell&rsquo;importo diverso *</label>
+        <input class="fc" id="fa-mot" placeholder="Es. abbuono concordato, trattenuta per ritardo, pagamento parziale"></div>
       <div class="fg"><label class="fl">Note in fattura
         <span style="font-weight:400;color:var(--mut)">&mdash; le legge il committente</span></label>
         <textarea class="fc" id="fa-notefatt" rows="2"
@@ -1550,7 +1556,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.8';
+const VERSIONE = '2026.11.03.10';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1766,7 +1772,8 @@ const MIGRAZIONI = {
   '038_contratto_da_preventivo': ['preventivo_id'],
   '040_spese_art15_nei_servizi': ['art15'],
   '042_costi_ricorrenti':    ['ricorrente','scadenza','origine_id'],
-  '043_intestatario_fattura': ['intestatario']
+  '043_intestatario_fattura': ['intestatario'],
+  '044_motivo_incasso':      ['motivo_incasso']
   /* 041_cliente_propaga: solo un trigger, nessuna colonna da controllare */
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
@@ -7520,7 +7527,8 @@ function fatturePanel(pid) {
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px">' + esc(f.numero_fattura || '-')
         + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.data_fattura) + '</div>' : '') + '</td>'
-      + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
+      + '<td style="font-size:12px;color:var(--mut)">' + (f.data_prevista || !fattAperta(f) ? fdate(f.data_prevista)
+          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da indicare</span>') + '</td>'
       + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f)
         + (canW() && fattAperta(f)
             ? '<button class="btn btn-xs" data-chiedi="' + f.id + '" title="Dì all’amministrazione che si può fatturare">&#128227;</button> ' : '')
@@ -7778,6 +7786,47 @@ function datiReportIncassi() {
   return { emesse, proforme, daSaldare, totEmesse: tot(emesse), totProforme: tot(proforme),
            totIncassare: r2(tot(emesse) + tot(proforme)), totSaldare: tot(daSaldare) };
 }
+/* L'ANNO SOLARE DELLO STUDIO, IN NUMERI
+   - fatturato: fatture emesse o incassate con data nell'anno, fino a oggi;
+   - incassato: fatture incassate con data d'incasso nell'anno (se la data non
+     e' stata segnata, vale l'anno della fattura - e si dice quante sono);
+   - competenza: come per l'ISA, gli scaglioni di competenza dell'anno divisi
+     fra quelli che si emettono e incassano ENTRO l'anno (gia' fatturati, con
+     la proforma mandata, pronti da emettere, o con la data prevista entro il
+     31/12) e quelli che
+     si fattureranno L'ANNO DOPO (data prevista oltre, o non indicata). */
+const annoDi4 = d => Number(String(d || '').slice(0, 4)) || null;
+const fineAnno = y => y + '-12-31';
+const annoCompScaglione = f => Number(f.anno_competenza) || annoDi4(f.data_fattura) || annoDi4(f.data_prevista) || null;
+function numeriAnno(y) {
+  y = Number(y) || today().getFullYear();
+  const vive = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id));
+  const fatturate = vive.filter(f => ISA_FATTURATE.indexOf(f.stato) >= 0 && annoDi4(f.data_fattura) === y);
+  const incassate = vive.filter(f => f.stato === 'incassata' && (annoDi4(f.data_incasso) || annoDi4(f.data_fattura)) === y);
+  const lordo = f => contiDaIncassare(f, false).totale;
+  const incasso = f => Number(f.importo_incassato) || contiDaIncassare(f, false).netto;
+  const somma = (arr, fn) => r2(arr.reduce((a, f) => a + fn(f), 0));
+  const comp = vive.filter(f => annoCompScaglione(f) === y);
+  const entro = f => fattAperta(f)
+    ? !!(f.proforma_numero || f.stato === 'pronta' || (f.data_prevista && f.data_prevista <= fineAnno(y)))
+    : (annoDi4(f.data_fattura) || y) <= y;
+  const compEntro = comp.filter(entro), compDopo = comp.filter(f => !entro(f));
+  return { anno: y,
+    fatturato: { n: fatturate.length, imponibile: somma(fatturate, impFattura), lordo: somma(fatturate, lordo) },
+    incassato: { n: incassate.length, importo: somma(incassate, incasso),
+                 senzaData: incassate.filter(f => !f.data_incasso).length },
+    compEntro, compDopo,
+    totEntro: { imponibile: somma(compEntro, impFattura), lordo: somma(compEntro, lordo) },
+    totDopo:  { imponibile: somma(compDopo, impFattura), lordo: somma(compDopo, lordo) } };
+}
+/* com'e' messo lo scaglione: fatturato, in proforma, previsto, da prevedere */
+function quandoScaglione(f) {
+  if (f.stato === 'incassata') return 'incassata' + (f.numero_fattura ? ' (fatt. ' + f.numero_fattura + ')' : '');
+  if (f.stato === 'emessa') return 'fattura ' + (f.numero_fattura || '') + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '');
+  if (f.proforma_numero) return 'proforma ' + f.proforma_numero;
+  if (f.data_prevista) return 'prevista ' + fdate(f.data_prevista);
+  return 'data prevista da indicare';
+}
 function reportIncassi(saldo) {
   const d = datiReportIncassi();
   const s = saldo === '' || saldo === null || saldo === undefined || isNaN(Number(saldo)) ? null : r2(Number(saldo));
@@ -7801,6 +7850,12 @@ function reportIncassi(saldo) {
   const totRiga = (etichetta, arr, tot) => [etichetta, feuro(somma(arr, 'imponibile')), feuro(somma(arr, 'cassa')),
     feuro(somma(arr, 'iva'))].concat(conSpese ? [feuro(somma(arr, 'anticipazioni'))] : []).concat([feuro(tot)]);
   const inMora = d.emesse.concat(d.proforme).filter(x => x.f.messa_in_mora);
+  const na = numeriAnno(today().getFullYear()), y = na.anno;
+  const colComp = ['Commessa', 'Intestatario', 'Scaglione', 'Stato / quando', 'Imponibile', 'Lordo'];
+  const rigaComp = f => [pn(f.project_id), intestatarioDi(f), f.descrizione || '', quandoScaglione(f),
+    feuro(impFattura(f)), feuro(contiDaIncassare(f, false).totale)];
+  const ordina = arr => arr.slice().sort((a, b) => String(a.data_fattura || a.data_prevista || '9999')
+    .localeCompare(String(b.data_fattura || b.data_prevista || '9999')));
   return {
     titolo: 'Lista debitori — ' + nome, orizzontale: true,
     sottotitolo: 'Situazione al ' + fdate(todayISO()) + ': chi ci deve pagare e chi dobbiamo pagare',
@@ -7808,7 +7863,13 @@ function reportIncassi(saldo) {
       { titolo: 'Riepilogo', campi: [
         ['Saldo conto', s === null ? 'non indicato' : feuro(s)],
         ['Totale da incassare', feuro(d.totIncassare) + '  (fatture ' + feuro(d.totEmesse) + ' + proforme ' + feuro(d.totProforme) + ')'],
-        ['Totale da saldare', feuro(d.totSaldare)]]
+        ['Totale da saldare', feuro(d.totSaldare)],
+        ['Fatturato ' + y + ' fino a oggi', feuro(na.fatturato.imponibile) + ' imponibile · ' + feuro(na.fatturato.lordo)
+          + ' lordo  (' + na.fatturato.n + (na.fatturato.n === 1 ? ' fattura)' : ' fatture)')],
+        ['Incassato ' + y, feuro(na.incassato.importo) + '  (' + na.incassato.n + (na.incassato.n === 1 ? ' fattura' : ' fatture')
+          + (na.incassato.senzaData ? '; per ' + na.incassato.senzaData + ' senza data d’incasso vale l’anno della fattura' : '') + ')'],
+        ['Competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile) + ' imponibile · ' + feuro(na.totEntro.lordo) + ' lordo'],
+        ['Competenza ' + y + ' fatturata l’anno dopo', feuro(na.totDopo.imponibile) + ' imponibile · ' + feuro(na.totDopo.lordo) + ' lordo']]
         .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
           + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
@@ -7818,6 +7879,16 @@ function reportIncassi(saldo) {
       { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 3, totCol: 5,
           righe: d.proforme.map(riga), tot: d.proforme.length ? [totRiga('Totale proforme', d.proforme, d.totProforme)] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
+      { titolo: 'Competenza ' + y + ' — emessa e incassata entro il 31/12/' + y
+          + ' (già fatturata, in proforma, pronta o prevista entro l’anno)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          righe: ordina(na.compEntro).map(rigaComp),
+          tot: na.compEntro.length ? [['Totale competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile), feuro(na.totEntro.lordo)]] : null,
+          vuoto: 'Nessuno scaglione di competenza ' + y + '.' } },
+      { titolo: 'Competenza ' + y + ' — si fatturerà e incasserà dal ' + (y + 1)
+          + ' (data prevista oltre il ' + y + ' o da indicare)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          righe: ordina(na.compDopo).map(rigaComp),
+          tot: na.compDopo.length ? [['Totale competenza ' + y + ' dal ' + (y + 1), feuro(na.totDopo.imponibile), feuro(na.totDopo.lordo)]] : null,
+          vuoto: 'Niente di competenza ' + y + ' rimandato al ' + (y + 1) + '.' } },
       { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
           righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
           tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
@@ -8025,8 +8096,11 @@ function rFatturare() {
                 + esc(f.richiesta_note) + '</div>' : '') : '') + chipSolleciti(f) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
-      + '<td style="font-size:12px;color:var(--mut)">' + fdate(f.data_prevista) + '</td>'
-      + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f) + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
+      + '<td style="font-size:12px;color:var(--mut)">' + (f.data_prevista || !fattAperta(f) ? fdate(f.data_prevista)
+          : '<span style="color:var(--ora);font-weight:600" title="Indica quando maturerà: serve alla previsione dell’anno">da indicare</span>') + '</td>'
+      + '<td class="ac" style="white-space:nowrap">' + bottoneSolleciti(f)
+        + (canW() && f.stato === 'emessa' ? '<button class="btn btn-xs btn-p" data-incassa="' + f.id + '" title="Segna incassata: oggi, per l’importo da incassare (modificabili)">&#10003; Incassata</button> ' : '')
+        + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
         + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
   };
   /* extra: i saldi che mancano, come righe in rosso fra quelli che matureranno */
@@ -8080,8 +8154,13 @@ function rFatturare() {
         : '')
     + tabella(kRich, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
     + tabella(kPronte, '💶 Pronte da emettere', 'var(--ora)')
-    + tabella(list.filter(f => f.stato !== 'pronta' && senzaProf(f)), '⏳ Matureranno più avanti', null,
-        daControllare.filter(x => x.c.problema === 'saldo'))
+    /* quello che maturera': entro l'anno solare, o dopo (o senza una data) */
+    + (() => { const y = today().getFullYear();
+        const mat = list.filter(f => f.stato !== 'pronta' && senzaProf(f));
+        const entro = mat.filter(f => f.data_prevista && f.data_prevista <= fineAnno(y));
+        return tabella(entro, '⏳ Matureranno più avanti — entro il 31/12/' + y, null,
+                 daControllare.filter(x => x.c.problema === 'saldo'))
+          + tabella(mat.filter(f => entro.indexOf(f) < 0), '📅 Matureranno più avanti — dal ' + (y + 1) + ' o senza data prevista', null); })()
     + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + '</div>';
@@ -8624,11 +8703,17 @@ function openFatt(id, presetPid) {
   el('fa-perc').value  = f && f.percentuale !== null ? f.percentuale : '';
   el('fa-imp').value   = f && f.imponibile !== null ? f.imponibile : '';
   el('fa-prev').value  = f ? (f.data_prevista || '') : '';
+  { const y = today().getFullYear();
+    el('fa-prev-anni').innerHTML = [y, y + 1, y + 2].map(a => '<button class="btn btn-xs" type="button" data-prevanno="' + a + '">'
+      + (a === y ? 'Entro fine ' + a : 'Nel ' + a) + '</button>').join('');
+    el('fa-prev-anni').onclick = e => { const b = e.target.closest('[data-prevanno]'); if (!b) return;
+      el('fa-prev').value = fineAnno(b.dataset.prevanno); }; }
   el('fa-stato2').value= f ? f.stato : 'da_emettere';
   el('fa-num').value   = f ? (f.numero_fattura || '') : '';
   el('fa-data').value  = f ? (f.data_fattura || '') : '';
   el('fa-inc').value   = f ? (f.data_incasso || '') : '';
   el('fa-incimp').value= f && f.importo_incassato !== null ? f.importo_incassato : '';
+  el('fa-mot').value   = f ? (f.motivo_incasso || '') : '';
   el('fa-note2').value = f ? (f.note || '') : '';
   el('fa-notefatt').value = f ? (f.note_fattura || '') : '';
   el('fa-isa').innerHTML  = isaOpzioni(f ? (f.isa_tipo || '') : '');
@@ -8643,9 +8728,37 @@ function openFatt(id, presetPid) {
                                             isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
                                             art15: !!r.art15, art15Mano: true }));
   disegnaRigheFatt();
+  aggiornaIncasso();
   openM('m-fatt');
 }
 let FATT_PID = null;
+
+/* L'INCASSO: DATA E IMPORTO DA SOLI, IL MOTIVO SE CAMBIA
+   Segnando «incassata» si mettono la data di oggi e l'importo da incassare
+   (con la scissione dei pagamenti senza l'IVA). Si possono cambiare: se
+   l'importo non e' quello atteso si chiede il perche'. */
+function attesoScaglione() {
+  const p = byId(S.projects, FATT_PID) || {};
+  const id = el('fa-id2').value;
+  const fisso = parseFloat(el('fa-imp').value), perc = parseFloat(el('fa-perc').value);
+  const imp = FATT_RIGHE.length ? totRighe(FATT_RIGHE)
+    : (!isNaN(fisso) && fisso > 0) ? fisso : (!isNaN(perc) && p.amount) ? r2(Number(p.amount) * perc / 100) : 0;
+  const antic = (FATT_RIGHE.length ? totAnticipiRighe(FATT_RIGHE) : 0) + (id ? totSpese(speseDiFatt(id)) : 0);
+  return calcolaFattura(imp, antic, !!p.split_payment).netto;
+}
+function aggiornaIncasso(daStato) {
+  const inc = el('fa-stato2').value === 'incassata';
+  const atteso = attesoScaglione();
+  if (inc && daStato) {
+    if (!el('fa-inc').value) el('fa-inc').value = todayISO();
+    if (el('fa-incimp').value === '') el('fa-incimp').value = atteso;
+  }
+  const v = el('fa-incimp').value === '' ? null : parseFloat(el('fa-incimp').value);
+  const diverso = inc && v !== null && Math.abs(v - atteso) > 0.005;
+  el('fa-motbox').style.display = diverso ? '' : 'none';
+  el('fa-inc-h').innerHTML = inc ? 'Da incassare: <b>' + feuro(atteso) + '</b>'
+    + (diverso ? ' · <span style="color:var(--ora)">differenza ' + feuro(r2(v - atteso)) + ': scrivi il motivo</span>' : '') : '';
+}
 
 /* I SERVIZI DELLA FATTURA, MENTRE SI MODIFICANO
    Stanno qui e non nel database finche' non si preme Salva: aggiungere una riga
@@ -8739,6 +8852,16 @@ async function saveFatt() {
     return toast('Scegli in alto ' + manca.join(' e ') + ': senza non si salva.', 'error');
   }
   const id = el('fa-id2').value;
+  /* incassata: se non e' scritto diversamente, oggi e l'importo da incassare */
+  if (el('fa-stato2').value === 'incassata') {
+    if (!el('fa-inc').value) el('fa-inc').value = todayISO();
+    const atteso = attesoScaglione();
+    if (el('fa-incimp').value === '') el('fa-incimp').value = atteso;
+    if (Math.abs(parseFloat(el('fa-incimp').value) - atteso) > 0.005 && !el('fa-mot').value.trim()) {
+      aggiornaIncasso(); el('fa-mot').focus();
+      return toast('L’importo incassato è diverso da quello da incassare (' + feuro(atteso) + '): scrivi il motivo.', 'error');
+    }
+  }
   const pay = {
     project_id: FATT_PID, descrizione: desc,
     percentuale: perc === '' ? null : parseFloat(perc),
@@ -8750,11 +8873,14 @@ async function saveFatt() {
     data_fattura: el('fa-data').value || null,
     data_incasso: el('fa-inc').value || null,
     importo_incassato: el('fa-incimp').value === '' ? null : parseFloat(el('fa-incimp').value),
+    motivo_incasso: null,
     note: el('fa-note2').value.trim() || null,
     note_fattura: el('fa-notefatt').value.trim() || null,
     isa_tipo: el('fa-isa').value || null,
     anno_competenza: Number(el('fa-anno').value) || null
   };
+  if (pay.stato === 'incassata' && pay.importo_incassato !== null
+      && Math.abs(pay.importo_incassato - attesoScaglione()) > 0.005) pay.motivo_incasso = el('fa-mot').value.trim() || null;
   setLoading('fa-save2', true);
   let fid = id;
   if (id) {
@@ -13641,7 +13767,9 @@ document.addEventListener('DOMContentLoaded', () => {
       el('fa-num').value = numScaglione();
       if (!el('fa-data').value) el('fa-data').value = todayISO();
     }
+    aggiornaIncasso(true);
   });
+  el('fa-incimp').addEventListener('input', () => aggiornaIncasso());
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
   el('fa-xml').onclick   = vaiAllaFattura;
 
@@ -13794,6 +13922,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-nchiedi'))) { e.stopPropagation(); return openChiedi(S.projId, null); }
     if ((n = f('data-fxml')))    { e.stopPropagation(); return scaricaXml(n.dataset.fxml); }
     if ((n = f('data-fproforma'))) { e.stopPropagation(); return openRevisione(n.dataset.fproforma); }
+    if ((n = f('data-incassa')))   { e.stopPropagation(); openFatt(n.dataset.incassa);
+      el('fa-stato2').value = 'incassata'; aggiornaIncasso(true);
+      return toast('Controlla data e importo incassato, poi salva', 'info'); }
     if ((n = f('data-prevpdf')))   { e.stopPropagation(); return pdfPreventivo(n.dataset.prevpdf); }
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }

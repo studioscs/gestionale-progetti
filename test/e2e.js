@@ -51,6 +51,9 @@ function launchOpts(){
      stanno in alto nella pagina, e il primo pulsante in assoluto sarebbe il loro. */
   const primaAperta=k=>p.evaluate(k=>{ const b=[...document.querySelectorAll('[data-'+k+']')]
     .find(x=>{ const f=byId(S.fatture,x.dataset[k]); return f&&fattAperta(f); }); return b?b.dataset[k]:null; },k);
+  const catturaStampaPrima=()=>p.evaluate(()=>{ window.__STAMPA=null;
+    window.open=()=>{ const d={html:'',open(){},write(h){this.html+=h;},close(){}};
+      return {document:d,focus(){},print(){ window.__STAMPA=d.html; },close(){}}; }; });
   const isaScelta=()=>p.evaluate(()=>{ if(!el('fa-isa').value) el('fa-isa').value='C05';
     if(!el('fa-anno').value) el('fa-anno').value=String(today().getFullYear()); });
   await p.waitForTimeout(800);
@@ -4222,15 +4225,17 @@ function launchOpts(){
     await p.fill('#mst-saldo','6295.24');
     await p.click('#mst-carta'); await p.waitForTimeout(700);
     const h=await p.evaluate(()=>window.__STAMPA||'');
-    const blocco=(da,a)=>h.slice(h.indexOf(da),a?h.indexOf(a):undefined);
+    /* la fine del blocco si cerca dopo il suo inizio: «Competenza» c'e' anche nel riepilogo */
+    const blocco=(da,a)=>{ const i=h.indexOf(da); return h.slice(i,a?h.indexOf(a,i+1):undefined); };
     const emesse=blocco('Lista debitori — fatture emesse','Proforme in attesa');
-    const prof=blocco('Proforme in attesa','Da saldare');
+    /* dopo le proforme vengono le due tabelle di competenza, poi i debiti */
+    const prof=blocco('Proforme in attesa','Competenza ');
     const deb=blocco('Da saldare');
     must(/BL-1\/PA/.test(emesse)&&/COMUNE DI PROVA BL/.test(emesse)&&emesse.indexOf(BL.pa)>=0,'fattura PA non riportata o importo diverso da '+BL.pa);
-    must(!/BL-0/.test(h),'compare una fattura già incassata');
+    must(!/BL-0/.test(emesse+prof),'fra i debitori compare una fattura già incassata');
     must(/PROFORMA BL7/.test(prof)&&prof.indexOf(BL.pf1)>=0,'proforma con le spese aperte: atteso '+BL.pf1);
     must(/PROFORMA BL8/.test(prof)&&prof.indexOf(BL.pf2)>=0,'seconda proforma (spese una volta sola): atteso '+BL.pf2);
-    must(!/Senza proforma/.test(h),'compare uno scaglione senza proforma');
+    must(!/Senza proforma/.test(emesse+prof),'fra i debitori compare uno scaglione senza proforma');
     must(/Fornitore BL/.test(deb)&&/99,50/.test(deb)&&/Esterno BL/.test(deb)&&/120,00/.test(deb),'debiti dello studio mancanti');
     must(!/Pagato BL/.test(h),'compare un costo già pagato');
     must(/6\.295,24/.test(h),'saldo conto non stampato');
@@ -4396,6 +4401,63 @@ function launchOpts(){
     await p.click('#rev-intest-reset'); await p.waitForTimeout(200);
     must(await p.inputValue('[data-rev="cliente"]')===prima,'«Torna al committente» non riporta il nome');
     await p.evaluate(async id=>{ closeM('m-rev'); await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
+  });
+
+  await t('previsione: anno con un clic, matureranno entro l anno o dopo, numeri dell anno nel report',async()=>{
+    const y=new Date().getFullYear();
+    const pid=await p.evaluate(()=>S.projects[0].id);
+    await p.evaluate(id=>openFatt(null,id),pid); await p.waitForSelector('#m-fatt.show');
+    await p.fill('#fa-desc','Saldo previsto anno prossimo'); await p.fill('#fa-imp','4000');
+    await p.click('[data-prevanno="'+(y+1)+'"]');
+    must(await p.inputValue('#fa-prev')===(y+1)+'-12-31','il pulsante dell anno non imposta la data: '+await p.inputValue('#fa-prev'));
+    await isaScelta(); await p.evaluate(y=>{ el('fa-anno').value=String(y); },y);
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(y=>{ go('fatturare');
+      const card=re=>[...document.querySelectorAll('#page .card')].find(c=>re.test((c.querySelector('.card-t')||{}).textContent||''));
+      const dopo=card(/dal \d{4} o senza data/), entro=card(/entro il 31\/12/);
+      const f=S.fatture.find(x=>x.descrizione==='Saldo previsto anno prossimo');
+      const na=numeriAnno(y);
+      return {inDopo:!!(dopo&&dopo.querySelector('[data-fatt="'+f.id+'"]')),inEntro:!!(entro&&entro.querySelector('[data-fatt="'+f.id+'"]')),
+        compDopo:na.compDopo.some(x=>x.id===f.id),compEntro:na.compEntro.some(x=>x.id===f.id),
+        fatt:na.fatturato, fattAtteso:r2(S.fatture.filter(x=>['emessa','incassata'].includes(x.stato)&&String(x.data_fattura||'').slice(0,4)===String(y)).reduce((a,x)=>a+impFattura(x),0)),
+        daIndicare:/da indicare/.test(el('page').textContent)}; },y);
+    must(g.inDopo&&!g.inEntro,'lo scaglione previsto per l anno dopo non sta in «dal '+(y+1)+'»');
+    must(g.compDopo&&!g.compEntro,'nella competenza '+y+' non risulta rimandato al '+(y+1));
+    must(g.fatt.imponibile===g.fattAtteso,'fatturato dell anno '+g.fatt.imponibile+' invece di '+g.fattAtteso);
+    await catturaStampaPrima();
+    await p.click('#bl-btn'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
+    await p.click('#mst-carta'); await p.waitForTimeout(700);
+    const h=await p.evaluate(()=>window.__STAMPA||'');
+    must(new RegExp('Fatturato '+y+' fino a oggi').test(h)&&new RegExp('Incassato '+y).test(h),'nel report mancano fatturato e incassato dell anno');
+    must(new RegExp('Competenza '+y+' — emessa e incassata entro').test(h)&&new RegExp('Competenza '+y+' — si fatturerà e incasserà dal '+(y+1)).test(h),'mancano le due tabelle di competenza');
+    must(/Saldo previsto anno prossimo/.test(h.slice(h.indexOf('si fatturerà e incasserà'))),'lo scaglione non è nella tabella dell anno dopo');
+    await p.evaluate(async()=>{ closeAll&&closeAll(); const f=S.fatture.find(x=>x.descrizione==='Saldo previsto anno prossimo');
+      await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); });
+  });
+
+  await t('incassata con un clic: oggi e l importo da incassare; se diverso serve il motivo',async()=>{
+    const fid=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Da incassare in prova',imponibile:1000,
+        stato:'emessa',numero_fattura:'IN-1',data_fattura:'2026-10-01',ordine:95,isa_tipo:'C05',anno_competenza:2026}).select().single();
+      await loadAll(true); go('fatturare'); return data.id; });
+    await p.click('[data-incassa="'+fid+'"]'); await p.waitForSelector('#m-fatt.show',{timeout:4000});
+    const g=await p.evaluate(id=>({stato:el('fa-stato2').value,data:el('fa-inc').value,imp:Number(el('fa-incimp').value),
+      atteso:contiDaIncassare(byId(S.fatture,id),false).netto,oggi:todayISO()}),fid);
+    must(g.stato==='incassata'&&g.data===g.oggi,'non propone oggi: '+JSON.stringify(g));
+    must(g.imp===g.atteso,'non propone l importo da incassare: '+g.imp+' invece di '+g.atteso);
+    await p.fill('#fa-incimp',String(g.atteso-100)); await p.waitForTimeout(100);
+    must(await p.isVisible('#fa-mot'),'importo diverso: non chiede il motivo');
+    await p.click('#fa-save2'); await p.waitForTimeout(400);
+    must(await p.evaluate(id=>__DB.commessa_fatture.find(x=>x.id===id).stato,fid)==='emessa','salvata senza motivo');
+    await p.fill('#fa-mot','Abbuono concordato'); await p.click('#fa-save2'); await p.waitForTimeout(800);
+    const r=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {s:f.stato,d:f.data_incasso,i:Number(f.importo_incassato),m:f.motivo_incasso}; },fid);
+    must(r.s==='incassata'&&r.d===g.oggi&&r.i===g.atteso-100&&r.m==='Abbuono concordato','salvato male: '+JSON.stringify(r));
+    /* dallo stato, senza toccare niente: importo pieno e nessun motivo */
+    await p.evaluate(async id=>{ await SB.from('commessa_fatture').update({stato:'emessa',data_incasso:null,importo_incassato:null,motivo_incasso:null}).eq('id',id); await loadAll(true); openFatt(id); },fid);
+    await p.selectOption('#fa-stato2','incassata'); await p.click('#fa-save2'); await p.waitForTimeout(800);
+    const r2=await p.evaluate(id=>{ const f=__DB.commessa_fatture.find(x=>x.id===id); return {s:f.stato,i:Number(f.importo_incassato),m:f.motivo_incasso,d:f.data_incasso}; },fid);
+    must(r2.s==='incassata'&&r2.i===g.atteso&&!r2.m&&r2.d===g.oggi,'dallo stato: '+JSON.stringify(r2));
+    await p.evaluate(async id=>{ await SB.from('commessa_fatture').delete().eq('id',id); await loadAll(true); },fid);
   });
 
   /* ---------------- SPESE ANTICIPATE FRA I SERVIZI: ART. 15 ---------------- */
