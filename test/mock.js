@@ -158,6 +158,21 @@
     DB.commessa_fatture.filter(f=>f.fase_id===fa.id&&f.stato==='da_emettere'&&!f.richiesta_at).forEach(f=>{
       f.stato='pronta'; prontaInRichiesta(f,'Fase «'+fa.nome+'» completata il '+new Date().toLocaleDateString('it-IT')); });
   }
+  /* Migrazione 048: stato della commessa e delle fasi insieme */
+  function fasiStatoCommessa(fa){
+    const p=DB.projects.find(x=>x.id===fa.project_id); if(!p) return;
+    const ff=DB.commessa_fasi.filter(x=>x.project_id===p.id);
+    const aperte=ff.filter(x=>x.stato!=='completata'&&x.stato!=='non_applicabile').length;
+    const fatte=ff.filter(x=>x.stato==='completata').length;
+    if(aperte===0&&fatte>0) p.status='completato';
+    else if(p.status==='completato'&&fa.stato!=='completata'&&fa.stato!=='non_applicabile') p.status='attivo';
+  }
+  function commessaCompletaFasi(p){
+    if(p.status!=='completato') return;
+    const oggi=new Date().toISOString().slice(0,10);
+    DB.commessa_fasi.filter(x=>x.project_id===p.id&&x.stato!=='completata'&&x.stato!=='non_applicabile')
+      .forEach(x=>{ x.stato='completata'; x.data_completamento=x.data_completamento||oggi; maturaFase(x); });
+  }
   /* Trigger della migrazione 021: l'importo della commessa e' la somma degli
      atti accettati. Finche' la commessa non ha atti, resta quello scritto a
      mano - come fa il database. */
@@ -283,7 +298,9 @@
         /* come il trigger: anche lo scaglione da cui una voce se ne va */
         if(table==='commessa_fattura_righe') DB.commessa_fatture.forEach(f=>ricalcolaImponibile(f.id));
         if(table==='commessa_fasi') DB.commessa_fasi.filter(r=>flt.every(f=>f(r)))
-          .forEach(f=>{ allineaFine(f.project_id); maturaFase(f); });
+          .forEach(f=>{ allineaFine(f.project_id); maturaFase(f); if(api._upd&&'stato' in api._upd) fasiStatoCommessa(f); });
+        if(table==='projects'&&api._upd&&api._upd.status==='completato')
+          DB.projects.filter(r=>flt.every(f=>f(r))).forEach(commessaCompletaFasi);
         if(table==='commessa_fatture'){ DB.commessa_fatture.filter(r=>flt.every(f=>f(r))).forEach(f=>prontaInRichiesta(f));
           if(api._upd&&'fase_id' in api._upd) controllaRichiesteDiFase(); }
       },

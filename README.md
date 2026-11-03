@@ -65,6 +65,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 44. [`sql/045_pronta_diventa_richiesta.sql`](sql/045_pronta_diventa_richiesta.sql) — niente più stato «pronta»: quello che si può fatturare è una richiesta
 45. [`sql/046_accessi_sicuri.sql`](sql/046_accessi_sicuri.sql) — chi si iscrive da solo non ottiene niente; disattivato = fuori
 46. [`sql/047_fase_riaperta_toglie_richiesta.sql`](sql/047_fase_riaperta_toglie_richiesta.sql) — fase riaperta o scaglione staccato: via la richiesta automatica
+47. [`sql/048_fasi_e_stato_commessa.sql`](sql/048_fasi_e_stato_commessa.sql) — stato della commessa e delle fasi insieme
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -2837,4 +2838,23 @@ orizzontale) il quadro di tutte le commesse, archiviate comprese:
 
 Vede le commesse che chi lo genera può vedere: per un quadro di tutto lo
 studio va generato da un amministratore o da chi vede tutte le commesse.
+
+## Stato della commessa e stato delle fasi vanno insieme
+
+Regola del database (migrazione 048), in tutte e due le direzioni:
+
+- quando **tutte le fasi** sono completate (le «non applicabili» non
+  contano) la commessa diventa **Completato** — anche quando l'ultima fase si
+  chiude da sola perché sono state spuntate tutte le sue attività;
+- quando la commessa viene segnata **Completato** (Modifica commessa), le
+  fasi ancora aperte diventano completate con la data di oggi; il gestionale
+  chiede conferma e chiude anche le attività non ancora spuntate. Come per
+  ogni fase chiusa, gli scaglioni agganciati diventano richieste di
+  fatturazione;
+- se una fase **si riapre** mentre la commessa è completata, la commessa
+  torna **Attivo**.
+
+Riaprire la commessa non riapre le fasi: quali riaprire lo decide chi ci
+lavora. Le commesse che erano già incoerenti prima di questa regola non
+sono state toccate.
 

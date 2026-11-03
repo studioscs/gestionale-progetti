@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.25';
+const VERSIONE = '2026.11.03.26';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3583,6 +3583,15 @@ async function syncFase(fid) {
   if (nuovo === 'completata') {
     toast('Fase completata: ' + f.nome, 'success');
     notificaFaseCompletata(f);
+  }
+  /* chiusa l'ultima fase, o riaperta una: lo stato della commessa lo
+     aggiorna il database (migrazione 048), qui lo si rilegge */
+  const p = byId(S.projects, f.project_id), prima = p && p.status;
+  if (nuovo === 'completata' || prima === 'completato') {
+    if (await loadAll(true)) render();
+    const dopo = (byId(S.projects, f.project_id) || {}).status;
+    if (prima !== dopo && dopo === 'completato') toast('Tutte le fasi completate: commessa «' + p.name + '» completata', 'success');
+    else if (prima !== dopo && prima === 'completato') toast('Fase riaperta: la commessa «' + p.name + '» torna attiva', 'info');
   }
 }
 
@@ -13206,8 +13215,25 @@ async function wzSave() {
   try {
     if (WZ.edit) {
       const primaDi = Object.assign({}, byId(S.projects, WZ.edit) || {});
+      /* COMMESSA COMPLETATA = FASI COMPLETATE (migrazione 048): le fasi le
+         chiude il database; le attivita' ancora aperte le chiudiamo qui,
+         chiedendolo, perche' una fase chiusa non lasci arretrati. */
+      const chiude = pay.status === 'completato' && primaDi.status !== 'completato';
+      if (chiude) {
+        const fAperte = fasiOf(WZ.edit).filter(f => ['completata', 'non_applicabile'].indexOf(f.stato) < 0);
+        const tAperte = fAperte.reduce((a, f) => a + tasksFase(f.id).filter(isOpen).length, 0);
+        if ((fAperte.length || tAperte) && !confirm('Segnando la commessa come completata si chiudono anche '
+            + fAperte.length + (fAperte.length === 1 ? ' fase ancora aperta' : ' fasi ancora aperte')
+            + (tAperte ? ' e ' + tAperte + (tAperte === 1 ? ' attività' : ' attività') + ' non ancora spuntate' : '')
+            + '.\n\nGli scaglioni agganciati a quelle fasi diventano richieste di fatturazione. Procedo?')) {
+          setLoading('mp-save', false); return;
+        }
+        pay._fasiDaChiudere = fAperte.map(f => f.id);
+      }
+      const fasiDaChiudere = pay._fasiDaChiudere || []; delete pay._fasiDaChiudere;
       const { error } = await SB.from('projects').update(pay).eq('id', WZ.edit);
       if (error) return sbErr(error, 'salva commessa');
+      for (const fid of fasiDaChiudere) await chiudiAttivitaDellaFase(fid);
       if (pay.ente_pubblico) await registraEnte(pay);
       /* i dati del committente corretti qui arrivano in anagrafica e nelle
          altre commesse dello stesso cliente */

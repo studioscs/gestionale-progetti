@@ -4601,6 +4601,24 @@ function launchOpts(){
     must(!g.kpi,'c è ancora «Pronte da emettere» in testa');
     must(!/pronta/.test(g.opz),'«Pronta» si può ancora scegliere: '+g.opz);
   });
+  await t('fasi e commessa insieme: tutte le fasi chiuse = commessa completata, e viceversa',async()=>{
+    const g=await p.evaluate(async()=>{
+      const pr=(await SB.from('projects').insert({name:'FS stato',codice:'2099_95',client:'X',status:'attivo'}).select().single()).data;
+      const mk=(k,st)=>SB.from('commessa_fasi').insert({project_id:pr.id,fase_key:k,nome:k,stato:st,ordine:1}).select().single();
+      const a=(await mk('a','completata')).data, b=(await mk('b','in_corso')).data, c=(await mk('c','non_applicabile')).data;
+      await loadAll(true);
+      const st=()=>S.projects.find(x=>x.id===pr.id).status;
+      const r={};
+      await SB.from('commessa_fasi').update({stato:'completata'}).eq('id',b.id); await loadAll(true); r.chiusa=st();
+      await SB.from('commessa_fasi').update({stato:'in_corso'}).eq('id',a.id); await loadAll(true); r.riaperta=st();
+      await SB.from('projects').update({status:'completato'}).eq('id',pr.id); await loadAll(true);
+      r.fasi=S.fasi.filter(x=>x.project_id===pr.id).map(x=>x.fase_key+'='+x.stato).sort().join(',');
+      await SB.from('commessa_fasi').delete().eq('project_id',pr.id); await SB.from('projects').delete().eq('id',pr.id);
+      await loadAll(true); return r; });
+    must(g.chiusa==='completato','chiusa l ultima fase la commessa è '+g.chiusa);
+    must(g.riaperta==='attivo','riaperta una fase la commessa è '+g.riaperta);
+    must(g.fasi==='a=completata,b=completata,c=non_applicabile','commessa completata, fasi: '+g.fasi);
+  });
   await t('report commesse: senza importo, note sui contratti, stato, responsabili',async()=>{
     const g=await p.evaluate(async()=>{
       const mk=async o=>(await SB.from('projects').insert(Object.assign({client:'Cliente R',status:'attivo'},o)).select().single()).data;
