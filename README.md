@@ -1251,14 +1251,26 @@ fatture: le proforma stanno sopra), le **richieste dei responsabili**, le
 tre solo per gli scaglioni senza proforma né fattura). In fondo il controllo
 contratto/fatturazione e le parcelle degli esterni.
 
+### Raggruppate per commessa
+
+In ogni tabella della pagina Fatturazione (proforma emesse, fatture emesse,
+richieste, pronte, matureranno) gli scaglioni sono **raggruppati per
+commessa**: una riga d'intestazione con 📁 codice e nome della commessa,
+cliente, quanti sono e quanto fanno in tutto; sotto, gli scaglioni nel loro
+ordine. Le commesse si susseguono **in ordine di codice** (2022_20, 2024_38,
+2026_16…); quelle senza codice in fondo. Il clic sull'intestazione apre la
+commessa, quello su uno scaglione apre lo scaglione. La ricerca resta un
+elenco unico.
+
 ### Dalla fatturazione alla commessa e all'anagrafica
 
 Fatturando ci si accorge che manca il CAP, la P.IVA o il codice SDI. Per
 correggerlo senza cercare la commessa:
 
-- nelle tabelle di Fatturazione, accanto al nome della commessa, il pulsante
-  **📁** apre la commessa (scheda Fatturazione); se compare **📁!** al
-  committente mancano dati (passandoci sopra si vede quanti);
+- nelle tabelle di Fatturazione, il clic sulla riga **📁** d'intestazione
+  della commessa la apre (scheda Fatturazione); se dopo il nome compare un
+  **!** arancione al committente mancano dati (passandoci sopra si vede
+  quanti). Nei risultati della ricerca c'è il pulsante 📁 accanto al nome;
 - nella scheda dello scaglione e nella revisione Proforma/XML, in basso, ci
   sono **📁 Commessa** e **✏️ Anagrafica**. Nello scaglione, se mancano dati,
   un riquadro in alto li elenca con **Completa l'anagrafica**.

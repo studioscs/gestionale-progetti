@@ -4432,12 +4432,25 @@ function launchOpts(){
       r.revChiusa=!el('m-rev').classList.contains('show');
       closeM('m-cli'); closeM('m-proj');
       S.page='fatturare'; render();
-      r.riga=!!document.querySelector('tr[data-fatt="'+data.id+'"] [data-projfatt="'+pid+'"]');
+      r.riga=!!document.querySelector('tr.riga-gruppo[data-projfatt="'+pid+'"]');
       await SB.from('commessa_fatture').delete().eq('id',data.id); await loadAll(true); render(); return r; });
     must(g.bottoni,'pulsanti Commessa/Anagrafica non visibili nello scaglione');
     must(g.pagina==='project'&&g.proj&&g.tab==='fatture'&&g.chiusa,'non porta alla commessa: '+JSON.stringify(g));
     must(g.anag&&g.revChiusa,'non apre l anagrafica dalla revisione');
-    must(g.riga,'manca il pulsante 📁 sulla riga della fatturazione');
+    must(g.riga,'manca l intestazione della commessa nella fatturazione');
+  });
+  await t('fatturazione: scaglioni raggruppati per commessa, commesse in ordine di codice',async()=>{
+    const g=await p.evaluate(async()=>{
+      const mk=async(codice,name)=>(await SB.from('projects').insert({name,codice,client:'Cliente '+codice,status:'in_corso',amount:1000}).select().single()).data;
+      const a=await mk('2099_02','Zeta ordinamento'), b=await mk('2099_01','Alfa ordinamento');
+      const ins=(pid,d,o)=>SB.from('commessa_fatture').insert({project_id:pid,descrizione:d,imponibile:100,stato:'pronta',ordine:o,isa_tipo:'C05',anno_competenza:2026});
+      await ins(a.id,'Z-saldo',2); await ins(b.id,'A-acconto',1); await ins(a.id,'Z-acconto',1); await ins(b.id,'A-saldo',2);
+      await loadAll(true); S.page='fatturare'; render();
+      const card=[...document.querySelectorAll('.card')].find(c=>/Pronte da emettere/.test(c.querySelector('.card-t')?.textContent||''));
+      const righe=card?[...card.querySelectorAll('tbody tr')].map(tr=>tr.classList.contains('riga-gruppo')?'#'+tr.textContent.trim():tr.cells[0].textContent.trim()):[];
+      return {righe:righe.filter(x=>/ordinamento|^[AZ]-/.test(x)).map(x=>x.startsWith('#')?(/Alfa/.test(x)?'#A':'#Z'):x.slice(0,9)),ids:[a.id,b.id]}; });
+    must(JSON.stringify(g.righe)===JSON.stringify(['#A','A-acconto','A-saldo','#Z','Z-acconto','Z-saldo']),'ordine/raggruppamento: '+JSON.stringify(g.righe));
+    await p.evaluate(async ids=>{ for(const id of ids){ await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id);} await loadAll(true); },g.ids);
   });
 
   await t('intestata alla moglie: la modifica resta rigenerando la stessa proforma',async()=>{

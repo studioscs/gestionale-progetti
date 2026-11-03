@@ -1564,7 +1564,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.12';
+const VERSIONE = '2026.11.03.13';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7697,6 +7697,34 @@ function proformeEmesse(tutte) {
     .sort((a, b) => String(b.proforma_data || '').localeCompare(String(a.proforma_data || ''))
                  || numProforma(b.proforma_numero) - numProforma(a.proforma_numero));
 }
+/* RAGGRUPPATE PER COMMESSA, IN ORDINE DI CODICE
+   Nelle tabelle della fatturazione le righe di una stessa commessa stanno
+   insieme sotto una riga d'intestazione (codice, nome, cliente, quante sono,
+   quanto fanno), e le commesse si susseguono in ordine di codice: 2022_20,
+   2024_38, 2026_16... Quelle senza codice vanno in fondo, per nome. Dentro la
+   commessa gli scaglioni seguono il loro ordine. Il clic sull'intestazione
+   apre la commessa. */
+const chiaveCommessa = p => (p && p.codice ? '0' + p.codice : '1' + String(p && p.name || '')).toLowerCase();
+function gruppiCommessa(arr, pidDi) {
+  const m = new Map();
+  arr.forEach(x => { const pid = pidDi(x); if (!m.has(pid)) m.set(pid, []); m.get(pid).push(x); });
+  return Array.from(m, ([pid, voci]) => ({ pid, p: byId(S.projects, pid) || {}, voci }))
+    .sort((a, b) => chiaveCommessa(a.p).localeCompare(chiaveCommessa(b.p), 'it', { numeric: true }));
+}
+const perOrdine = (a, b) => (Number(a.ordine) || 0) - (Number(b.ordine) || 0)
+  || String(a.data_prevista || '').localeCompare(String(b.data_prevista || ''));
+function rigaGruppoCommessa(g, colonne, n, totale) {
+  const m = datiMancantiCommessa(g.pid).length;
+  return '<tr class="riga-gruppo" data-projfatt="' + g.pid + '" style="cursor:pointer;background:var(--bg)" '
+    + 'title="Apri la commessa' + (m ? ' — al committente mancano ' + m + (m === 1 ? ' dato' : ' dati') : '') + '">'
+    + '<td colspan="' + colonne + '" style="padding-top:9px"><div class="spread" style="gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:12.5px">&#128193; <b>' + esc(nomeConCodice(g.p)) + '</b>'
+      + (g.p.client ? ' <span style="color:var(--mut)">— ' + esc(g.p.client) + '</span>' : '')
+      + (m ? ' <span style="color:var(--ora);font-weight:700" title="Dati del committente mancanti">!</span>' : '')
+      + ' <span class="chip">' + n + '</span></span>'
+    + '<b style="font-size:12.5px">' + feuro(totale) + '</b></div></td></tr>';
+}
+
 /* Il pulsante 📁 accanto al nome della commessa, nelle tabelle della
    fatturazione: il clic sulla riga apre lo scaglione, quello sul pulsante la
    commessa (dove si correggono anche i dati del committente). */
@@ -7720,14 +7748,21 @@ function riquadroProforme() {
     + '<div class="hint" style="margin:-6px 0 10px">' + (S.pfTutte
         ? 'Tutte le proforma scaricate, anche quelle già diventate fattura (non più in attesa).'
         : 'Le proforma scaricate e mandate al committente la cui fattura non è ancora stata emessa.') + '</div>'
-    + (list.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Proforma</th><th>Data</th><th>Commessa</th>'
+    + (list.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Proforma</th><th>Data</th><th>Intestatario</th>'
       + '<th>Scaglione</th><th style="text-align:right">Totale</th><th>Stato</th><th></th></tr></thead><tbody>'
-      + list.map(f => { const c = contiScaglione(f), p = byId(S.projects, f.project_id) || {};
+      + gruppiCommessa(list, f => f.project_id).map(g => {
+          const voci = g.voci.slice().sort(perOrdine);
+          return rigaGruppoCommessa(g, 7, voci.length, r2(voci.reduce((a, f) => a + contiScaglione(f).totale, 0)))
+            + voci.map(rigaProforma).join(''); }).join('')
+      + '</tbody></table></div>'
+      : '<div class="hint" style="margin:0">Nessuna proforma in attesa di fattura.</div>')
+    + '</div>';
+  function rigaProforma(f) { const c = contiScaglione(f);
           return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
-            + '<td><b>' + esc(f.proforma_numero) + '</b></td>'
+            + '<td style="padding-left:22px"><b>' + esc(f.proforma_numero) + '</b></td>'
             + '<td style="font-size:12px">' + fdate(f.proforma_data || String(f.proforma_at || '').slice(0, 10)) + '</td>'
-            + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b>' + bottoneCommessa(f.project_id) + '<div style="color:var(--mut)">' + esc(intestatarioDi(f))
-              + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
+            + '<td style="font-size:12px">' + esc(intestatarioDi(f))
+              + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</td>'
             + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
             + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
             + '<td>' + bdg(f.stato, ST_FATT) + (f.numero_fattura && !fattAperta(f)
@@ -7737,10 +7772,7 @@ function riquadroProforme() {
             + '<td class="ac" style="white-space:nowrap">' + (fattAperta(f) ? bottoneSolleciti(f) : '')
               + (canW() && fattAperta(f) ? '<button class="btn btn-xs" data-fproforma="' + f.id
                 + '" title="Riapri la proforma (si può riscaricare)">&#128196;</button> '
-                + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Pagata: genera la fattura XML">&#128229;</button>' : '') + '</td></tr>'; }).join('')
-      + '</tbody></table></div>'
-      : '<div class="hint" style="margin:0">Nessuna proforma in attesa di fattura.</div>')
-    + '</div>';
+                + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Pagata: genera la fattura XML">&#128229;</button>' : '') + '</td></tr>'; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -8102,9 +8134,7 @@ function rFatturare() {
     const c = contiScaglione(f);
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
-      + '<td style="font-size:12px"><b>' + esc(pn(f.project_id)) + '</b>' + bottoneCommessa(f.project_id)
-        + '<div style="color:var(--mut)">' + esc((byId(S.projects, f.project_id) || {}).client || '') + '</div></td>'
-      + '<td>' + esc(f.descrizione)
+      + '<td style="padding-left:22px">' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
       + '<td>' + bdg(f.stato, ST_FATT) + (f.proforma_numero ? '<div style="font-size:11px;color:var(--blue);margin-top:3px">📄 proforma ' + esc(f.proforma_numero)
             + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '') + '</div>' : '')
@@ -8127,18 +8157,23 @@ function rFatturare() {
     + titolo + ' <span class="chip">' + (arr.length + (extra ? extra.length : 0)) + '</span></span>'
     + '<b style="font-size:13px">' + feuro(r2(arr.reduce((a, f) => a + impFattura(f), 0)
         + (extra || []).reduce((a, x) => a + x.c.scoperto, 0))) + '</b></div>'
-    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th>Scaglione</th><th>Stato</th>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th>'
     + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
-    + '<th>Prevista</th><th></th></tr></thead><tbody>' + arr.map(riga).join('')
-    + (extra || []).map(x => '<tr class="riga-saldo" data-projfatt="' + x.p.id + '" style="cursor:pointer">'
-        + '<td style="font-size:12px"><b>' + esc(x.p.name) + '</b><div style="color:var(--mut)">' + esc(x.p.client || '') + '</div></td>'
-        + '<td><b style="color:var(--red)">' + (x.c.nScag ? 'Saldo finale mancante' : 'Nessuno scaglione') + '</b>'
+    + '<th>Prevista</th><th></th></tr></thead><tbody>'
+    + gruppiCommessa(arr.map(f => ({ f, pid: f.project_id }))
+        .concat((extra || []).map(x => ({ x, pid: x.p.id }))), v => v.pid).map(g => {
+        const fatt = g.voci.filter(v => v.f).map(v => v.f).sort(perOrdine), ex = g.voci.filter(v => v.x).map(v => v.x);
+        return rigaGruppoCommessa(g, 6, fatt.length + ex.length,
+                 r2(fatt.reduce((a, f) => a + impFattura(f), 0) + ex.reduce((a, x) => a + x.c.scoperto, 0)))
+          + fatt.map(riga).join('') + ex.map(rigaSaldo).join(''); }).join('')
+    + '</tbody></table></div></div>';
+  function rigaSaldo(x) { return '<tr class="riga-saldo" data-projfatt="' + x.p.id + '" style="cursor:pointer">'
+        + '<td style="padding-left:22px"><b style="color:var(--red)">' + (x.c.nScag ? 'Saldo finale mancante' : 'Nessuno scaglione') + '</b>'
           + '<div style="font-size:11px;color:var(--mut)">contratto ' + feuro(x.c.imp) + ', negli scaglioni ' + feuro(x.c.piano) + '</div></td>'
         + '<td><span class="bdg br">Da inserire</span></td>'
         + '<td style="text-align:right;color:var(--red)"><b>' + feuro(x.c.scoperto) + '</b></td>'
         + '<td></td><td></td>'
-        + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>').join('')
-    + '</tbody></table></div></div>';
+        + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>'; }
 
   el('page').innerHTML = barraCercaFatt()
     + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
@@ -8767,7 +8802,8 @@ function clienteDellaCommessa(pid) {
 function datiMancantiCommessa(pid) {
   const p = byId(S.projects, pid); if (!p) return [];
   const c = clienteDellaCommessa(pid);
-  if (c) return datiMancantiCliente(c);
+  /* qui contano i dati che servono alla fattura: email e telefono no */
+  if (c) return datiMancantiCliente(c).filter(x => x !== 'email' && x !== 'telefono');
   const v = k => String(p[k] || '').trim(), m = [];
   if (!v('cliente_cf') && !v('cliente_piva')) m.push('codice fiscale o partita IVA');
   if (!v('cliente_indirizzo')) m.push('indirizzo');
