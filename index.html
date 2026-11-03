@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.22';
+const VERSIONE = '2026.11.03.23';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -9545,7 +9545,8 @@ function numeroSuccessivo(usati, anno, standard) {
 function numeriDellAnno(campoNum, campoData, anno, escludi) {
   const a4 = String(anno);
   return S.fatture.filter(f => f.id !== escludi && f[campoNum])
-    .filter(f => f[campoData] ? annoDi(f[campoData]) === Number(anno) : String(f[campoNum]).indexOf(a4) >= 0)
+    .filter(f => f[campoData] ? annoDi(f[campoData]) === Number(anno)
+      : String(f[campoNum]).indexOf(a4) >= 0 || new RegExp('/\\s*' + a4.slice(-2) + '\\s*$').test(String(f[campoNum])))
     .map(f => String(f[campoNum]));
 }
 /* Lo stesso numero gia' su un altro documento dello stesso anno */
@@ -9608,10 +9609,20 @@ async function generaProforma() {
    dopo 16/PA viene 17/PA). Senza serie resta la regola di prima: il piu'
    alto dell'anno, in qualunque formato. */
 const serieFattura = pid => (byId(S.projects, pid) || {}).ente_pubblico ? 'PA' : 'FE';
-const dellaSerie = (num, serie) => new RegExp('\\/\\s*' + serie + '\\s*$', 'i').test(String(num || '').trim());
+/* La serie: «67/FE» e, dal 2027, «001/FE/27» (con l'anno in fondo) */
+const dellaSerie = (num, serie) => new RegExp('\\/\\s*' + serie + '\\s*(\\/\\s*\\d{2}\\s*)?$', 'i').test(String(num || '').trim());
+/* DAL 2027 IL NUMERO PORTA L'ANNO: nnn/FE/YY e nnn/PA/YY (es. 001/FE/27).
+   Lo stesso numero puo' tornare in anni diversi - 59/FE del 2026 e del
+   2027 sono due fatture diverse - e con l'anno scritto dentro non ci si
+   confonde piu'. Il contatore riparte da 001 ogni anno; sempre modificabile. */
+const ANNO_NUMERO_CON_ANNO = 2027;
 function prossimoNumero(anno, escludi, serie) {
   anno = anno || today().getFullYear();
   const usati = numeriDellAnno('numero_fattura', 'data_fattura', anno, escludi);
+  if (serie && anno >= ANNO_NUMERO_CON_ANNO) {
+    const n = usati.filter(x => dellaSerie(x, serie)).map(x => (contatoreDi(x, anno) || { n: 0 }).n);
+    return String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0') + '/' + serie + '/' + String(anno).slice(-2);
+  }
   if (serie) return numeroSuccessivo(usati.filter(n => dellaSerie(n, serie)), anno, '1/' + serie);
   return numeroSuccessivo(usati, anno, anno + '/001');
 }

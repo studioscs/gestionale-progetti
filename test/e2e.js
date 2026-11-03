@@ -4598,6 +4598,25 @@ function launchOpts(){
     must(!g.kpi,'c è ancora «Pronte da emettere» in testa');
     must(!/pronta/.test(g.opz),'«Pronta» si può ancora scegliere: '+g.opz);
   });
+  await t('dal 2027 il numero porta l anno: 001/FE/27, 001/PA/27',async()=>{
+    const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const r={fe0:prossimoNumero(2027,null,'FE'),pa0:prossimoNumero(2027,null,'PA'),v26:prossimoNumero(2026,null,'FE')};
+      const a=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'N27',imponibile:100,stato:'emessa',isa_tipo:'C05',anno_competenza:2027,
+        numero_fattura:'005/FE/27',data_fattura:'2027-02-01',ordine:96})).data;
+      await loadAll(true);
+      r.fe1=prossimoNumero(2027,null,'FE'); r.pa1=prossimoNumero(2027,null,'PA');
+      /* stesso numero, anni diversi: non e' un doppione */
+      const b=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'N26',imponibile:100,stato:'emessa',isa_tipo:'C05',anno_competenza:2026,
+        numero_fattura:'005/FE/27',data_fattura:'2026-02-01',ordine:97})).data;
+      await loadAll(true);
+      r.doppio=problemiNumeri().some(x=>/N2[67]/.test(x.f.descrizione)&&x.p.some(t=>/anche su/.test(t)));
+      for(const d of ['N27','N26']){ const f=S.fatture.find(x=>x.descrizione===d); if(f) await SB.from('commessa_fatture').delete().eq('id',f.id); }
+      await loadAll(true); return r; });
+    must(g.fe0==='001/FE/27'&&g.pa0==='001/PA/27','primo numero del 2027: '+g.fe0+' '+g.pa0);
+    must(!/\/27$/.test(g.v26),'il 2026 ha cambiato formato: '+g.v26);
+    must(g.fe1==='006/FE/27'&&g.pa1==='001/PA/27','dopo il 005/FE/27: '+g.fe1+' '+g.pa1);
+    must(!g.doppio,'lo stesso numero in anni diversi risulta doppione');
+  });
   await t('numeri di fattura: su uno scaglione non emesso si toglie, i doppioni si segnalano',async()=>{
     const g=await p.evaluate(async()=>{ const y=today().getFullYear(), pid=S.projects[0].id;
       const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',anno_competenza:y,ordine:94,imponibile:100},o)).select().single();

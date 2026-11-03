@@ -765,7 +765,8 @@ ctx.S.fatture=[
 t('privati: dopo 66/FE viene 67/FE (non conta la serie PA)',ctx.prossimoNumero(2026,null,'FE')==='67/FE',ctx.prossimoNumero(2026,null,'FE'));
 t('PA: dopo 16/PA viene 17/PA (non conta la serie FE)',ctx.prossimoNumero(2026,null,'PA')==='17/PA',ctx.prossimoNumero(2026,null,'PA'));
 t('rinumerando la 16/PA stessa si torna a 10/PA',ctx.prossimoNumero(2026,'p2','PA')==='10/PA',ctx.prossimoNumero(2026,'p2','PA'));
-t('anno nuovo: ogni serie riparte da 1',ctx.prossimoNumero(2027,null,'FE')==='1/FE'&&ctx.prossimoNumero(2027,null,'PA')==='1/PA',[ctx.prossimoNumero(2027,null,'FE'),ctx.prossimoNumero(2027,null,'PA')]);
+t('anno nuovo (dal 2027 con l anno): ogni serie riparte da 001/../27',ctx.prossimoNumero(2027,null,'FE')==='001/FE/27'&&ctx.prossimoNumero(2027,null,'PA')==='001/PA/27',[ctx.prossimoNumero(2027,null,'FE'),ctx.prossimoNumero(2027,null,'PA')]);
+t('la serie con l anno in fondo si riconosce',ctx.dellaSerie('012/FE/27','FE')&&!ctx.dellaSerie('012/PA/27','FE'),null);
 t('la serie si riconosce anche scritta minuscola o con spazi',ctx.dellaSerie('12 / pa','PA')&&!ctx.dellaSerie('12/FE','PA'),null);
 ctx.S.fatture=[
   {id:'a',numero_fattura:'47',data_fattura:'2026-03-01',proforma_numero:'2026/004',proforma_data:'2026-02-01'},

@@ -1470,6 +1470,16 @@ fiscale e fatturato per anno contano ogni parte nell'anno giusto.
 Si può solo finché lo scaglione è da emettere o pronto: con la proforma o il
 numero di fattura il documento è già uno.
 
+### Dal 2027 il numero di fattura porta l'anno
+
+Lo stesso numero torna ogni anno (il 59/FE del 2026 e quello del 2027 sono
+due fatture diverse, ed è normale). Per non confonderle, **dal 2027** il
+numero proposto ha l'anno in fondo: **001/FE/27**, **001/PA/27** (fatture ai
+privati e alla PA, due serie separate), con il contatore che riparte da 001
+ogni anno. Resta sempre modificabile. Fino al 2026 il formato non cambia.
+Il controllo dei doppioni guarda il numero **e l'anno della data della
+fattura**: stesso numero in anni diversi non è un doppione.
+
 ### Numeri e date delle fatture da verificare
 
 In fondo a Fatturazione, se ce ne sono, il riquadro rosso **Numeri e date
