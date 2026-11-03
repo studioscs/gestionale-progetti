@@ -1336,8 +1336,7 @@ function launchOpts(){
   });
   await t('pagina Da fatturare',async()=>{
     await p.click('.sn[data-page="fatturare"]'); await p.waitForTimeout(700);
-    must(/Pronte da emettere/.test(await p.textContent('#page'))
-      || /Matureranno/.test(await p.textContent('#page')),'pagina vuota');
+    must(/Chieste dai responsabili|Matureranno|Senza data prevista|Proforma emesse|Fatture emesse/.test(await p.textContent('#page')),'pagina vuota');
     must(await p.locator('tbody tr[data-fatt]').count()>0,'nessuno scaglione elencato');
   });
   await t('badge laterale conta gli scaglioni aperti',async()=>{
