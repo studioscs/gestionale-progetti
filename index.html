@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.21';
+const VERSIONE = '2026.11.03.22';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3713,7 +3713,15 @@ async function boot() {
       S.prof.email = user.email;
     }
     if (prof.attivo === false) {
-      toast('Il tuo account è disattivato: contatta un amministratore.', 'error');
+      /* disattivato: nel database non ha piu' accesso a niente (046); qui
+         non si entra nemmeno */
+      await SB.auth.signOut();
+      el('auth').classList.remove('hide');
+      el('app').classList.remove('show');
+      return showErr('Il tuo account è disattivato: contatta un amministratore.');
+    }
+    if (prof.role === 'viewer' && !prof.vede_tutto) {
+      toast('Il tuo account è in attesa di abilitazione: un amministratore deve assegnarti un ruolo.', 'info');
     }
   }
 
@@ -3765,19 +3773,28 @@ async function doRegister() {
   if (p1.length < 8)    return fail('La password deve avere almeno 8 caratteri.');
   if (p1 !== p2)        return fail('Le password non coincidono.');
   setLoading('rbtn', true);
-  const { error } = await SB.auth.signUp({
+  /* Il ruolo non si manda: lo decide il database (migrazione 046), e chi si
+     iscrive nasce senza accesso finche' un amministratore non lo abilita. */
+  const { data, error } = await SB.auth.signUp({
     email, password: p1,
-    options: { data: { full_name: nome, role: 'viewer' } }
+    options: { data: { full_name: nome }, emailRedirectTo: location.origin + location.pathname }
   });
   setLoading('rbtn', false);
-  if (error) return fail(error.message);
+  if (error) return fail(/not allowed|disabled/i.test(error.message)
+    ? 'Le iscrizioni sono chiuse: chiedi a un amministratore di invitarti.' : error.message);
+  /* Con la conferma dell'email spenta su Supabase l'account e' gia' attivo e
+     la sessione aperta: si chiude, perche' dentro non c'e' ancora niente. */
+  const confermata = !!(data && data.session);
+  if (confermata) await SB.auth.signOut();
   el('regpanel').style.display = 'none';
   el('areglink').style.display = 'none';
   const ok = document.createElement('div');
   ok.className = 'aok';
   ok.innerHTML = '<b>&#10003; Registrazione completata</b><br><span style="font-size:12px">'
-    + 'Conferma l’account dalla mail che hai ricevuto, poi accedi.<br>'
-    + 'Un amministratore dovrà abilitarti come Collaboratore.</span>';
+    + (confermata
+        ? 'La password è quella che hai appena scelto.<br>'
+        : 'Ti abbiamo mandato una mail: apri il link per confermare l’indirizzo, poi accedi con la password che hai scelto.<br>')
+    + 'Finché un amministratore non ti abilita, nel gestionale non vedrai nessuna commessa.</span>';
   el('abox-inner').appendChild(ok);
 }
 
@@ -12539,7 +12556,8 @@ async function salvaCosto(uid) {
 function rUsers() {
   if (!isAd()) return el('page').innerHTML = '<div class="card"><div class="empty"><p>Accesso riservato agli amministratori.</p></div></div>';
   el('top-act').innerHTML = '<div class="ibox" style="font-size:11.5px;max-width:520px">'
-    + 'Invita gli utenti da Supabase &rarr; Authentication &rarr; Users, oppure falli registrare: nascono <b>Viewer</b> e li attivi qui.</div>';
+    + 'Invita gli utenti da Supabase &rarr; Authentication &rarr; Users, oppure falli registrare: nascono <b>Viewer</b> senza accesso '
+    + 'alle commesse e li abiliti qui (ruolo, oppure «vede tutte le commesse» per il commercialista). Disattivato = non entra più.</div>';
   el('page').innerHTML = '<div class="card"><div class="tw"><table><thead><tr>'
     + '<th>Utente</th><th>Email</th><th>Ruolo</th><th>Stato</th><th>Attività aperte</th>'
     + '<th style="text-align:right">Costo orario</th><th></th></tr></thead><tbody>'
@@ -12548,7 +12566,7 @@ function rUsers() {
         const rc = u.role === 'admin' ? '<span class="chip chip-a">Admin</span>'
                  : u.role === 'collaboratore' ? '<span class="chip chip-c">Collaboratore</span>'
                  : eCommercialista(u) ? '<span class="chip" title="Vede tutto come l’amministrazione, in sola lettura">Commercialista</span>'
-                 : '<span class="chip">Viewer</span>';
+                 : '<span class="chip chip-a" title="Iscritto da solo: non vede nessuna commessa finché non lo abiliti">Da abilitare</span>';
         return '<tr><td><span class="row">' + av(u.id, 28) + '<b>' + esc(u.full_name) + '</b></span></td>'
           + '<td style="font-size:12px;color:var(--mut)">' + esc(u.email || '-') + '</td>'
           + '<td>' + rc + '</td>'

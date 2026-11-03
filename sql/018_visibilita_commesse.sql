@@ -44,6 +44,7 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (
     select 1 from public.profiles p
     where p.id = auth.uid() and (p.role = 'admin' or p.vede_tutto)
+      and coalesce(p.attivo, true)          -- disattivato = niente (migrazione 046)
   );
 $$;
 
@@ -64,7 +65,9 @@ create or replace function private.commesse_visibili()
 returns setof uuid language sql stable security definer set search_path = public as $$
   select p.id
   from public.projects p
-  where private.vede_tutte_commesse()
+  -- solo per gli utenti attivi (migrazione 046)
+  where exists (select 1 from public.profiles u where u.id = auth.uid() and coalesce(u.attivo, true))
+    and (private.vede_tutte_commesse()
      or p.owner_id   = auth.uid()
      or p.created_by = auth.uid()
      or exists (select 1 from public.tasks t
@@ -75,7 +78,7 @@ returns setof uuid language sql stable security definer set search_path = public
      or exists (select 1 from public.commessa_pratiche c
                 where c.project_id = p.id and c.responsabile_id = auth.uid())
      or exists (select 1 from public.time_entries e
-                where e.project_id = p.id and e.operator_id = auth.uid());
+                where e.project_id = p.id and e.operator_id = auth.uid()));
 $$;
 
 -- Comoda per le verifiche a mano e per un singolo controllo mirato

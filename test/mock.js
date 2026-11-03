@@ -358,7 +358,11 @@
         if(attrs.data&&'pwd_da_scegliere' in attrs.data) window.__PWDDASCEGLIERE=attrs.data.pwd_da_scegliere;
         return Promise.resolve({data:{user:{id:'u-me'}},error:null}); },
       resetPasswordForEmail:(em,o)=>{ window.__RESET={email:em,opts:o}; return Promise.resolve({data:{},error:null}); },
-      signOut:()=>Promise.resolve({error:null})
+      /* Iscrizione: con __CONFERMA Supabase chiede di confermare la mail e
+         non apre la sessione; senza, l'account e' gia' attivo e la apre. */
+      signUp:(o)=>{ window.__SIGNUP=o;
+        return Promise.resolve({data:{user:{id:'u-nuovo'},session:window.__CONFERMA?null:{user:{id:'u-nuovo'}}},error:null}); },
+      signOut:()=>{ window.__SIGNEDOUT=(window.__SIGNEDOUT||0)+1; return Promise.resolve({error:null}); }
     },
     /* La funzione «ipa» (Indice PA) con un solo ufficio inventato: TSTU01.
        __IPAGIU simula l'IPA irraggiungibile. */

@@ -223,6 +223,40 @@ function launchOpts(){
     must(/Inserisci prima la tua email/.test(await p.textContent('#tc')),await p.textContent('#tc'));
     await p.close();
   });
+  /* ISCRIZIONE E ACCOUNT DISATTIVATO (migrazione 046) */
+  const iscriviti=async(conferma)=>{
+    const p=await b.newPage();
+    await p.addInitScript(c=>{ window.__NOSESSION=true; window.__CONFERMA=c; },conferma);
+    await p.goto(URL0); await p.waitForTimeout(900);
+    await p.click('#areglink'); await p.waitForTimeout(200);
+    await p.fill('#rnome','Mario Rossi'); await p.fill('#remail','mario@esempio.it');
+    await p.fill('#rpass','Password123'); await p.fill('#rpass2','Password123');
+    await p.click('#rbtn'); await p.waitForTimeout(500);
+    return p; };
+  await t('iscrizione senza conferma via mail: dice che la password è quella scelta e chiude la sessione',async()=>{
+    const p=await iscriviti(false);
+    const txt=await p.textContent('#abox-inner');
+    must(/password è quella che hai appena scelto/.test(txt),'messaggio: '+txt);
+    must(/non vedrai nessuna commessa/.test(txt),'non dice che serve l abilitazione');
+    must(!/Conferma l’account dalla mail/.test(txt),'parla ancora di una mail che non arriva');
+    must(await p.evaluate(()=>window.__SIGNEDOUT>0),'la sessione non è stata chiusa');
+    const su=await p.evaluate(()=>window.__SIGNUP);
+    must(!(su.options&&su.options.data&&su.options.data.role),'manda ancora il ruolo: '+JSON.stringify(su));
+    await p.close();
+  });
+  await t('iscrizione con conferma via mail: dice di aprire il link',async()=>{
+    const p=await iscriviti(true);
+    must(/apri il link per confermare/.test(await p.textContent('#abox-inner')),'non spiega la conferma');
+    await p.close();
+  });
+  await t('account disattivato: non si entra',async()=>{
+    const p=await nuova();
+    await p.evaluate(async()=>{ const me=__DB.profiles.find(x=>x.id===S.me.id); me.attivo=false; await boot(); });
+    await p.waitForTimeout(400);
+    must(/disattivato/.test(await p.textContent('#aerr')),'nessun messaggio sul login');
+    must(!(await p.isVisible('#app')),'è entrato nell app');
+    await p.close();
+  });
   console.log('✓ '+ok.length+' passati'); ko.forEach(x=>console.log('✗ '+x));
   await b.close(); process.exit(ko.length?1:0);
 })();

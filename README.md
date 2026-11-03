@@ -63,6 +63,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 42. [`sql/043_intestatario_fattura.sql`](sql/043_intestatario_fattura.sql) — fattura o proforma intestata a chi paga, se non è il committente
 43. [`sql/044_motivo_incasso.sql`](sql/044_motivo_incasso.sql) — il motivo di un incasso diverso dal dovuto
 44. [`sql/045_pronta_diventa_richiesta.sql`](sql/045_pronta_diventa_richiesta.sql) — niente più stato «pronta»: quello che si può fatturare è una richiesta
+45. [`sql/046_accessi_sicuri.sql`](sql/046_accessi_sicuri.sql) — chi si iscrive da solo non ottiene niente; disattivato = fuori
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -2769,3 +2770,37 @@ perché protetta da RLS.
 - La chiave anon Supabase è nel sorgente: è corretto e previsto, ma **richiede che
   RLS sia attiva su tutte le tabelle**. La migrazione la configura sulle tabelle
   nuove; verifica che lo sia anche su quelle preesistenti.
+
+## Iscrizione e accesso
+
+**Come funziona oggi.** Su Supabase la *conferma dell'email* è spenta: chi
+si iscrive dalla pagina di accesso sceglie la sua password lì, l'account è
+subito attivo e **nessuna mail di conferma parte** (per questo il
+commercialista non l'ha ricevuta: non c'era niente da confermare, la
+password l'aveva già scelta). Il gestionale ora lo dice chiaramente alla
+fine dell'iscrizione.
+
+**Chi si iscrive da solo non ottiene niente** (migrazione 046): nasce
+«viewer», non vede nessuna commessa, nessun cliente, nessuna fattura e
+nell'elenco utenti solo se stesso; in Gestione utenti compare come **Da
+abilitare**. Lo abilita un amministratore: ruolo Collaboratore/Admin, oppure
+«vede tutte le commesse» per il commercialista (sola lettura di tutto).
+Nessuno, tranne un amministratore, può cambiarsi ruolo, stato o «vede tutto»,
+nemmeno chiamando direttamente il database.
+
+**Disattivato = fuori.** Un utente disattivato non ha più accesso a niente
+nel database, non riesce più ad accedere (l'account è sospeso anche su
+Supabase) e la sessione eventualmente aperta scade entro un'ora.
+Riattivandolo torna come prima.
+
+**Consigliato, da fare una volta nel pannello di Supabase** (non si può
+fare dal gestionale): *Authentication → Sign In / Providers → Email*
+
+- **«Allow new users to sign up» spento**, se gli utenti li aggiungete solo
+  voi: si invitano da *Authentication → Users → Invite user*, ricevono la
+  mail e scelgono la password al primo accesso (il gestionale lo gestisce);
+- oppure **«Confirm email» acceso**, se volete lasciare l'iscrizione aperta:
+  chi si iscrive deve aprire il link ricevuto prima di poter entrare. In
+  *Authentication → URL Configuration* il *Site URL* deve essere l'indirizzo
+  del gestionale, altrimenti il link porta altrove.
+
