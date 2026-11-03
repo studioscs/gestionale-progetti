@@ -1550,7 +1550,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.3';
+const VERSIONE = '2026.11.03.4';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7689,7 +7689,7 @@ function riquadroProforme() {
 }
 
 /* ---------------------------------------------------------------------------
-   REPORT INCASSI E PAGAMENTI ("black list")
+   REPORT INCASSI E PAGAMENTI («lista debitori», prima «black list»)
    Lo stesso foglio che lo studio teneva a mano: le fatture emesse e non
    ancora pagate, le proforme mandate e non ancora saldate, e quello che lo
    studio deve a fornitori ed esterni. Il saldo del conto in banca il
@@ -7753,7 +7753,7 @@ function reportIncassi(saldo) {
   const inMora = d.emesse.concat(d.proforme).filter(x => x.f.messa_in_mora);
   const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Importo'];
   return {
-    titolo: 'Black list — ' + nome,
+    titolo: 'Lista debitori — ' + nome,
     sottotitolo: 'Situazione al ' + fdate(todayISO()) + ': chi ci deve pagare e chi dobbiamo pagare',
     sezioni: [
       { titolo: 'Riepilogo', campi: [
@@ -7763,7 +7763,7 @@ function reportIncassi(saldo) {
         .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
           + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
-      { titolo: 'Black list — fatture emesse non ancora incassate', tabella: { col, dx: [4], largo: 2, totCol: 4,
+      { titolo: 'Lista debitori — fatture emesse non ancora incassate', tabella: { col, dx: [4], largo: 2, totCol: 4,
           righe: d.emesse.map(riga), tot: d.emesse.length ? [['Totale fatture da incassare', feuro(d.totEmesse)]] : null,
           vuoto: 'Nessuna fattura emessa in attesa di pagamento.' } },
       { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: [4], largo: 2, totCol: 4,
@@ -7780,8 +7780,8 @@ const SALDO_KEY = 'scs.saldoConto';
 function apriReportIncassi() {
   let v = '';
   try { v = localStorage.getItem(SALDO_KEY) || ''; } catch (e) {}
-  SCHEDA = { s: null, crea: reportIncassi, nomeFile: nomeFilePdf('Black-list', todayISO()) };
-  el('mst-t').textContent = 'Black list: incassi e pagamenti in sospeso';
+  SCHEDA = { s: null, crea: reportIncassi, nomeFile: nomeFilePdf('Lista-debitori', todayISO()) };
+  el('mst-t').textContent = 'Lista debitori: incassi e pagamenti in sospeso';
   el('mst-extra').innerHTML = '<div class="fg"><label class="fl">Saldo del conto oggi €</label>'
     + '<input class="fc" type="number" step="0.01" id="mst-saldo" value="' + esc(v) + '" placeholder="es. 6295,24">'
     + '<div class="hint">Il gestionale non vede la banca: lo scrivi tu, e resta su questo dispositivo per la prossima volta. Si può lasciare vuoto.</div></div>';

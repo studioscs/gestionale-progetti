@@ -831,7 +831,7 @@ dallo scaglione. Lo stesso avviso, con lo
 stesso pulsante, compare in testa alla scheda *Fatturazione* della commessa.
 Le commesse archiviate non si controllano.
 
-## Report incassi e pagamenti ("black list")
+## Report incassi e pagamenti («lista debitori»)
 
 In *Fatturazione* il pulsante **🖨️ Report incassi** (solo per chi tiene
 l'amministrazione) stampa su carta o scarica in PDF lo stesso foglio che lo
@@ -842,7 +842,7 @@ studio teneva a mano:
   saldare*. Il saldo del conto il gestionale non lo conosce: si scrive al
   momento della stampa e resta ricordato su quel dispositivo (si può lasciare
   vuoto).
-- **Black list**: fatture **emesse e non ancora incassate**, con anno, numero,
+- **Lista debitori**: fatture **emesse e non ancora incassate**, con anno, numero,
   intestatario e quanto il committente deve versare (imponibile, cassa, IVA,
   spese anticipate, meno l'eventuale ritenuta; per gli enti in scissione dei
   pagamenti senza l'IVA, che l'ente versa all'erario). Conta l'importo
@@ -1244,8 +1244,8 @@ non si crea mai due volte, nemmeno con due persone collegate insieme (lo
 impedisce il database, migrazione
 [`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql)). Nella lista
 dei costi ogni voce mostra 🔁 *annuale* e, se non pagata, la scadenza (in
-rosso se passata); le rate dell'anno in corso non pagate entrano nella black
-list.
+rosso se passata); le rate dell'anno in corso non pagate entrano nella lista
+debitori.
 
 ## ISA: il quadro C si compila da sé
 

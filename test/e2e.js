@@ -3515,7 +3515,7 @@ function launchOpts(){
     const txt=await p.textContent('#page');
     must(/Canone software di calcolo/.test(txt)&&/annuale/.test(txt)&&/scade il 31\/03\/2026/.test(txt),'la pagina non mostra rata e scadenza');
   });
-  await t('nella black list i debiti: costi generali dell anno non pagati e parcelle, in ordine di scadenza',async()=>{
+  await t('nella lista debitori i debiti: costi generali dell anno non pagati e parcelle, in ordine di scadenza',async()=>{
     const g=await p.evaluate(()=>{ const d=datiReportIncassi();
       const canone=d.daSaldare.filter(x=>/Canone software/.test(x.det||x.chi)||/Software House/.test(x.chi));
       const anno=today().getFullYear();
@@ -3524,8 +3524,8 @@ function launchOpts(){
       return {canone:canone.map(x=>x.num), nonPagati, costiInLista, tot:d.totSaldare,
         somma:r2(d.daSaldare.reduce((a,x)=>a+x.importo,0))}; });
     /* solo l'anno solare della lista: la rata 2027, gia' preparata, resta fuori */
-    must(g.canone.join()==='SCADE 31/03/'+new Date().getFullYear(),'rate del canone nella black list: '+g.canone.join());
-    must(g.costiInLista===g.nonPagati,'i costi da pagare dell anno non sono tutti nella black list: '+g.costiInLista+' su '+g.nonPagati);
+    must(g.canone.join()==='SCADE 31/03/'+new Date().getFullYear(),'rate del canone nella lista debitori: '+g.canone.join());
+    must(g.costiInLista===g.nonPagati,'i costi da pagare dell anno non sono tutti nella lista debitori: '+g.costiInLista+' su '+g.nonPagati);
     must(g.tot===g.somma,'il totale da saldare non torna');
   });
   /* ---------------- PREVENTIVI ---------------- */
@@ -4181,7 +4181,7 @@ function launchOpts(){
     must(/migrazione 034/.test(tst),'messaggio: '+tst);
   });
 
-  /* ---------------- REPORT INCASSI E PAGAMENTI (BLACK LIST) ---------------- */
+  /* ---------------- REPORT INCASSI E PAGAMENTI (LISTA DEBITORI) ---------------- */
   let BL=null;
   await t('il report incassi raccoglie fatture emesse, proforme e debiti dello studio',async()=>{
     BL=await p.evaluate(async()=>{ S.prof.role='admin';
@@ -4209,7 +4209,7 @@ function launchOpts(){
     await p.click('#mst-carta'); await p.waitForTimeout(700);
     const h=await p.evaluate(()=>window.__STAMPA||'');
     const blocco=(da,a)=>h.slice(h.indexOf(da),a?h.indexOf(a):undefined);
-    const emesse=blocco('Black list — fatture emesse','Proforme in attesa');
+    const emesse=blocco('Lista debitori — fatture emesse','Proforme in attesa');
     const prof=blocco('Proforme in attesa','Da saldare');
     const deb=blocco('Da saldare');
     must(/BL-1\/PA/.test(emesse)&&/COMUNE DI PROVA BL/.test(emesse)&&emesse.indexOf(BL.pa)>=0,'fattura PA non riportata o importo diverso da '+BL.pa);
@@ -4230,7 +4230,7 @@ function launchOpts(){
     await p.click('#bl-btn'); await p.waitForSelector('#m-stampa.show',{timeout:3000});
     const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#mst-pdf')]);
     must(dl,'nessun PDF scaricato');
-    must(/^Black-list-/.test(dl.suggestedFilename()),'nome file: '+dl.suggestedFilename());
+    must(/^Lista-debitori-/.test(dl.suggestedFilename()),'nome file: '+dl.suggestedFilename());
     const txt=await testoPdf(await dl.path());
     must(/BL-1\/PA/.test(txt)&&/PROFORMA BL7/.test(txt)&&/Fornitore BL/.test(txt)&&/6\.295,24/.test(txt),'PDF incompleto: '+txt.slice(0,400));
   });
