@@ -1255,6 +1255,27 @@ stato **Pronta** nella riga dice che si possono già emettere (il numero in
 testa «Pronte da emettere» resta). In fondo il controllo
 contratto/fatturazione e le parcelle degli esterni.
 
+### L'anno fiscale, per competenza
+
+Sotto i numeri di sintesi c'è il riquadro **📅 Anno fiscale** (quello in
+corso; con ◀ ▶ si passa all'anno prima o dopo). Divide gli scaglioni per
+**anno di competenza** — lo stesso dell'ISA — in cinque caselle, con
+l'imponibile e quanti sono:
+
+1. **di competenza dell'anno, da fatturare nell'anno**: non ancora
+   fatturati, ma con la proforma mandata, pronti, o con la data prevista
+   entro il 31/12 — da fatturare e quindi da incassare;
+2. **di competenza dell'anno, fatturato e incassato**;
+3. **di competenza dell'anno, fatturato e non ancora incassato**;
+4. **di competenza dell'anno, da fatturare l'anno dopo**: data prevista
+   oltre il 31/12 o non ancora indicata (si dice quanti sono senza data);
+5. **di competenza dell'anno successivo**, tutto.
+
+In testa il totale delle prime quattro. Le regole sono quelle del Report
+incassi, quindi i numeri tornano fra le due pagine. Gli scaglioni aperti
+senza anno di competenza né date non stanno in nessun anno: una riga sotto
+dice quanti sono.
+
 ### Raggruppate per commessa
 
 In ogni tabella della pagina Fatturazione (proforma emesse, fatture emesse,

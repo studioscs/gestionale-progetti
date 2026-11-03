@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.14';
+const VERSIONE = '2026.11.03.15';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7870,6 +7870,56 @@ function numeriAnno(y) {
     totEntro: { imponibile: somma(compEntro, impFattura), lordo: somma(compEntro, lordo) },
     totDopo:  { imponibile: somma(compDopo, impFattura), lordo: somma(compDopo, lordo) } };
 }
+/* L'ANNO FISCALE IN TESTA ALLA FATTURAZIONE
+   Per l'anno di competenza X (di norma quello in corso; si scorre con ◀ ▶):
+   - di competenza X, ancora da fatturare ma che si fatturera' entro l'anno
+     (con la proforma mandata, pronto, o con la data prevista entro il 31/12):
+     da fatturare e quindi da incassare;
+   - di competenza X fatturato e incassato;
+   - di competenza X fatturato e non ancora incassato;
+   - di competenza X che si fatturera' l'anno dopo (data prevista oltre il
+     31/12, o non ancora indicata);
+   - di competenza dell'anno X+1, tutto.
+   La regola dell'anno e di «entro» e' la stessa del report incassi e
+   dell'ISA (numeriAnno): i numeri tornano fra una pagina e l'altra.
+   Importi imponibili, come gli altri numeri della pagina. */
+function riquadroAnnoFiscale() {
+  const y = Number(S.annoFisc) || today().getFullYear();
+  const n = numeriAnno(y);
+  const somma = arr => r2(arr.reduce((a, f) => a + impFattura(f), 0));
+  const daFatt = n.compEntro.filter(fattAperta);
+  const incassate = n.compEntro.concat(n.compDopo).filter(f => f.stato === 'incassata');
+  const emesse = n.compEntro.concat(n.compDopo).filter(f => f.stato === 'emessa');
+  const dopo = n.compDopo.filter(fattAperta);
+  const senzaData = dopo.filter(f => !f.data_prevista).length;
+  const prossimo = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id) && annoCompScaglione(f) === y + 1);
+  const totY = somma(daFatt) + somma(incassate) + somma(emesse) + somma(dopo);
+  const pc = v => totY ? v / totY * 100 : 0;
+  const nn = a => a.length + (a.length === 1 ? ' scaglione' : ' scaglioni');
+  const senzaAnno = S.fatture.filter(f => f.stato !== 'annullata' && fattAperta(f) && byId(S.projects, f.project_id)
+    && !(byId(S.projects, f.project_id) || {}).archiviato && !annoCompScaglione(f)).length;
+  return '<div class="card mb16"><div class="card-h"><span class="card-t">&#128197; Anno fiscale ' + y
+      + ' <span style="font-weight:400;color:var(--mut);font-size:12px">— per anno di competenza, importi imponibili</span></span>'
+      + '<span class="row" style="gap:6px"><button class="btn btn-xs" data-act="annofisc-" title="Anno prima">&#9664;</button>'
+      + '<b style="font-size:13px">' + feuro(r2(totY)) + '</b>'
+      + '<button class="btn btn-xs" data-act="annofisc+" title="Anno dopo">&#9654;</button></span></div>'
+    + '<div class="kgrid" style="margin-bottom:0">'
+    + kpi('Di competenza ' + y + ' · da fatturare nel ' + y, feuro(somma(daFatt)),
+          nn(daFatt) + ' · da fatturare e incassare', pc(somma(daFatt)), 'var(--ora)')
+    + kpi('Di competenza ' + y + ' · fatturato e incassato', feuro(somma(incassate)), nn(incassate), pc(somma(incassate)), 'var(--grn)')
+    + kpi('Di competenza ' + y + ' · fatturato, non incassato', feuro(somma(emesse)), nn(emesse), pc(somma(emesse)), 'var(--blue)')
+    + kpi('Di competenza ' + y + ' · da fatturare nel ' + (y + 1), feuro(somma(dopo)),
+          nn(dopo) + (senzaData ? ' · ' + senzaData + ' senza data prevista' : ''), pc(somma(dopo)), 'var(--mut2)')
+    + kpi('Di competenza ' + (y + 1), feuro(somma(prossimo)), nn(prossimo) + ' · anno fiscale successivo',
+          prossimo.length ? 100 : 0, 'var(--vio)')
+    + '</div>'
+    + (senzaAnno ? '<div class="hint" style="margin:8px 0 0">' + (senzaAnno === 1
+        ? '1 scaglione aperto non ha né anno di competenza né date: non è contato in nessun anno. Si completa aprendo lo scaglione.'
+        : senzaAnno + ' scaglioni aperti non hanno né anno di competenza né date: non sono contati in nessun anno. Si completano aprendo gli scaglioni.')
+        + '</div>' : '')
+    + '</div>';
+}
+
 /* com'e' messo lo scaglione: fatturato, in proforma, previsto, da prevedere */
 function quandoScaglione(f) {
   if (f.stato === 'incassata') return 'incassata' + (f.numero_fattura ? ' (fatt. ' + f.numero_fattura + ')' : '');
@@ -8193,6 +8243,7 @@ function rFatturare() {
           return m.length ? kpi('In mora con l’avvocato', m.length,
             feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
       + '</div>'
+    + riquadroAnnoFiscale()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
     /* L'ORDINE DELLA PAGINA: prima quello che si aspetta di incassare (le
@@ -14246,6 +14297,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a === 'ripristina') return archiviaProj(S.projId, false);
       if (a === 'prreset')  { S.prQ=''; S.prBucket='aperte'; S.prProj=''; S.prEnte=''; S.prResp=''; return render(); }
       if (a === 'pftutte')  { S.pfTutte = !S.pfTutte; return render(); }
+      if (a === 'annofisc-' || a === 'annofisc+') {
+        S.annoFisc = (Number(S.annoFisc) || today().getFullYear()) + (a === 'annofisc+' ? 1 : -1); return render(); }
       if (a === 'prvista')  { S.prVista = S.prVista === 'catalogo' ? 'pratiche' : 'catalogo'; return render(); }
       if (a === 'riordina') return apriRiordino();
       if (a === 'pcnuova')  return apriVoceCatalogo(null);

@@ -4466,6 +4466,37 @@ function launchOpts(){
     must(g.anag&&g.revChiusa,'non apre l anagrafica dalla revisione');
     must(g.riga,'manca l intestazione della commessa nella fatturazione');
   });
+  await t('fatturazione: l anno fiscale diviso per competenza',async()=>{
+    const g=await p.evaluate(async()=>{
+      const y=today().getFullYear(), pid=S.projects[0].id;
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',ordine:90},o)).select().single();
+      const mk=[await ins({descrizione:'AF entro',imponibile:1000,stato:'da_emettere',anno_competenza:y,data_prevista:y+'-12-01'}),
+        await ins({descrizione:'AF incassata',imponibile:2000,stato:'incassata',anno_competenza:y,numero_fattura:'901/FE',data_fattura:y+'-02-01',data_incasso:y+'-03-01'}),
+        await ins({descrizione:'AF emessa',imponibile:3000,stato:'emessa',anno_competenza:y,numero_fattura:'902/FE',data_fattura:y+'-04-01'}),
+        await ins({descrizione:'AF dopo',imponibile:4000,stato:'da_emettere',anno_competenza:y,data_prevista:(y+1)+'-03-01'}),
+        await ins({descrizione:'AF prossimo',imponibile:5000,stato:'da_emettere',anno_competenza:y+1})].map(r=>r.data.id);
+      await loadAll(true); S.annoFisc=null; S.page='fatturare'; render();
+      const card=[...document.querySelectorAll('#page .card')].find(c=>/Anno fiscale/.test(c.querySelector('.card-t')?.textContent||''));
+      const v=l=>{ const k=[...card.querySelectorAll('.kpi')].find(x=>x.querySelector('.kpi-l').textContent===l); return k?k.querySelector('.kpi-v').textContent:null; };
+      const n=numeriAnno(y), sm=a=>r2(a.reduce((s,f)=>s+impFattura(f),0));
+      const r={card:!!card,
+        entro:v('Di competenza '+y+' · da fatturare nel '+y)===feuro(sm(n.compEntro.filter(fattAperta))),
+        inc:v('Di competenza '+y+' · fatturato e incassato')===feuro(sm(n.compEntro.concat(n.compDopo).filter(f=>f.stato==='incassata'))),
+        em:v('Di competenza '+y+' · fatturato, non incassato')===feuro(sm(n.compEntro.concat(n.compDopo).filter(f=>f.stato==='emessa'))),
+        dopo:v('Di competenza '+y+' · da fatturare nel '+(y+1))===feuro(sm(n.compDopo.filter(fattAperta))),
+        pross:v('Di competenza '+(y+1))===feuro(sm(S.fatture.filter(f=>f.stato!=='annullata'&&annoCompScaglione(f)===y+1))),
+        dentro:['AF entro','AF dopo'].every(d=>{ const f=S.fatture.find(x=>x.descrizione===d);
+          return d==='AF entro'?n.compEntro.includes(f):n.compDopo.includes(f); })};
+      card.querySelector('[data-act="annofisc+"]').click();
+      r.avanti=/Anno fiscale \d+/.test(document.querySelector('#page').textContent) && [...document.querySelectorAll('#page .card-t')].some(x=>x.textContent.includes('Anno fiscale '+(y+1)));
+      S.annoFisc=null;
+      for(const id of mk) await SB.from('commessa_fatture').delete().eq('id',id);
+      await loadAll(true); render(); return r; });
+    must(g.card,'manca il riquadro dell anno fiscale');
+    must(g.entro&&g.inc&&g.em&&g.dopo&&g.pross,'importi sbagliati: '+JSON.stringify(g));
+    must(g.dentro,'scaglioni nella divisione sbagliata');
+    must(g.avanti,'il pulsante ▶ non passa all anno dopo');
+  });
   await t('fatturazione: scaglioni raggruppati per commessa, commesse in ordine di codice',async()=>{
     const g=await p.evaluate(async()=>{
       const mk=async(codice,name)=>(await SB.from('projects').insert({name,codice,client:'Cliente '+codice,status:'in_corso',amount:1000}).select().single()).data;
