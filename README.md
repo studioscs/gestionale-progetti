@@ -1432,6 +1432,39 @@ competenza* — sono **obbligatorie**:
 Gli scaglioni già esistenti senza tipologia restano come sono finché non li si
 apre: alla prima modifica, o alla prima fattura, va scelta.
 
+### Voci di anni diversi fatturate in date diverse
+
+Se i servizi di uno scaglione sono di **anni di competenza diversi**, sotto
+la data prevista compare un riquadro con una riga per anno (con il suo
+importo) e una **data prevista per ciascun anno**. La riga dell'anno dello
+scaglione è la «Data prevista» stessa.
+
+Una fattura ha una data sola: se le date sono **diverse**, salvando lo
+scaglione **si divide** — le voci del suo anno restano, quelle di ogni altro
+anno con una data diversa diventano uno scaglione a sé («… — competenza
+2027»), con la loro data, la tipologia ISA delle voci e l'anno. Prima di
+dividere il gestionale chiede conferma. Con la **stessa data** (o senza data)
+resta una fattura sola, con le voci dei due anni. Così Report incassi, anno
+fiscale e fatturato per anno contano ogni parte nell'anno giusto.
+
+Si può solo finché lo scaglione è da emettere o pronto: con la proforma o il
+numero di fattura il documento è già uno.
+
+### Numeri e date delle fatture da verificare
+
+In fondo a Fatturazione, se ce ne sono, il riquadro rosso **Numeri e date
+delle fatture da verificare** elenca: scaglioni non emessi che hanno un
+numero di fattura, numeri usati su due documenti dello stesso anno, fatture
+emesse o incassate senza numero, incassi datati prima della fattura, fatture
+datate nel futuro. Il clic apre lo scaglione, dove lo stesso avviso è in
+alto. Salvando:
+
+- uno scaglione «da emettere» o «pronto» con un numero: il gestionale chiede
+  se toglierlo (con la data della fattura) — un numero vale solo per una
+  fattura emessa;
+- una fattura emessa o incassata con un numero già usato nello stesso anno
+  da un'altra: chiede conferma prima di salvare.
+
 ### La tipologia ISA in alto e quella dei singoli servizi
 
 Nello scaglione la **tipologia ISA** e l'**anno di competenza** si scelgono in

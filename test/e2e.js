@@ -4531,6 +4531,75 @@ function launchOpts(){
     must(g.entro&&g.riga,'la casella «da fatturare» non elenca i suoi scaglioni raggruppati');
     must(g.chiuso,'il secondo clic non chiude l elenco');
   });
+  await t('voci di anni diversi con date diverse: lo scaglione si divide, una fattura per anno',async()=>{
+    const y=new Date().getFullYear();
+    const pid=await p.evaluate(()=>{ const pid=S.projects[0].id; openFatt(null,pid);
+      el('fa-desc').value='Acconto misto anni';
+      el('fa-isa').value='C05'; el('fa-isa').dispatchEvent(new Event('change'));
+      el('fa-anno').value=String(today().getFullYear()); el('fa-anno').dispatchEvent(new Event('change'));
+      el('fa-addriga').click(); el('fa-addriga').click();
+      FATT_RIGHE[0].descrizione='Progetto'; FATT_RIGHE[0].importo=1000;
+      FATT_RIGHE[1].descrizione='Direzione lavori'; FATT_RIGHE[1].importo=500; FATT_RIGHE[1].anno_competenza=today().getFullYear()+1;
+      el('fa-prev').value=today().getFullYear()+'-12-01'; disegnaRigheFatt(); return pid; });
+    must(await p.isVisible('[data-annodata="'+(y+1)+'"]'),'manca la data per l anno '+(y+1));
+    must(/Voci di anni di competenza diversi/.test(await p.textContent('#fa-anni-date')),'manca la spiegazione');
+    await p.fill('[data-annodata="'+(y+1)+'"]',(y+1)+'-06-30');
+    await p.dispatchEvent('[data-annodata="'+(y+1)+'"]','change');
+    must(/diventa uno scaglione a sé/.test(await p.textContent('#fa-anni-date')),'non dice che si divide');
+    await p.click('#fa-save2'); await p.waitForTimeout(1200);
+    const g=await p.evaluate(pid=>{ const y=today().getFullYear();
+      const a=S.fatture.find(f=>f.project_id===pid&&f.descrizione==='Acconto misto anni');
+      const b=S.fatture.find(f=>f.project_id===pid&&f.descrizione==='Acconto misto anni — competenza '+(y+1));
+      const r={a:!!a,b:!!b};
+      if(a&&b){ r.aImp=impFattura(a); r.bImp=impFattura(b); r.aData=a.data_prevista; r.bData=b.data_prevista;
+        r.aAnno=a.anno_competenza; r.bAnno=b.anno_competenza; r.bIsa=b.isa_tipo;
+        r.aVoci=righeFattura(a.id).map(x=>x.descrizione).join(','); r.bVoci=righeFattura(b.id).map(x=>x.descrizione).join(',');
+        r.dopo=numeriAnno(y).compEntro.includes(a)&&annoCompScaglione(b)===y+1; r.ids=[a.id,b.id]; }
+      return r; },pid);
+    must(g.a&&g.b,'scaglione non diviso: '+JSON.stringify(g));
+    must(g.aImp===1000&&g.bImp===500,'importi dopo la divisione: '+g.aImp+' / '+g.bImp);
+    must(g.aData===y+'-12-01'&&g.bData===(y+1)+'-06-30','date: '+g.aData+' / '+g.bData);
+    must(g.aAnno===y&&g.bAnno===y+1&&g.bIsa==='C05','anno o tipologia del nuovo: '+JSON.stringify(g));
+    must(g.aVoci==='Progetto'&&g.bVoci==='Direzione lavori','voci: '+g.aVoci+' | '+g.bVoci);
+    must(g.dopo,'nei numeri dell anno la divisione non si vede');
+    /* con la stessa data resta una fattura sola */
+    const h=await p.evaluate(async pid=>{ const y=today().getFullYear(); openFatt(null,pid);
+      el('fa-desc').value='Acconto misto stessa data'; el('fa-isa').value='C05'; el('fa-anno').value=String(y);
+      el('fa-addriga').click(); el('fa-addriga').click();
+      FATT_RIGHE[0].descrizione='A'; FATT_RIGHE[0].importo=100; FATT_RIGHE[1].descrizione='B'; FATT_RIGHE[1].importo=200; FATT_RIGHE[1].anno_competenza=y+1;
+      el('fa-prev').value=y+'-12-01'; disegnaRigheFatt();
+      FATT_DATE_ANNO[y+1]=y+'-12-01';
+      await saveFatt(); await new Promise(r=>setTimeout(r,400));
+      const tutte=S.fatture.filter(f=>f.project_id===pid&&/Acconto misto stessa data/.test(f.descrizione));
+      return {n:tutte.length,voci:tutte[0]?righeFattura(tutte[0].id).length:0,ids:tutte.map(f=>f.id)}; },pid);
+    must(h.n===1&&h.voci===2,'con la stessa data si è diviso: '+JSON.stringify(h));
+    await p.evaluate(async ids=>{ for(const id of ids){ await SB.from('commessa_fattura_righe').delete().eq('fattura_id',id); await SB.from('commessa_fatture').delete().eq('id',id);} await loadAll(true); },g.ids.concat(h.ids));
+  });
+  await t('numeri di fattura: su uno scaglione non emesso si toglie, i doppioni si segnalano',async()=>{
+    const g=await p.evaluate(async()=>{ const y=today().getFullYear(), pid=S.projects[0].id;
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',anno_competenza:y,ordine:94,imponibile:100},o)).select().single();
+      const a=(await ins({descrizione:'NUM aperta',stato:'pronta',numero_fattura:'971/FE',data_fattura:y+'-03-01'})).data;
+      const b=(await ins({descrizione:'NUM emessa',stato:'emessa',numero_fattura:'971/FE',data_fattura:y+'-03-02'})).data;
+      await loadAll(true);
+      const r={};
+      const pr=problemiNumeri();
+      r.aperta=pr.some(x=>x.f.id===a.id&&x.p.some(t=>/non è emessa/.test(t)));
+      r.doppio=pr.some(x=>x.f.id===b.id&&x.p.some(t=>/anche su/.test(t)));
+      S.page='fatturare'; render();
+      r.card=[...document.querySelectorAll('#page .card-t')].some(x=>/Numeri e date delle fatture da verificare/.test(x.textContent));
+      openFatt(a.id); r.avviso=/Da verificare/.test(el('fa-anagr').textContent);
+      await saveFatt(); await new Promise(x=>setTimeout(x,400));
+      const a2=S.fatture.find(x=>x.id===a.id); r.tolto=!a2.numero_fattura&&!a2.data_fattura;
+      r.dopo=!problemiNumeri().some(x=>x.f.id===b.id);
+      await SB.from('commessa_fatture').delete().eq('id',a.id); await SB.from('commessa_fatture').delete().eq('id',b.id);
+      await loadAll(true); render(); return r; });
+    must(g.aperta,'non segnala lo scaglione non emesso con il numero');
+    must(g.doppio,'non segnala il numero doppio');
+    must(g.card,'manca il riquadro di controllo in Fatturazione');
+    must(g.avviso,'manca l avviso nella finestra dello scaglione');
+    must(g.tolto,'salvando (e confermando) il numero non è stato tolto');
+    must(g.dopo,'tolto il numero, il doppione resta segnalato');
+  });
   await t('anno fiscale: uno scaglione pronto con la data l anno dopo non sta fra quelli dell anno',async()=>{
     const g=await p.evaluate(async()=>{
       const y=today().getFullYear(), pid=S.projects[0].id;

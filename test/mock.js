@@ -251,8 +251,8 @@
           .forEach(applicaVariante);
         if(table==='commessa_contratti') DB.commessa_contratti.filter(r=>flt.every(f=>f(r)))
           .forEach(c=>ricalcolaImporto(c.project_id));
-        if(table==='commessa_fattura_righe') DB.commessa_fattura_righe.filter(r=>flt.every(f=>f(r)))
-          .forEach(r=>ricalcolaImponibile(r.fattura_id));
+        /* come il trigger: anche lo scaglione da cui una voce se ne va */
+        if(table==='commessa_fattura_righe') DB.commessa_fatture.forEach(f=>ricalcolaImponibile(f.id));
         if(table==='commessa_fasi') DB.commessa_fasi.filter(r=>flt.every(f=>f(r)))
           .forEach(f=>allineaFine(f.project_id));
       },

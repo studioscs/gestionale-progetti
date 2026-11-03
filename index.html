@@ -1135,6 +1135,7 @@ tbody tr:hover td { background:#f0f4f9; }
           <div class="hint" style="margin:4px 0 0">La data concordata con il cliente o, se si sa solo l&rsquo;anno, un clic:
             serve a prevedere cosa si fatturer&agrave; entro l&rsquo;anno.</div></div>
       </div>
+      <div id="fa-anni-date"></div>
       <div class="fg"><label class="fl">Stato</label>
         <select class="fc" id="fa-stato2">
           <option value="da_emettere">Da emettere</option>
@@ -1565,7 +1566,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.19';
+const VERSIONE = '2026.11.03.20';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8221,6 +8222,47 @@ async function creaSaldo(pid) {
   toast('Controlla tipologia ISA e anno di competenza, poi salva il saldo.', 'info');
 }
 /* Il riquadro del controllo, in testa a Da fatturare */
+/* CONTROLLO DI NUMERI E DATE DELLE FATTURE
+   Il debug sui dati veri ha trovato: scaglioni tornati «da emettere» o
+   «pronti» che tengono il numero di una fattura (e quel numero e' stato poi
+   dato a un'altra: due documenti con lo stesso numero); fatture incassate
+   senza numero; un incasso datato prima della fattura; una fattura datata
+   nel futuro. Nessuna di queste cose si corregge da sola - va guardata - ma
+   qui si vedono tutte insieme, con il clic che apre lo scaglione. */
+const FATT_ISSUED = ['emessa', 'incassata'];
+function problemiNumeri() {
+  const vive = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id));
+  const chiave = f => String(f.numero_fattura || '').trim().toLowerCase() + '|' + (annoDi4(f.data_fattura) || '');
+  const conta = {};
+  vive.filter(f => f.numero_fattura).forEach(f => { conta[chiave(f)] = (conta[chiave(f)] || []).concat(f); });
+  const out = [];
+  vive.forEach(f => {
+    const p = [];
+    if (fattAperta(f) && f.numero_fattura) p.push('non è emessa ma ha il numero ' + f.numero_fattura);
+    if (f.numero_fattura && (conta[chiave(f)] || []).length > 1)
+      p.push('il numero ' + f.numero_fattura + ' è anche su ' + conta[chiave(f)].filter(x => x !== f).map(x => pn(x.project_id)).join(', '));
+    if (FATT_ISSUED.indexOf(f.stato) >= 0 && !f.numero_fattura) p.push('fattura senza numero');
+    if (f.data_incasso && f.data_fattura && f.data_incasso < f.data_fattura) p.push('incassata (' + fdate(f.data_incasso) + ') prima della data della fattura (' + fdate(f.data_fattura) + ')');
+    if (f.data_fattura && f.data_fattura > todayISO()) p.push('data della fattura nel futuro (' + fdate(f.data_fattura) + ')');
+    if (p.length) out.push({ f, p });
+  });
+  return out;
+}
+function riquadroNumeri() {
+  const el_ = problemiNumeri();
+  if (!el_.length) return '';
+  return '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:var(--red)">&#128269; Numeri e date delle fatture da verificare '
+      + '<span class="chip">' + el_.length + '</span></span></div>'
+    + '<div class="hint" style="margin:-6px 0 10px">Un numero di fattura vale per un documento solo, e solo se è emesso. '
+      + 'Apri lo scaglione e correggi: se non è stato emesso, togli il numero; se lo è, segnalo emesso o incassato.</div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th><th>Da verificare</th></tr></thead><tbody>'
+    + gruppiCommessa(el_, x => x.f.project_id).map(g => rigaGruppoCommessa(g, 3, g.voci.length, r2(g.voci.reduce((a, x) => a + impFattura(x.f), 0)))
+        + g.voci.map(x => '<tr data-fatt="' + x.f.id + '" style="cursor:pointer"><td style="padding-left:22px">' + esc(x.f.descrizione || '')
+          + (x.f.numero_fattura ? ' <b>' + esc(x.f.numero_fattura) + '</b>' : '') + '</td>'
+          + '<td>' + bdg(x.f.stato, ST_FATT) + '</td>'
+          + '<td style="font-size:12px;color:var(--red)">' + x.p.map(esc).join('<br>') + '</td></tr>').join('')).join('')
+    + '</tbody></table></div></div>';
+}
 function riquadroControlloFatt(elenco) {
   if (!elenco.length) return '<div class="ibox mb16" style="font-size:12.5px">&#10003; <b>Contratti e fatturazione tornano</b>: '
     + 'in ogni commessa l’importo del contratto è tutto negli scaglioni, e le commesse completate sono tutte fatturate.</div>';
@@ -8394,6 +8436,7 @@ function rFatturare() {
                  daControllare.filter(x => x.c.problema === 'saldo'))
           + tabella(mat.filter(f => entro.indexOf(f) < 0 && f.data_prevista), '📅 Matureranno più avanti — dal ' + (y + 1), null)
           + tabella(mat.filter(f => !f.data_prevista), '❓ Senza data prevista — da inserire', 'var(--red)'); })()
+    + riquadroNumeri()
     + riquadroControlloFatt(daControllare)
     + esterniRiepilogo()
     + '</div>';
@@ -8940,7 +8983,7 @@ function openFatt(id, presetPid) {
     el('fa-prev-anni').innerHTML = [y, y + 1, y + 2].map(a => '<button class="btn btn-xs" type="button" data-prevanno="' + a + '">'
       + (a === y ? 'Entro fine ' + a : 'Nel ' + a) + '</button>').join('');
     el('fa-prev-anni').onclick = e => { const b = e.target.closest('[data-prevanno]'); if (!b) return;
-      el('fa-prev').value = fineAnno(b.dataset.prevanno); }; }
+      el('fa-prev').value = fineAnno(b.dataset.prevanno); boxDatePerAnno(); }; }
   el('fa-stato2').value= f ? f.stato : 'da_emettere';
   el('fa-num').value   = f ? (f.numero_fattura || '') : '';
   el('fa-data').value  = f ? (f.data_fattura || '') : '';
@@ -8961,11 +9004,14 @@ function openFatt(id, presetPid) {
                                             isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
                                             art15: !!r.art15, art15Mano: true }));
   FATT_ISA_PREV = { isa: el('fa-isa').value, anno: el('fa-anno').value };
+  FATT_DATE_ANNO = {};
   disegnaRigheFatt();
   aggiornaIncasso();
   el('fa-goproj').style.display = pid ? 'inline-flex' : 'none';
   el('fa-anag').style.display   = pid && canW() ? 'inline-flex' : 'none';
-  el('fa-anagr').innerHTML      = avvisoAnagrafica(pid, 'fa-anagr-fix');
+  el('fa-anagr').innerHTML      = avvisoAnagrafica(pid, 'fa-anagr-fix')
+    + (f && problemiNumeri().some(x => x.f === f) ? '<div class="wbox mb16" style="font-size:12.5px"><b>Da verificare:</b> '
+        + problemiNumeri().find(x => x.f === f).p.map(esc).join('; ') + '.</div>' : '');
   openM('m-fatt');
 }
 let FATT_PID = null;
@@ -9083,9 +9129,60 @@ function disegnaRigheFatt() {
      percentuale e importo fisso farebbe credere che contino ancora. */
   const conRighe = FATT_RIGHE.length > 0;
   barraIsaTutte();
+  boxDatePerAnno();
   el('fa-box-imp').style.opacity = conRighe ? '0.45' : '';
   ['fa-perc','fa-imp'].forEach(k => el(k).disabled = conRighe);
   aggiornaCalcolo();
+}
+
+/* VOCI DI ANNI DI COMPETENZA DIVERSI, FATTURATE IN DATE DIVERSE
+   Una fattura ha una data sola. Se le voci di uno scaglione sono di anni di
+   competenza diversi e si fattureranno in momenti diversi (le voci 2026 a
+   dicembre, quelle 2027 a giugno), sono in realta' due fatture: qui si
+   indica la data prevista di ciascun anno e, salvando, lo scaglione si
+   divide - le voci dell'anno dello scaglione restano, quelle degli altri anni
+   con una data diversa diventano uno scaglione ciascuno, con la loro data,
+   tipologia e anno. Con la stessa data (o senza) restano una fattura sola.
+   Si puo' solo finche' lo scaglione e' da emettere: con la proforma o la
+   fattura il documento e' gia' uno. */
+let FATT_DATE_ANNO = {};
+const annoVoce = r => Number(r.anno_competenza) || Number(el('fa-anno').value) || null;
+function anniDelleVoci() {
+  const a = [];
+  vociIsa().filter(r => Number(r.importo)).forEach(r => { const y = annoVoce(r); if (y && a.indexOf(y) < 0) a.push(y); });
+  return a.sort();
+}
+function scaglioneDivisibile() {
+  const id = el('fa-id2').value, f = id ? byId(S.fatture, id) : null;
+  return ['da_emettere', 'pronta'].indexOf(el('fa-stato2').value) >= 0
+    && !(f && (f.proforma_numero || f.numero_fattura)) && !el('fa-num').value.trim();
+}
+const annoPrincipale = anni => { const y = Number(el('fa-anno').value); return anni.indexOf(y) >= 0 ? y : anni[0]; };
+function boxDatePerAnno() {
+  const box = el('fa-anni-date'); if (!box) return;
+  const anni = anniDelleVoci();
+  if (anni.length < 2 || !scaglioneDivisibile()) { box.innerHTML = ''; return; }
+  const main = annoPrincipale(anni);
+  FATT_DATE_ANNO[main] = el('fa-prev').value;
+  const sub = y => r2(vociIsa().filter(r => annoVoce(r) === y).reduce((a, r) => a + (Number(r.importo) || 0), 0));
+  const divise = anni.filter(y => y !== main && FATT_DATE_ANNO[y] && FATT_DATE_ANNO[y] !== FATT_DATE_ANNO[main]);
+  box.innerHTML = '<div class="ibox mb16" style="font-size:12.5px"><b>Voci di anni di competenza diversi.</b> '
+    + 'Indica quando si fatturano quelle di ciascun anno. Una fattura ha una data sola: se le date sono diverse, '
+    + 'salvando lo scaglione <b>si divide</b> in uno per anno; con la stessa data (o senza) resta una fattura sola.'
+    + anni.map(y => '<div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">'
+      + '<b style="width:110px">Competenza ' + y + '</b><span style="width:110px;text-align:right">' + feuro(sub(y)) + '</span>'
+      + '<input type="date" class="fc" style="width:170px" data-annodata="' + y + '" value="' + esc(FATT_DATE_ANNO[y] || '') + '">'
+      + '<span style="color:var(--mut);font-size:12px">' + (y === main ? 'questo scaglione (è la «Data prevista» sopra)'
+          : divise.indexOf(y) >= 0 ? '→ diventa uno scaglione a sé' : 'resta in questo scaglione') + '</span></div>').join('')
+    + '</div>';
+}
+/* Le voci da spostare: per ogni altro anno con una data sua, diversa */
+function gruppiDaDividere() {
+  const anni = anniDelleVoci();
+  if (anni.length < 2 || !scaglioneDivisibile()) return [];
+  const main = annoPrincipale(anni), dMain = el('fa-prev').value;
+  return anni.filter(y => y !== main && FATT_DATE_ANNO[y] && FATT_DATE_ANNO[y] !== dMain)
+    .map(y => ({ anno: y, data: FATT_DATE_ANNO[y], righe: vociIsa().filter(r => annoVoce(r) === y) }));
 }
 
 /* LA TIPOLOGIA ISA DELLO SCAGLIONE E QUELLA DEI SERVIZI
@@ -9175,6 +9272,26 @@ async function saveFatt() {
     return toast('Scegli in alto ' + manca.join(' e ') + ': senza non si salva.', 'error');
   }
   const id = el('fa-id2').value;
+  /* Un numero di fattura vale solo per una fattura emessa, e per una sola */
+  {
+    const st = el('fa-stato2').value, num = el('fa-num').value.trim();
+    if (num && ['da_emettere', 'pronta'].indexOf(st) >= 0
+        && confirm('Lo scaglione è «' + (st === 'pronta' ? 'pronto' : 'da emettere') + '» ma ha il numero di fattura ' + num
+          + '. Un numero vale solo per una fattura emessa, e lasciarlo qui fa nascere doppioni. Lo tolgo (con la data della fattura)?\n\n'
+          + 'OK = togli il numero · Annulla = lascialo')) { el('fa-num').value = ''; el('fa-data').value = ''; }
+    const num2 = el('fa-num').value.trim();
+    if (num2 && FATT_ISSUED.indexOf(st) >= 0) {
+      const anno = annoDi4(el('fa-data').value) || today().getFullYear();
+      const altro = S.fatture.find(x => x.id !== id && FATT_ISSUED.indexOf(x.stato) >= 0
+        && String(x.numero_fattura || '').trim().toLowerCase() === num2.toLowerCase() && (annoDi4(x.data_fattura) || anno) === anno);
+      if (altro && !confirm('Il numero ' + num2 + ' del ' + anno + ' è già della fattura «' + (altro.descrizione || '') + '» ('
+          + pn(altro.project_id) + '). Salvo lo stesso?')) return el('fa-num').focus();
+    }
+  }
+  const gruppi = gruppiDaDividere();
+  if (gruppi.length && !confirm('Le voci di competenza ' + gruppi.map(g => g.anno + ' (prevista ' + fdate(g.data) + ')').join(', ')
+      + ' si fatturano in una data diversa: diventano ' + (gruppi.length === 1 ? 'uno scaglione a sé' : gruppi.length + ' scaglioni a sé')
+      + '. In questo restano le voci di competenza ' + annoPrincipale(anniDelleVoci()) + '. Procedo?')) return;
   /* incassata: se non e' scritto diversamente, oggi e l'importo da incassare */
   if (el('fa-stato2').value === 'incassata') {
     if (!el('fa-inc').value) el('fa-inc').value = todayISO();
@@ -9204,6 +9321,8 @@ async function saveFatt() {
   };
   if (pay.stato === 'incassata' && pay.importo_incassato !== null
       && Math.abs(pay.importo_incassato - attesoScaglione()) > 0.005) pay.motivo_incasso = el('fa-mot').value.trim() || null;
+  /* diviso: questo scaglione tiene le voci del suo anno, e quell'anno e' il suo */
+  if (gruppi.length) pay.anno_competenza = annoPrincipale(anniDelleVoci());
   setLoading('fa-save2', true);
   let fid = id;
   if (id) {
@@ -9215,26 +9334,59 @@ async function saveFatt() {
     if (error) { setLoading('fa-save2', false); return sbErr(error, 'scaglione'); }
     fid = data.id;
   }
-  const eRighe = await salvaRigheFatt(fid);
+  const eDiv = gruppi.length ? await dividiScaglione(fid, pay, gruppi) : null;
+  if (eDiv) { setLoading('fa-save2', false); return sbErr(eDiv, 'divisione dello scaglione'); }
+  const spostate = gruppi.reduce((a, g) => a.concat(g.righe.filter(r => r.id).map(r => r.id)), []);
+  const restano = FATT_RIGHE.filter(r => !gruppi.some(g => g.righe.indexOf(r) >= 0));
+  const eRighe = await salvaRigheFatt(fid, restano, spostate);
   setLoading('fa-save2', false);
   if (eRighe) return sbErr(eRighe, 'servizi della fattura');
-  closeM('m-fatt'); await loadAll(true); render(); toast('Scaglione salvato', 'success');
+  closeM('m-fatt'); await loadAll(true); render();
+  toast(gruppi.length ? 'Scaglione salvato e diviso: ' + gruppi.map(g => 'competenza ' + g.anno + ' a sé').join(', ') : 'Scaglione salvato', 'success');
+}
+/* Uno scaglione nuovo per ogni anno da separare, con le sue voci */
+async function dividiScaglione(fid, pay, gruppi) {
+  const base = byId(S.fatture, fid) || {};
+  let ordine = Math.max(0, ...fattureOf(pay.project_id).map(f => Number(f.ordine) || 0)) + 1;
+  for (const g of gruppi) {
+    const isaV = g.righe.map(r => r.isa_tipo).filter(Boolean);
+    const isa = isaV.length && isaV.every(x => x === isaV[0]) ? isaV[0] : pay.isa_tipo;
+    const nuovo = { project_id: pay.project_id, descrizione: pay.descrizione + ' — competenza ' + g.anno,
+      percentuale: null, imponibile: r2(g.righe.reduce((a, r) => a + (Number(r.importo) || 0), 0)),
+      fase_id: null, data_prevista: g.data, stato: pay.stato === 'pronta' ? 'pronta' : 'da_emettere',
+      isa_tipo: isa, anno_competenza: g.anno, note_fattura: pay.note_fattura,
+      intestatario: base.intestatario || null, ordine: ordine++, created_by: S.me.id };
+    const { data, error } = await SB.from('commessa_fatture').insert(nuovo).select().single();
+    if (error) return error;
+    for (let i = 0; i < g.righe.length; i++) {
+      const r = g.righe[i];
+      const riga = { fattura_id: data.id, descrizione: String(r.descrizione).trim(), importo: Number(r.importo) || 0,
+        ordine: i, isa_tipo: r.isa_tipo || isa, anno_competenza: g.anno, art15: false };
+      const { error: e } = r.id
+        ? await SB.from('commessa_fattura_righe').update(riga).eq('id', r.id)
+        : await SB.from('commessa_fattura_righe').insert(Object.assign({ created_by: S.me.id }, riga));
+      if (e) return e;
+    }
+  }
+  return null;
 }
 
 /* Allinea le righe del database a quelle della finestra: toglie quelle
    cancellate, aggiorna quelle cambiate, inserisce le nuove. Un solo giro, e
    nell'ordine in cui l'utente le ha messe - l'ordine e' quello che poi si
    rilegge in fattura. */
-async function salvaRigheFatt(fid) {
+async function salvaRigheFatt(fid, voci, spostate) {
+  voci = voci || FATT_RIGHE; spostate = spostate || [];
   const prima = righeFattura(fid);
-  const restano = FATT_RIGHE.filter(r => r.id).map(r => r.id);
-  const daTogliere = prima.filter(r => restano.indexOf(r.id) < 0).map(r => r.id);
+  const restano = voci.filter(r => r.id).map(r => r.id);
+  /* quelle passate a un altro scaglione non si cancellano: si sono spostate */
+  const daTogliere = prima.filter(r => restano.indexOf(r.id) < 0 && spostate.indexOf(r.id) < 0).map(r => r.id);
   if (daTogliere.length) {
     const { error } = await SB.from('commessa_fattura_righe').delete().in('id', daTogliere);
     if (error) return error;
   }
-  for (let i = 0; i < FATT_RIGHE.length; i++) {
-    const r = FATT_RIGHE[i];
+  for (let i = 0; i < voci.length; i++) {
+    const r = voci[i];
     const riga = { descrizione: String(r.descrizione).trim(),
                    importo: Number(r.importo) || 0, ordine: i,
                    /* la voce senza una sua tipologia prende quella dello scaglione */
@@ -14313,10 +14465,20 @@ document.addEventListener('DOMContentLoaded', () => {
       r.art15 = eAnticipazione(r.descrizione); return disegnaRigheFatt();
     }
     if (k === 'isa_tipo' || k === 'anno_competenza') barraIsaTutte();
+    if (k === 'anno_competenza' || (k === 'importo' && e.type === 'change')) boxDatePerAnno();
     const tot = el('fa-righe').querySelector('.spread b');
     if (tot) tot.textContent = feuro(totRighe(FATT_RIGHE));
     aggiornaCalcolo();
   }));
+  el('fa-anni-date').addEventListener('change', e => {
+    const y = e.target.dataset.annodata; if (!y) return;
+    FATT_DATE_ANNO[y] = e.target.value;
+    const anni = anniDelleVoci();
+    if (Number(y) === annoPrincipale(anni)) el('fa-prev').value = e.target.value;
+    boxDatePerAnno();
+  });
+  el('fa-prev').addEventListener('change', boxDatePerAnno);
+  el('fa-stato2').addEventListener('change', boxDatePerAnno);
   el('fa-isa').addEventListener('change', seguiIsaInAlto);
   el('fa-anno').addEventListener('change', seguiIsaInAlto);
   el('fa-isa-tutte').addEventListener('click', e => { if (e.target.closest('#fa-isa-applica')) applicaIsaATutte(); });
