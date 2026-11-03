@@ -1550,7 +1550,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.4';
+const VERSIONE = '2026.11.03.5';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5588,16 +5588,17 @@ function htmlScheda(s) {
             + '>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>'
           + z.tabella.righe.map(r => '<tr>' + r.map((c, i) => '<td' + ((z.tabella.dx || []).indexOf(i) >= 0 ? ' class="dx"' : '') + '>'
               + esc(c === null || c === undefined ? '' : String(c)).replace(/\n/g, '<br>') + '</td>').join('') + '</tr>').join('')
-          + '</tbody>' + (z.tabella.tot ? '<tfoot>' + z.tabella.tot.map(r => { const k = colonnaTotale(z.tabella);
-              return '<tr><td colspan="' + k + '">' + esc(r[0]) + '</td><td class="dx">' + esc(r[1]) + '</td>'
-                + (z.tabella.col.length - k - 1 > 0 ? '<td colspan="' + (z.tabella.col.length - k - 1) + '"></td>' : '') + '</tr>'; }).join('')
+          /* una riga di totale: l'etichetta fino alla colonna k, poi uno o piu' valori */
+          + '</tbody>' + (z.tabella.tot ? '<tfoot>' + z.tabella.tot.map(r => { const k = colonnaTotale(z.tabella), v = r.slice(1);
+              return '<tr><td colspan="' + k + '">' + esc(r[0]) + '</td>' + v.map(x => '<td class="dx">' + esc(x) + '</td>').join('')
+                + (z.tabella.col.length - k - v.length > 0 ? '<td colspan="' + (z.tabella.col.length - k - v.length) + '"></td>' : '') + '</tr>'; }).join('')
               + '</tfoot>' : '') + '</table>'
         : '<p class="vuoto">' + esc(z.tabella.vuoto || 'Nessuna voce.') + '</p>') : '')
     + (z.testo !== undefined ? '<div class="note">' + (String(z.testo || '').trim() ? esc(z.testo) : '<span class="vuoto">Nessuna nota.</span>') + '</div>' : '')
     + '</section>';
   return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(s.titolo) + '</title>'
     + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<style>@page{size:A4;margin:14mm}body{font:11pt/1.4 Helvetica,Arial,sans-serif;color:#1d2733;margin:0 auto;max-width:190mm;padding:12px}'
+    + '<style>@page{size:A4' + (s.orizzontale ? ' landscape' : '') + ';margin:14mm}body{font:11pt/1.4 Helvetica,Arial,sans-serif;color:#1d2733;margin:0 auto;max-width:' + (s.orizzontale ? '277' : '190') + 'mm;padding:12px}'
     + 'header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1f3a5f;padding-bottom:8px;margin-bottom:12px}'
     + 'header img{height:52px}header .st{font-size:9pt;color:#5b6673}header .st b{color:#1d2733;font-size:10.5pt}'
     + 'h1{font-size:16pt;margin:4px 0 2px;color:#1f3a5f}.sub{color:#5b6673;font-size:10pt;margin-bottom:10px}'
@@ -5619,12 +5620,13 @@ function htmlScheda(s) {
 
 function pdfScheda(s) {
   const blu = '#2f6fb2', grigio = '#5b6673';
+  const largh = s.orizzontale ? 762 : 515;      /* A4 meno i margini */
   const cont = [
     { columns: [{ image: LOGO_STUDIO, width: 80 },
       { stack: [{ text: STUDIO.denominazione || '', bold: true, fontSize: 10.5 },
         { text: [STUDIO.indirizzo, STUDIO.civico].filter(Boolean).join(' ') + ', ' + (STUDIO.cap || '') + ' ' + (STUDIO.comune || ''),
           color: grigio, fontSize: 8.5 }], margin: [10, 8, 0, 0] }] },
-    { canvas: [{ type: 'line', x1: 0, y1: 4, x2: 515, y2: 4, lineWidth: 1.5, lineColor: '#1f3a5f' }], margin: [0, 4, 0, 8] },
+    { canvas: [{ type: 'line', x1: 0, y1: 4, x2: largh, y2: 4, lineWidth: 1.5, lineColor: '#1f3a5f' }], margin: [0, 4, 0, 8] },
     { text: s.titolo, fontSize: 15, bold: true, color: '#1f3a5f' }
   ];
   if (s.sottotitolo) cont.push({ text: s.sottotitolo, color: grigio, margin: [0, 2, 0, 4] });
@@ -5646,9 +5648,10 @@ function pdfScheda(s) {
         const body = [t.col.map((c, i) => ({ text: c, bold: true, fontSize: 8.5, fillColor: '#eef1f4', alignment: allinea(i) }))]
           .concat(t.righe.map(r => r.map((c, i) => ({ text: c === null || c === undefined ? '' : String(c), fontSize: 9, alignment: allinea(i) }))));
         const k = colonnaTotale(t);
-        (t.tot || []).forEach(r => body.push([{ text: r[0], bold: true, colSpan: k }]
-          .concat(t.col.slice(1, k).map(() => '')).concat([{ text: r[1], bold: true, alignment: 'right' }])
-          .concat(t.col.slice(k + 1).map(() => ''))));
+        (t.tot || []).forEach(r => { const v = r.slice(1);
+          body.push([{ text: r[0], bold: true, colSpan: k }]
+            .concat(t.col.slice(1, k).map(() => '')).concat(v.map(x => ({ text: x, bold: true, fontSize: 9, alignment: 'right' })))
+            .concat(t.col.slice(k + v.length).map(() => ''))); });
         cont.push({ table: { headerRows: 1, widths: t.col.map((c, i) => i === (t.largo || 0) ? '*' : 'auto'), body },
           layout: { hLineColor: '#e3e7ec', vLineWidth: () => 0 } });
       }
@@ -5658,7 +5661,8 @@ function pdfScheda(s) {
       : { text: 'Nessuna nota.', italics: true, color: '#8a95a3' });
   });
   cont.push({ text: 'Stampata il ' + fdate(todayISO()) + ' dal gestionale dello studio.', fontSize: 8, color: '#8a95a3', margin: [0, 16, 0, 0] });
-  return { pageSize: 'A4', pageMargins: [40, 36, 40, 40], content: cont, defaultStyle: { fontSize: 10 },
+  return { pageSize: 'A4', pageOrientation: s.orizzontale ? 'landscape' : 'portrait',
+           pageMargins: [40, 36, 40, 40], content: cont, defaultStyle: { fontSize: 10 },
            info: { title: s.titolo } };
 }
 
@@ -7702,12 +7706,15 @@ const intestatarioDi = f => { const p = byId(S.projects, f.project_id) || {};
    IVA (non in scissione dei pagamenti), spese anticipate, meno la ritenuta.
    Sulla proforma vanno anche le spese della commessa non ancora fatturate,
    come nel PDF della proforma - ma una volta sola, sulla prima. */
-function daIncassareDi(f, conSpeseAperte) {
+/* I conti del documento come li vede chi deve pagare: imponibile, cassa,
+   IVA (o scissione), spese anticipate, e quello che va versato allo studio. */
+function contiDaIncassare(f, conSpeseAperte) {
   const p = byId(S.projects, f.project_id) || {};
   const spese = totSpese(speseDiFatt(f.id)) + (conSpeseAperte ? totSpese(speseAperte(f.project_id)) : 0)
     + totAnticipiRighe(righeFattura(f.id));
-  return calcolaFattura(impFattura(f), spese, !!p.split_payment).netto;
+  return calcolaFattura(impFattura(f), spese, !!p.split_payment);
 }
+const daIncassareDi = (f, conSpeseAperte) => contiDaIncassare(f, conSpeseAperte).netto;
 function datiReportIncassi() {
   const perData = k => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''));
   const emesse = S.fatture.filter(f => f.stato === 'emessa').sort(perData('data_fattura'))
@@ -7715,13 +7722,13 @@ function datiReportIncassi() {
                  /* l'importo intero: «importo incassato» su una fattura ancora emessa
                     nei dati reali e' spesso compilato con l'importo atteso, non con
                     un pagamento arrivato - toglierlo nasconderebbe crediti veri */
-                 importo: daIncassareDi(f, false) }));
+                 c: contiDaIncassare(f, false), importo: daIncassareDi(f, false) }));
   const giaSpese = {};
   const proforme = S.fatture.filter(f => fattAperta(f) && f.proforma_numero)
     .sort((a, b) => (perData('proforma_data')(a, b)) || ((a.ordine || 0) - (b.ordine || 0)))
     .map(f => { const prima = !giaSpese[f.project_id]; giaSpese[f.project_id] = true;
       return { f, anno: annoDiData(f.proforma_data), num: 'PROFORMA ' + f.proforma_numero, chi: intestatarioDi(f),
-               importo: daIncassareDi(f, prima) }; });
+               c: contiDaIncassare(f, prima), importo: daIncassareDi(f, prima) }; });
   /* I costi generali dell'ANNO SOLARE della lista (quello della data in cui
      la si genera) non ancora pagati a quella data, in ordine di scadenza.
      L'anno di un costo e' quello della scadenza, se c'e', altrimenti quello
@@ -7749,11 +7756,25 @@ function reportIncassi(saldo) {
   const d = datiReportIncassi();
   const s = saldo === '' || saldo === null || saldo === undefined || isNaN(Number(saldo)) ? null : r2(Number(saldo));
   const nome = (STUDIO.denominazione || 'Studio').replace(/\s+(S\.?R\.?L\.?|STP|S\.?P\.?A\.?)\b.*$/i, '').trim();
-  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), x.f ? testoSolleciti(x.f) : '', feuro(x.importo)];
+  /* NETTO E LORDO, COLONNA PER COLONNA
+     Imponibile (il netto), cassa 4%, IVA - o «split payment» quando la versa
+     l'ente - e il lordo: quello che il committente deve versare allo studio
+     (con la scissione senza l'IVA). Le spese anticipate art. 15 hanno una
+     colonna loro solo se ce ne sono. */
+  const conSpese = d.emesse.concat(d.proforme).some(x => x.c.anticipazioni > 0);
+  const aliqCassa = String(STUDIO.aliquotaCassa || 4).replace('.', ',');
+  const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Imponibile', 'Cassa ' + aliqCassa + '%', 'IVA']
+    .concat(conSpese ? ['Spese art. 15'] : []).concat(['Lordo']);
+  const dxIncassi = col.map((c, i) => i).filter(i => i >= 4);
+  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), x.f ? testoSolleciti(x.f) : '',
+    feuro(x.c.imponibile), feuro(x.c.cassa), x.c.split ? 'split payment' : feuro(x.c.iva)]
+    .concat(conSpese ? [x.c.anticipazioni ? feuro(x.c.anticipazioni) : '—'] : []).concat([feuro(x.importo)]);
+  const somma = (arr, k) => r2(arr.reduce((a, x) => a + (k === 'iva' ? (x.c.split ? 0 : x.c.iva) : x.c[k]), 0));
+  const totRiga = (etichetta, arr, tot) => [etichetta, feuro(somma(arr, 'imponibile')), feuro(somma(arr, 'cassa')),
+    feuro(somma(arr, 'iva'))].concat(conSpese ? [feuro(somma(arr, 'anticipazioni'))] : []).concat([feuro(tot)]);
   const inMora = d.emesse.concat(d.proforme).filter(x => x.f.messa_in_mora);
-  const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Importo'];
   return {
-    titolo: 'Lista debitori — ' + nome,
+    titolo: 'Lista debitori — ' + nome, orizzontale: true,
     sottotitolo: 'Situazione al ' + fdate(todayISO()) + ': chi ci deve pagare e chi dobbiamo pagare',
     sezioni: [
       { titolo: 'Riepilogo', campi: [
@@ -7763,11 +7784,11 @@ function reportIncassi(saldo) {
         .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
           + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
-      { titolo: 'Lista debitori — fatture emesse non ancora incassate', tabella: { col, dx: [4], largo: 2, totCol: 4,
-          righe: d.emesse.map(riga), tot: d.emesse.length ? [['Totale fatture da incassare', feuro(d.totEmesse)]] : null,
+      { titolo: 'Lista debitori — fatture emesse non ancora incassate', tabella: { col, dx: dxIncassi, largo: 2, totCol: 4,
+          righe: d.emesse.map(riga), tot: d.emesse.length ? [totRiga('Totale fatture da incassare', d.emesse, d.totEmesse)] : null,
           vuoto: 'Nessuna fattura emessa in attesa di pagamento.' } },
-      { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: [4], largo: 2, totCol: 4,
-          righe: d.proforme.map(riga), tot: d.proforme.length ? [['Totale proforme', feuro(d.totProforme)]] : null,
+      { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 2, totCol: 4,
+          righe: d.proforme.map(riga), tot: d.proforme.length ? [totRiga('Totale proforme', d.proforme, d.totProforme)] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
       { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
           righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),

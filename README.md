@@ -847,6 +847,11 @@ studio teneva a mano:
   spese anticipate, meno l'eventuale ritenuta; per gli enti in scissione dei
   pagamenti senza l'IVA, che l'ente versa all'erario). Conta l'importo
   intero finché la fattura non è segnata *incassata*.
+- Per ogni fattura e proforma le colonne **Imponibile** (il netto), **Cassa
+  4%**, **IVA** — oppure *split payment* quando la versa l'ente —, **Spese
+  art. 15** (solo se ce ne sono) e **Lordo**, cioè quello che il committente
+  deve versare allo studio; in fondo il totale di ogni colonna. Il report si
+  stampa con il foglio in orizzontale.
 - **Proforme** mandate e non ancora pagate (scaglioni con proforma ancora da
   fatturare), con lo stesso importo del PDF della proforma: comprese le spese
   anticipate non ancora fatturate della commessa, contate una volta sola.
