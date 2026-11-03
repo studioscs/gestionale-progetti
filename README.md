@@ -1263,8 +1263,10 @@ corso; con ◀ ▶ si passa all'anno prima o dopo). Divide gli scaglioni per
 l'imponibile e quanti sono:
 
 1. **di competenza dell'anno, da fatturare nell'anno**: non ancora
-   fatturati, ma con la proforma mandata, pronti, o con la data prevista
-   entro il 31/12 — da fatturare e quindi da incassare;
+   fatturati, ma con la proforma mandata o con la data prevista entro il
+   31/12 (i pronti senza data contano qui) — da fatturare e quindi da
+   incassare. **La data prevista decide**: uno scaglione «pronto» con la
+   data a giugno dell'anno dopo sta nella casella dell'anno dopo;
 2. **di competenza dell'anno, fatturato e incassato**;
 3. **di competenza dell'anno, fatturato e non ancora incassato**;
 4. **di competenza dell'anno, da fatturare l'anno dopo**: data prevista
@@ -1291,9 +1293,9 @@ venire,
 
 - **già fatturato**: fatture emesse o incassate con la data nell'anno;
 - **da fatturare (previsto)**: nell'anno in corso gli scaglioni con la
-  proforma mandata, pronti o con la data prevista entro il 31/12 (anche
-  passata: sono in ritardo, restano qui); negli anni dopo quelli con la data
-  prevista in quell'anno;
+  proforma mandata o con la data prevista entro il 31/12 (anche passata:
+  sono in ritardo, restano qui), più i pronti senza data; negli anni dopo
+  quelli con la data prevista in quell'anno (anche se già pronti);
 - **totale** imponibile e lordo.
 
 Gli scaglioni aperti senza data prevista (né pronti né in proforma) sono in

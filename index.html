@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.17';
+const VERSIONE = '2026.11.03.18';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7848,6 +7848,13 @@ function datiReportIncassi() {
      si fattureranno L'ANNO DOPO (data prevista oltre, o non indicata). */
 const annoDi4 = d => Number(String(d || '').slice(0, 4)) || null;
 const fineAnno = y => y + '-12-31';
+/* Uno scaglione aperto si fattura entro il 31/12 dell'anno y se la proforma
+   e' gia' partita, o se la data prevista cade entro l'anno (anche passata:
+   e' in ritardo). «Pronta» senza data conta nell'anno; ma se la data
+   prevista c'e' decide lei: uno scaglione pronto con la data a giugno
+   dell'anno dopo si fattura l'anno dopo. */
+const siFatturaEntro = (f, y) => !!(f.proforma_numero
+  || (f.data_prevista ? f.data_prevista <= fineAnno(y) : f.stato === 'pronta'));
 const annoCompScaglione = f => Number(f.anno_competenza) || annoDi4(f.data_fattura) || annoDi4(f.data_prevista) || null;
 function numeriAnno(y) {
   y = Number(y) || today().getFullYear();
@@ -7858,9 +7865,7 @@ function numeriAnno(y) {
   const incasso = f => Number(f.importo_incassato) || contiDaIncassare(f, false).netto;
   const somma = (arr, fn) => r2(arr.reduce((a, f) => a + fn(f), 0));
   const comp = vive.filter(f => annoCompScaglione(f) === y);
-  const entro = f => fattAperta(f)
-    ? !!(f.proforma_numero || f.stato === 'pronta' || (f.data_prevista && f.data_prevista <= fineAnno(y)))
-    : (annoDi4(f.data_fattura) || y) <= y;
+  const entro = f => fattAperta(f) ? siFatturaEntro(f, y) : (annoDi4(f.data_fattura) || y) <= y;
   const compEntro = comp.filter(entro), compDopo = comp.filter(f => !entro(f));
   return { anno: y,
     fatturato: { n: fatturate.length, imponibile: somma(fatturate, impFattura), lordo: somma(fatturate, lordo) },
@@ -7890,7 +7895,7 @@ function fatturatoPerAnno() {
   riga(y0);
   const senza = [];
   vive.filter(fattAperta).forEach(f => {
-    if (f.proforma_numero || f.stato === 'pronta' || (f.data_prevista && f.data_prevista <= fineAnno(y0))) riga(y0).prev.push(f);
+    if (siFatturaEntro(f, y0)) riga(y0).prev.push(f);
     else if (f.data_prevista) riga(annoDi4(f.data_prevista)).prev.push(f);
     else senza.push(f);
   });

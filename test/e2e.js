@@ -4531,6 +4531,26 @@ function launchOpts(){
     must(g.entro&&g.riga,'la casella «da fatturare» non elenca i suoi scaglioni raggruppati');
     must(g.chiuso,'il secondo clic non chiude l elenco');
   });
+  await t('anno fiscale: uno scaglione pronto con la data l anno dopo non sta fra quelli dell anno',async()=>{
+    const g=await p.evaluate(async()=>{
+      const y=today().getFullYear(), pid=S.projects[0].id;
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',ordine:93,anno_competenza:y},o)).select().single();
+      const a=(await ins({descrizione:'PR anno dopo',imponibile:900,stato:'pronta',data_prevista:(y+1)+'-06-30'})).data;
+      const b=(await ins({descrizione:'PR senza data',imponibile:800,stato:'pronta'})).data;
+      await loadAll(true);
+      const n=numeriAnno(y), fa=S.fatture.find(x=>x.id===a.id), fb=S.fatture.find(x=>x.id===b.id), d=fatturatoPerAnno();
+      const r={aDopo:n.compDopo.includes(fa)&&!n.compEntro.includes(fa), bEntro:n.compEntro.includes(fb),
+        anno:(d.anni.find(x=>x.anno===y+1)||{nPrev:0}).nPrev>0};
+      S.afFiltro='entro'; S.annoFisc=null; S.page='fatturare'; render();
+      r.elenco=!/PR anno dopo/.test(document.querySelector('#af-elenco').textContent)&&/PR senza data/.test(document.querySelector('#af-elenco').textContent);
+      S.afFiltro=null;
+      await SB.from('commessa_fatture').delete().eq('id',a.id); await SB.from('commessa_fatture').delete().eq('id',b.id);
+      await loadAll(true); render(); return r; });
+    must(g.aDopo,'il pronto con data l anno dopo conta nell anno');
+    must(g.bEntro,'il pronto senza data non conta nell anno');
+    must(g.anno,'nel fatturato per anno il pronto non va nell anno della sua data');
+    must(g.elenco,'l elenco della casella mostra il pronto dell anno dopo');
+  });
   await t('fatturato per anno: quest anno e quelli a venire, nel riquadro e nel report',async()=>{
     const g=await p.evaluate(async()=>{
       const y=today().getFullYear(), pid=S.projects[0].id;
