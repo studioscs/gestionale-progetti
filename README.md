@@ -59,6 +59,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 38. [`sql/039_commercialista.sql`](sql/039_commercialista.sql) — il commercialista: vede tutto come l'amministrazione, non modifica niente
 39. [`sql/040_spese_art15_nei_servizi.sql`](sql/040_spese_art15_nei_servizi.sql) — spese anticipate scritte fra i servizi: esenti art. 15, fuori dall'imponibile
 40. [`sql/041_cliente_propaga.sql`](sql/041_cliente_propaga.sql) — correggere il cliente in anagrafica corregge commesse (anche il nome) e preventivi
+41. [`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql) — costi che si ripetono ogni anno, con la loro scadenza
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -832,7 +833,7 @@ Le commesse archiviate non si controllano.
 
 ## Report incassi e pagamenti ("black list")
 
-In *Da fatturare* il pulsante **🖨️ Report incassi** (solo per chi tiene
+In *Fatturazione* il pulsante **🖨️ Report incassi** (solo per chi tiene
 l'amministrazione) stampa su carta o scarica in PDF lo stesso foglio che lo
 studio teneva a mano:
 
@@ -844,12 +845,18 @@ studio teneva a mano:
 - **Black list**: fatture **emesse e non ancora incassate**, con anno, numero,
   intestatario e quanto il committente deve versare (imponibile, cassa, IVA,
   spese anticipate, meno l'eventuale ritenuta; per gli enti in scissione dei
-  pagamenti senza l'IVA, che l'ente versa all'erario).
+  pagamenti senza l'IVA, che l'ente versa all'erario). Conta l'importo
+  intero finché la fattura non è segnata *incassata*.
 - **Proforme** mandate e non ancora pagate (scaglioni con proforma ancora da
   fatturare), con lo stesso importo del PDF della proforma: comprese le spese
   anticipate non ancora fatturate della commessa, contate una volta sola.
-- **Da saldare**: parcelle degli esterni non pagate e costi generali non
-  pagati.
+- **Da saldare**: le parcelle degli esterni non pagate e i **costi generali
+  dell'anno solare della lista** (quello della data in cui la si genera) non
+  ancora pagati a quella data, comprese le rate annuali di software,
+  assicurazioni e abbonamenti, in ordine di **scadenza** («SCADE 31/03/2026»).
+  L'anno di un costo è quello della scadenza, se c'è, altrimenti quello di
+  competenza: restano fuori le rate già preparate per l'anno dopo e i costi
+  degli anni passati.
 
 La colonna *Solleciti* riporta i solleciti segnati nel gestionale (vedi
 sotto); nel riepilogo compaiono anche le posizioni **in mora con
@@ -1225,6 +1232,21 @@ indica vale l'anno della data.
 > RLS della migrazione 031), non solo nell'interfaccia: un collaboratore non li
 > legge nemmeno interrogando Supabase direttamente.
 
+### Costi che si ripetono ogni anno: software, assicurazioni, abbonamenti
+
+Nel modulo del costo ci sono la **scadenza del pagamento** e la spunta
+**🔁 Si ripete ogni anno**. Passata la scadenza (o, senza, la data) di un
+costo ricorrente, il gestionale prepara da solo quello dell'anno dopo: stesso
+importo, fornitore e categoria, date spostate di un anno, **da pagare**,
+collegato al precedente. Se si riapre il gestionale dopo molto tempo prepara
+tutte le rate mancanti, fino alla prima con la scadenza nel futuro. Una rata
+non si crea mai due volte, nemmeno con due persone collegate insieme (lo
+impedisce il database, migrazione
+[`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql)). Nella lista
+dei costi ogni voce mostra 🔁 *annuale* e, se non pagata, la scadenza (in
+rosso se passata); le rate dell'anno in corso non pagate entrano nella black
+list.
+
 ## ISA: il quadro C si compila da sé
 
 Ogni anno il modello ISA (EK23U, studi tecnici) chiede, per ognuna delle
@@ -1265,6 +1287,16 @@ Gli scaglioni già esistenti senza tipologia restano come sono finché non li si
 apre: alla prima modifica, o alla prima fattura, va scelta.
 
 ### Il pulsante ISA
+
+**Contano tutte le fatture emesse o incassate di quell'anno**: l'anno è
+quello di competenza scritto sullo scaglione (o sul singolo servizio) e, per
+le fatture di prima che fosse obbligatorio, quello della data della fattura.
+Gli scaglioni ancora da emettere
+o solo pronti non sono compensi fatturati e restano fuori dalle percentuali.
+Sotto la tabella si legge quanto vale quello che ha la stessa competenza ma
+non è ancora fatturato, così a fine anno si vede cosa manca. Prima entravano
+anche questi: nel 2026 più di 370.000 € di lavoro non fatturato spostavano le
+percentuali.
 
 Nella pagina **Da fatturare**, in alto a destra. Si sceglie l'anno e compare il
 quadro C già fatto:

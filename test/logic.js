@@ -967,7 +967,7 @@ t('a zero non si divide per zero',ctx.percentualiA100([0,0]).join()==='0,0',null
 ctx.S.projects=[{id:'p1',name:'Villa'},{id:'p2',name:'Capannone'},{id:'p3',name:'Scuola'}];
 ctx.S.fatture=[
   /* con i servizi elencati: due caselle diverse nello stesso acconto */
-  {id:'f1',project_id:'p1',descrizione:'Acconto',imponibile:3000,stato:'pronta'},
+  {id:'f1',project_id:'p1',descrizione:'Acconto',imponibile:3000,stato:'emessa'},
   /* a voce unica: valgono tipo e anno dello scaglione */
   {id:'f2',project_id:'p2',descrizione:'Saldo',imponibile:2000,stato:'emessa',
    isa_tipo:'C02',anno_competenza:2026},
@@ -978,8 +978,13 @@ ctx.S.fatture=[
   {id:'f4',project_id:'p3',descrizione:'Annullata',imponibile:5000,stato:'annullata',
    isa_tipo:'C02',anno_competenza:2026},
   /* senza tipologia: va contata a parte, non ignorata */
-  {id:'f5',project_id:'p1',descrizione:'Da classificare',imponibile:500,stato:'pronta',
-   anno_competenza:2026}];
+  {id:'f5',project_id:'p1',descrizione:'Da classificare',imponibile:500,stato:'incassata',
+   anno_competenza:2026},
+  /* non ancora fatturato: non e' un compenso dell'anno, si dice a parte */
+  {id:'f6',project_id:'p2',descrizione:'Saldo futuro',imponibile:7000,stato:'pronta',
+   isa_tipo:'C02',anno_competenza:2026},
+  {id:'f7',project_id:'p2',descrizione:'Rata da emettere',imponibile:800,stato:'da_emettere',
+   isa_tipo:'C06',anno_competenza:2026}];
 ctx.S.fattRighe=[
   {id:'r1',fattura_id:'f1',ordine:0,descrizione:'Progetto',importo:2000,isa_tipo:'C06',anno_competenza:2026},
   {id:'r2',fattura_id:'f1',ordine:1,descrizione:'Direzione lavori',importo:1000,isa_tipo:'C12',anno_competenza:2026}];
@@ -994,6 +999,8 @@ t('C06 vale 2000 e C12 vale 1000',
   &&(R.righe.find(g=>g.tipo==='C12')||{}).importo===1000,null);
 t('l anno diverso resta fuori',!R.righe.some(g=>g.importo===9000),null);
 t('la fattura annullata pure',R.totale===5000,R.totale);
+t('gli scaglioni non ancora fatturati non contano',!R.righe.some(g=>g.importo>=7000)&&R.totale===5000,R.righe.map(g=>[g.tipo,g.importo]));
+t('ma si dice quanto vale il non fatturato',R.nonFatturato===7800&&R.nonFatturatoN===2,[R.nonFatturato,R.nonFatturatoN]);
 t('le percentuali fanno 100',
   ctx.r2(R.righe.reduce((a,g)=>a+g.perc,0))===100,R.righe.map(g=>g.perc));
 t('C06 e il 40% di 5000',(R.righe.find(g=>g.tipo==='C06')||{}).perc===40,null);
@@ -1023,7 +1030,7 @@ t('ma nel totale incarichi conta una volta sola',R2.incarichiTotali===2,R2.incar
    acconto di competenza 2025, o viceversa. Lo scaglione dice una cosa, la
    singola riga ne dice un'altra, e deve valere la riga. */
 ctx.S.projects=[{id:'pX',name:'A cavallo d anno'}];
-ctx.S.fatture=[{id:'fX',project_id:'pX',descrizione:'Acconto',imponibile:3000,stato:'pronta',
+ctx.S.fatture=[{id:'fX',project_id:'pX',descrizione:'Acconto',imponibile:3000,stato:'emessa',
   isa_tipo:'C02',anno_competenza:2026}];
 ctx.S.fattRighe=[
   /* segue lo scaglione: niente scritto sulla riga */
@@ -1059,6 +1066,11 @@ ctx.S.fattRighe=[
   {id:'r1',fattura_id:'f1',ordine:0,descrizione:'Progetto',importo:2000,isa_tipo:'C06',anno_competenza:2026},
   {id:'r2',fattura_id:'f1',ordine:1,descrizione:'Direzione lavori',importo:1000,isa_tipo:'C12',anno_competenza:2026}];
 
+/* Le fatture di prima, senza anno di competenza: vale l'anno della fattura */
+ctx.S.fatture=ctx.S.fatture.concat([{id:'fV',project_id:'p3',descrizione:'Vecchia senza anno',imponibile:1500,
+  stato:'incassata',isa_tipo:'C02',data_fattura:'2024-06-10'}]);
+t('senza anno di competenza vale l anno della fattura',ctx.isaRiepilogo(2024).totale===1500,ctx.isaRiepilogo(2024).totale);
+ctx.S.fatture=ctx.S.fatture.filter(f=>f.id!=='fV');
 /* Gli anni proposti sono quelli su cui c e davvero qualcosa */
 t('gli anni con dati sono 2026 e 2025',
   ctx.isaAnniConDati().join()==='2026,2025',ctx.isaAnniConDati().join());

@@ -1087,8 +1087,8 @@ function launchOpts(){
          prende da una fattura che c'e' gia' */
       const pid=S.fatture[0].project_id;
       const {error}=await SB.from('commessa_fatture').insert({project_id:pid,
-        descrizione:'Senza tipologia',imponibile:700,stato:'pronta',ordine:99,
-        anno_competenza:2026});
+        descrizione:'Senza tipologia',imponibile:700,stato:'incassata',ordine:99,
+        numero_fattura:'SENZA-ISA',data_fattura:'2026-05-10',anno_competenza:2026});
       await loadAll(true);
       const r=isaRiepilogo(2026);
       return {errore:error&&error.message, senza:r.senzaTipo.length,
@@ -3492,6 +3492,42 @@ function launchOpts(){
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; go('oggi'); });
   });
 
+  await t('un costo che si ripete ogni anno prepara da solo quello dell anno dopo, una volta sola',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; go('costi'); });
+    await p.click('#co-nuovo'); await p.waitForSelector('#m-costo.show',{timeout:4000});
+    await p.selectOption('#co-cat','software');
+    await p.fill('#co-desc','Canone software di calcolo'); await p.fill('#co-forn','Software House');
+    await p.fill('#co-imp','1500'); await p.fill('#co-data','2025-03-15'); await p.selectOption('#co-anno','2025');
+    await p.fill('#co-scad','2025-03-31'); await p.check('#co-ric');
+    await p.selectOption('#co-pag','1'); await p.fill('#co-pagdt','2025-03-20');
+    await p.click('#co-save'); await p.waitForTimeout(1200);
+    const g=await p.evaluate(()=>__DB.costi_generali.filter(x=>x.descrizione==='Canone software di calcolo')
+      .map(x=>({anno:x.anno_competenza,scad:x.scadenza,pag:x.pagato,ric:x.ricorrente,orig:!!x.origine_id,imp:Number(x.importo)}))
+      .sort((a,b)=>String(a.scad).localeCompare(String(b.scad))));
+    /* 2025 pagato, 2026 scaduto il 31/03/2026 quindi anche 2027 preparato */
+    must(g.length===3,'rate annuali: '+JSON.stringify(g));
+    must(g[1].scad==='2026-03-31'&&g[1].anno===2026&&!g[1].pag&&g[1].ric&&g[1].orig&&g[1].imp===1500,'rata 2026: '+JSON.stringify(g[1]));
+    must(g[2].scad==='2027-03-31'&&g[2].anno===2027,'rata 2027: '+JSON.stringify(g[2]));
+    await p.evaluate(async()=>{ await loadAll(true); await loadAll(true); });
+    const n=await p.evaluate(()=>__DB.costi_generali.filter(x=>x.descrizione==='Canone software di calcolo').length);
+    must(n===3,'ricaricando le rate si moltiplicano: '+n);
+    await p.selectOption('#co-annosel','2026'); await p.waitForTimeout(300);
+    const txt=await p.textContent('#page');
+    must(/Canone software di calcolo/.test(txt)&&/annuale/.test(txt)&&/scade il 31\/03\/2026/.test(txt),'la pagina non mostra rata e scadenza');
+  });
+  await t('nella black list i debiti: costi generali dell anno non pagati e parcelle, in ordine di scadenza',async()=>{
+    const g=await p.evaluate(()=>{ const d=datiReportIncassi();
+      const canone=d.daSaldare.filter(x=>/Canone software/.test(x.det||x.chi)||/Software House/.test(x.chi));
+      const anno=today().getFullYear();
+      const nonPagati=S.costiGen.filter(c=>!c.pagato&&(Number(String(c.scadenza||'').slice(0,4))||annoCosto(c))===anno).length;
+      const costiInLista=d.daSaldare.filter(x=>x.num==='COSTO'||/^SCADE /.test(x.num)).length;
+      return {canone:canone.map(x=>x.num), nonPagati, costiInLista, tot:d.totSaldare,
+        somma:r2(d.daSaldare.reduce((a,x)=>a+x.importo,0))}; });
+    /* solo l'anno solare della lista: la rata 2027, gia' preparata, resta fuori */
+    must(g.canone.join()==='SCADE 31/03/'+new Date().getFullYear(),'rate del canone nella black list: '+g.canone.join());
+    must(g.costiInLista===g.nonPagati,'i costi da pagare dell anno non sono tutti nella black list: '+g.costiInLista+' su '+g.nonPagati);
+    must(g.tot===g.somma,'il totale da saldare non torna');
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });

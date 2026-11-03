@@ -997,6 +997,14 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="hint" style="margin:-8px 0 14px">L&rsquo;anno di competenza non &egrave; per forza
         quello della data: la bolletta di dicembre pagata a gennaio &egrave; dell&rsquo;anno prima.</div>
       <div class="fg2">
+        <div class="fg"><label class="fl">Scadenza del pagamento</label><input type="date" class="fc" id="co-scad"></div>
+        <div class="fg"><label class="fl">&nbsp;</label>
+          <label class="row" style="gap:6px;cursor:pointer;font-size:13px;margin-top:8px">
+            <input type="checkbox" id="co-ric"> &#128257; Si ripete ogni anno</label></div>
+      </div>
+      <div class="hint" style="margin:-8px 0 14px">Software, assicurazioni, abbonamenti: con la spunta, passata la
+        scadenza il gestionale prepara da solo il costo dell&rsquo;anno dopo (stesso importo, stessa data), da pagare.</div>
+      <div class="fg2">
         <div class="fg"><label class="fl">Stato del pagamento</label>
           <select class="fc" id="co-pag"><option value="0">Da pagare</option><option value="1">Pagato</option></select></div>
         <div class="fg" id="co-pagdt-box"><label class="fl">Pagato il</label>
@@ -1542,7 +1550,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.02.6';
+const VERSIONE = '2026.11.03.3';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1565,7 +1573,7 @@ const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } })
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '',
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '', inRicorrenti: false, senzaRicorrenti: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -1756,7 +1764,8 @@ const MIGRAZIONI = {
   '034_note_commessa':       ['note_contratti'],
   '035_solleciti':           ['sollecito_1','sollecito_2','messa_in_mora','avvocato','note_solleciti'],
   '038_contratto_da_preventivo': ['preventivo_id'],
-  '040_spese_art15_nei_servizi': ['art15']
+  '040_spese_art15_nei_servizi': ['art15'],
+  '042_costi_ricorrenti':    ['ricorrente','scadenza','origine_id']
   /* 041_cliente_propaga: solo un trigger, nessuna colonna da controllare */
 };
 /* Dalle risposte di caricamento capisce quali migrazioni non sono state
@@ -2861,6 +2870,9 @@ async function loadAll(silent) {
                      [rpv, 'preventivi'],      [rpm, 'preventivo_modelli'],
                      [rpc, 'pratiche_catalogo'], [rtPrat, 'pratica_ruolo']]);
     S.loaded = true;
+    /* i costi ricorrenti dell'anno dopo, se e' il momento (una volta per caricamento) */
+    if (!S.inRicorrenti) { S.inRicorrenti = true;
+      try { await preparaRicorrenti(); } catch (e) { console.warn('costi ricorrenti', e); } finally { S.inRicorrenti = false; } }
     updBadges(); paintBell();
     return true;
   } finally {
@@ -4591,20 +4603,31 @@ function isaDellaCommessa(pid) {
 
    Si conta anche quello che NON e' classificato, per dirlo: un riepilogo che
    tace su quello che non sa e' peggio di uno che non c'e'. */
-function isaVoci(anno) {
+/* SOLO QUELLO CHE E' STATO FATTURATO
+   Il quadro C ripartisce i compensi dell'anno: contano le fatture emesse o
+   incassate. Prima entravano anche gli scaglioni ancora da emettere o solo
+   pronti (nel 2026 piu' di 370.000 euro su 610.000): lavoro previsto, non
+   fatturato, che spostava le percentuali. Con «tutti» si contano anche quelli,
+   per dire a parte quanto manca. */
+const ISA_FATTURATE = ['emessa', 'incassata'];
+function isaVoci(anno, tutti) {
   const out = [];
   S.fatture.forEach(f => {
     if (f.stato === 'annullata') return;
+    if (!tutti && ISA_FATTURATE.indexOf(f.stato) < 0) return;
+    /* senza anno di competenza (le fatture di prima che fosse obbligatorio)
+       vale l'anno della fattura */
+    const annoF = Number(f.anno_competenza || 0) || Number(String(f.data_fattura || '').slice(0, 4)) || null;
     const tutte = righeFattura(f.id), rr = tutte.filter(r => !r.art15);
     if (tutte.length && !rr.length) return;          // solo anticipazioni: niente compenso
     if (rr.length) {
       rr.forEach(r => out.push({
         tipo: r.isa_tipo || f.isa_tipo || null,
-        anno: Number(r.anno_competenza || f.anno_competenza || 0) || null,
+        anno: Number(r.anno_competenza || 0) || annoF,
         importo: r2(r.importo || 0), pid: f.project_id, fid: f.id, cosa: r.descrizione }));
     } else {
       out.push({ tipo: f.isa_tipo || null,
-        anno: Number(f.anno_competenza || 0) || null,
+        anno: annoF,
         importo: r2(impFattura(f)), pid: f.project_id, fid: f.id, cosa: f.descrizione });
     }
   });
@@ -4651,7 +4674,10 @@ function isaRiepilogo(anno) {
   const perc = percentualiA100(righe.map(g => g.importo));
   righe.forEach((g, i) => { g.perc = perc[i]; g.incarichi = g.commesse.size; });
 
+  /* con la stessa competenza ma non ancora fatturato: si dice, non si conta */
+  const nonFatt = isaVoci(anno, true).filter(v => { const f = byId(S.fatture, v.fid); return f && ISA_FATTURATE.indexOf(f.stato) < 0; });
   return { anno: Number(anno), righe,
+           nonFatturato: r2(nonFatt.reduce((a, v) => a + v.importo, 0)), nonFatturatoN: nonFatt.length,
            totale: r2(righe.reduce((a, g) => a + g.importo, 0)),
            incarichiTotali: new Set(classificate.map(v => v.pid)).size,
            senzaTipo, importoSenzaTipo: r2(senzaTipo.reduce((a, v) => a + v.importo, 0)) };
@@ -7686,6 +7712,9 @@ function datiReportIncassi() {
   const perData = k => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''));
   const emesse = S.fatture.filter(f => f.stato === 'emessa').sort(perData('data_fattura'))
     .map(f => ({ f, anno: annoDiData(f.data_fattura), num: f.numero_fattura || '—', chi: intestatarioDi(f),
+                 /* l'importo intero: «importo incassato» su una fattura ancora emessa
+                    nei dati reali e' spesso compilato con l'importo atteso, non con
+                    un pagamento arrivato - toglierlo nasconderebbe crediti veri */
                  importo: daIncassareDi(f, false) }));
   const giaSpese = {};
   const proforme = S.fatture.filter(f => fattAperta(f) && f.proforma_numero)
@@ -7693,9 +7722,20 @@ function datiReportIncassi() {
     .map(f => { const prima = !giaSpese[f.project_id]; giaSpese[f.project_id] = true;
       return { f, anno: annoDiData(f.proforma_data), num: 'PROFORMA ' + f.proforma_numero, chi: intestatarioDi(f),
                importo: daIncassareDi(f, prima) }; });
-  const costi = (S.costiGen || []).filter(c => !c.pagato).sort(perData('data_spesa'))
-    .map(c => ({ anno: String(c.anno_competenza || annoDiData(c.data_spesa)), num: '',
-                 chi: c.fornitore || c.descrizione, det: c.fornitore ? c.descrizione : nomeCategoria(c.categoria),
+  /* I costi generali dell'ANNO SOLARE della lista (quello della data in cui
+     la si genera) non ancora pagati a quella data, in ordine di scadenza.
+     L'anno di un costo e' quello della scadenza, se c'e', altrimenti quello
+     di competenza: restano fuori le rate gia' preparate per l'anno dopo e i
+     costi degli anni passati. */
+  const annoLista = today().getFullYear();
+  const annoDelCosto = c => Number(String(c.scadenza || '').slice(0, 4)) || annoCosto(c);
+  const quando = c => c.scadenza || c.data_spesa || '';
+  const costi = (S.costiGen || []).filter(c => !c.pagato && annoDelCosto(c) === annoLista)
+    .sort((a, b) => String(quando(a)).localeCompare(String(quando(b))))
+    .map(c => ({ anno: String(c.anno_competenza || annoDiData(c.data_spesa)),
+                 num: c.scadenza ? 'SCADE ' + fdate(c.scadenza) : 'COSTO',
+                 chi: c.fornitore || c.descrizione,
+                 det: (c.fornitore ? c.descrizione : nomeCategoria(c.categoria)) + (c.ricorrente ? ' · ogni anno' : ''),
                  importo: r2(Number(c.importo) || 0) }));
   const parcelle = daPagare(esterniTutti()).sort(perData('entry_date'))
     .map(e => ({ anno: annoDiData(e.entry_date), num: 'PARCELLA', chi: e.esterno, det: pn(e.project_id),
@@ -7729,7 +7769,7 @@ function reportIncassi(saldo) {
       { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: [4], largo: 2, totCol: 4,
           righe: d.proforme.map(riga), tot: d.proforme.length ? [['Totale proforme', feuro(d.totProforme)]] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
-      { titolo: 'Da saldare — ' + nome, tabella: { col: ['Anno rif.', 'N. fattura', 'Intestatario', 'Importo'], dx: [3], largo: 2,
+      { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
           righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
           tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
           vuoto: 'Niente da pagare: costi generali ed esterni sono saldati.' } }
@@ -8299,6 +8339,10 @@ function disegnaIsa(anno) {
           + '<td style="text-align:right"><b>' + feuro(r.totale) + '</b></td>'
           + '<td style="text-align:right"><b>' + somma.toFixed(2).replace('.', ',') + ' %</b></td>'
         + '</tr></tfoot></table></div>'
+      + (r.nonFatturato ? '<div class="ibox" style="margin-top:10px;font-size:12px">Contano solo le fatture '
+          + '<b>emesse o incassate</b>. Con competenza ' + esc(String(r.anno)) + ' ci sono anche <b>'
+          + feuro(r.nonFatturato) + '</b> in ' + r.nonFatturatoN + (r.nonFatturatoN === 1 ? ' scaglione' : ' scaglioni')
+          + ' non ancora fatturati: entreranno quando la fattura sarà emessa.</div>' : '')
       + '<div class="hint" style="margin-top:10px">'
         + '<b>Incarichi</b>: quante commesse diverse hanno almeno una voce di quella tipologia '
         + 'nell’anno — la stessa commessa conta una volta per ogni casella che tocca. '
@@ -8337,6 +8381,9 @@ function stampaIsa() {
     + (r.senzaTipo.length ? '<p style="margin-top:14px;color:#b00;font-size:11px">Attenzione: '
         + r.senzaTipo.length + ' voci senza tipologia (' + feuro(r.importoSenzaTipo)
         + ') non sono comprese in questi totali.</p>' : '')
+    + '<p style="margin-top:10px;color:#555;font-size:11px">Contano le fatture emesse o incassate.'
+    + (r.nonFatturato ? ' Con questa competenza ci sono anche ' + feuro(r.nonFatturato)
+        + ' in scaglioni non ancora fatturati, esclusi.' : '') + '</p>'
     + '</body></html>');
   w.document.close();
   setTimeout(() => w.print(), 250);
@@ -8391,8 +8438,11 @@ function rCosti() {
   const righe = r.voci.slice().sort((a, b) => String(b.data_spesa).localeCompare(String(a.data_spesa)))
     .map(c => '<tr data-costo="' + c.id + '" style="cursor:pointer">'
       + '<td style="width:88px;font-size:12px;color:var(--mut)">' + fdate(c.data_spesa) + '</td>'
-      + '<td><b>' + esc(c.descrizione) + '</b><div style="font-size:11px;color:var(--mut)">'
-        + esc(nomeCategoria(c.categoria)) + (c.fornitore ? ' · ' + esc(c.fornitore) : '') + '</div></td>'
+      + '<td><b>' + esc(c.descrizione) + '</b>' + (c.ricorrente ? ' <span class="chip" title="Si ripete ogni anno">&#128257; annuale</span>' : '')
+        + '<div style="font-size:11px;color:var(--mut)">'
+        + esc(nomeCategoria(c.categoria)) + (c.fornitore ? ' · ' + esc(c.fornitore) : '')
+        + (c.scadenza && !c.pagato ? ' · <span style="color:' + (c.scadenza < todayISO() ? 'var(--red)' : 'var(--ora)')
+            + '">scade il ' + fdate(c.scadenza) + '</span>' : '') + '</div></td>'
       + '<td style="text-align:right;white-space:nowrap"><b>' + feuro(c.importo) + '</b></td>'
       + '<td style="font-size:11.5px;white-space:nowrap">' + (c.pagato
           ? '<span style="color:var(--grn)">✓ pagato' + (c.data_pagamento ? ' il ' + fdate(c.data_pagamento) : '') + '</span>'
@@ -8422,6 +8472,8 @@ function openCosto(id) {
   el('co-pag').value  = c && c.pagato ? '1' : '0';
   el('co-pagdt').value = c ? (c.data_pagamento || '') : '';
   el('co-note').value = c ? (c.note || '') : '';
+  el('co-scad').value = c ? (c.scadenza || '') : '';
+  el('co-ric').checked = !!(c && c.ricorrente);
   /* i fornitori gia' usati, per non doverli riscrivere */
   el('co-fornitori').innerHTML = Array.from(new Set(S.costiGen.map(x => (x.fornitore || '').trim()).filter(Boolean)))
     .sort((a, b) => a.localeCompare(b, 'it')).map(f => '<option value="' + esc(f) + '">').join('');
@@ -8446,8 +8498,10 @@ async function saveCosto() {
     data_spesa: el('co-data').value || todayISO(),
     anno_competenza: Number(el('co-anno').value) || null,
     pagato, data_pagamento: pagato ? (el('co-pagdt').value || todayISO()) : null,
-    note: el('co-note').value.trim() || null
+    note: el('co-note').value.trim() || null,
+    scadenza: el('co-scad').value || null, ricorrente: el('co-ric').checked
   };
+  if (pay.ricorrente && !pay.scadenza) pay.scadenza = pay.data_spesa;
   const id = el('co-id').value;
   setLoading('co-save', true);
   const { error } = id
@@ -8459,6 +8513,37 @@ async function saveCosto() {
   if (pay.anno_competenza) S.costiAnno = pay.anno_competenza;
   closeM('m-costo'); await loadAll(true); render();
   toast(id ? 'Costo aggiornato' : 'Costo registrato', 'success');
+}
+/* COSTI CHE SI RIPETONO OGNI ANNO
+   Passata la scadenza (o, senza, la data) di un costo ricorrente, si prepara
+   quello dell'anno dopo: stesso importo, date spostate di un anno, da pagare,
+   collegato al precedente. Si va avanti finche' l'ultimo non e' nel futuro,
+   cosi' dopo un anno senza aprire il gestionale non manca nessuna rata. Il
+   database non accetta due ripetizioni dello stesso costo (migrazione 042):
+   due persone collegate insieme non le creano doppie. */
+const unAnnoDopo = d => { const x = pd(d); if (!x) return null; x.setFullYear(x.getFullYear() + 1); return iso(x); };
+async function preparaRicorrenti() {
+  if (!vedeTutto() || !canW() || !S.me || S.senzaRicorrenti) return 0;
+  let n = 0;
+  const oggi = todayISO();
+  for (const c0 of (S.costiGen || []).filter(c => c.ricorrente)) {
+    let c = c0, giri = 0;
+    while (giri++ < 10) {
+      if (S.costiGen.some(x => x.origine_id === c.id)) break;           // gia' preparato
+      if (String(c.scadenza || c.data_spesa || '') > oggi) break;       // non ancora scaduto
+      const nuovo = { categoria: c.categoria, descrizione: c.descrizione, fornitore: c.fornitore || null,
+        importo: c.importo, data_spesa: unAnnoDopo(c.data_spesa) || oggi, scadenza: unAnnoDopo(c.scadenza),
+        anno_competenza: c.anno_competenza ? Number(c.anno_competenza) + 1 : null, pagato: false, data_pagamento: null,
+        note: c.note || null, ricorrente: true, origine_id: c.id, created_by: S.me.id };
+      const { data, error } = await SB.from('costi_generali').insert(nuovo).select().maybeSingle();
+      if (error) {
+        if (/origine_id|ricorrente|scadenza/.test(error.message || '') && !/duplicate/i.test(error.message || '')) S.senzaRicorrenti = true;
+        break;                                                           // doppione o colonna mancante: si lascia stare
+      }
+      S.costiGen.push(data || nuovo); c = data || nuovo; n++;
+    }
+  }
+  return n;
 }
 async function delCosto() {
   const id = el('co-id').value; const c = byId(S.costiGen, id); if (!c) return;
