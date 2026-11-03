@@ -4500,6 +4500,37 @@ function launchOpts(){
     must(g.dentro,'scaglioni nella divisione sbagliata');
     must(g.avanti,'il pulsante ▶ non passa all anno dopo');
   });
+  await t('fatturato per anno: quest anno e quelli a venire, nel riquadro e nel report',async()=>{
+    const g=await p.evaluate(async()=>{
+      const y=today().getFullYear(), pid=S.projects[0].id;
+      const prima=fatturatoPerAnno(), v=(d,a)=>(d.anni.find(r=>r.anno===a)||{fatturato:0,previsto:0,totale:0});
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',ordine:91,anno_competenza:y},o)).select().single();
+      const mk=[await ins({descrizione:'FA emessa',imponibile:1000,stato:'emessa',numero_fattura:'951/FE',data_fattura:y+'-05-01'}),
+        await ins({descrizione:'FA pronta',imponibile:2000,stato:'pronta'}),
+        await ins({descrizione:'FA ritardo',imponibile:3000,stato:'da_emettere',data_prevista:(y-1)+'-06-01'}),
+        await ins({descrizione:'FA tra due anni',imponibile:4000,stato:'da_emettere',data_prevista:(y+2)+'-02-01'}),
+        await ins({descrizione:'FA senza data',imponibile:5000,stato:'da_emettere'})].map(r=>r.data.id);
+      await loadAll(true);
+      const d=fatturatoPerAnno(), A=v(d,y), A0=v(prima,y), C=v(d,y+2), C0=v(prima,y+2);
+      S.page='fatturare'; render();
+      const r={fatt:r2(A.fatturato-A0.fatturato), prev:r2(A.previsto-A0.previsto), due:r2(C.previsto-C0.previsto),
+        senza:r2(d.senzaData.previsto-prima.senzaData.previsto),
+        anni:d.anni.map(x=>x.anno).join(','),
+        tab:!!document.querySelector('#fatt-anni')&&/Fatturato per anno/.test(document.querySelector('#fatt-anni').textContent),
+        rep:(()=>{ const sc=reportIncassi(''); return sc.sezioni.some(z=>/Fatturato per anno/.test(z.titolo))
+          && sc.sezioni[0].campi.some(c=>/Fatturato totale/.test(c[0])); })()};
+      for(const id of mk) await SB.from('commessa_fatture').delete().eq('id',id);
+      await loadAll(true); render(); return r; });
+    must(g.fatt===1000,'già fatturato quest anno: '+g.fatt);
+    must(g.prev===5000,'previsto quest anno (pronta + in ritardo): '+g.prev);
+    must(g.due===4000,'previsto fra due anni: '+g.due);
+    must(g.senza===5000,'senza data: '+g.senza);
+    const y=new Date().getFullYear();
+    const an=g.anni.split(',').map(Number);
+    must(an[0]===y&&[y,y+1,y+2].every(a=>an.includes(a))&&an.every((a,i)=>!i||a===an[i-1]+1),'anni elencati: '+g.anni);
+    must(g.tab,'tabella assente nel riquadro');
+    must(g.rep,'manca nel report incassi');
+  });
   await t('fatturazione: scaglioni raggruppati per commessa, commesse in ordine di codice',async()=>{
     const g=await p.evaluate(async()=>{
       const mk=async(codice,name)=>(await SB.from('projects').insert({name,codice,client:'Cliente '+codice,status:'in_corso',amount:1000}).select().single()).data;

@@ -1276,6 +1276,24 @@ incassi, quindi i numeri tornano fra le due pagine. Gli scaglioni aperti
 senza anno di competenza né date non stanno in nessun anno: una riga sotto
 dice quanti sono.
 
+### Il fatturato per anno
+
+Sotto le cinque caselle, e nel **Report incassi** (riepilogo e tabella), il
+**fatturato per anno della fattura**: per l'anno in corso e per ogni anno a
+venire,
+
+- **già fatturato**: fatture emesse o incassate con la data nell'anno;
+- **da fatturare (previsto)**: nell'anno in corso gli scaglioni con la
+  proforma mandata, pronti o con la data prevista entro il 31/12 (anche
+  passata: sono in ritardo, restano qui); negli anni dopo quelli con la data
+  prevista in quell'anno;
+- **totale** imponibile e lordo.
+
+Gli scaglioni aperti senza data prevista (né pronti né in proforma) sono in
+una riga a parte, «Senza data prevista»: finché non si indica la data non
+si sa in che anno cadranno. Nel riepilogo del report c'è anche la riga
+«Fatturato totale dell'anno (emesso + da emettere entro il 31/12)».
+
 ### Raggruppate per commessa
 
 In ogni tabella della pagina Fatturazione (proforma emesse, fatture emesse,

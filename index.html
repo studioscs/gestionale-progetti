@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.15';
+const VERSIONE = '2026.11.03.16';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7870,6 +7870,58 @@ function numeriAnno(y) {
     totEntro: { imponibile: somma(compEntro, impFattura), lordo: somma(compEntro, lordo) },
     totDopo:  { imponibile: somma(compDopo, impFattura), lordo: somma(compDopo, lordo) } };
 }
+/* IL FATTURATO PER ANNO: QUELLO DI QUEST'ANNO E QUELLO DEGLI ANNI A VENIRE
+   Per anno della fattura (non di competenza):
+   - gia' fatturato: fatture emesse o incassate con la data nell'anno;
+   - da fatturare: gli scaglioni aperti che si fattureranno in quell'anno.
+     Nell'anno in corso quelli con la proforma mandata, pronti, o con la
+     data prevista entro il 31/12 (anche passata: sono in ritardo, non
+     spariscono); negli anni dopo quelli con la data prevista in quell'anno.
+   Gli aperti senza data, ne' pronti ne' in proforma, vanno in una riga a
+   parte: non si sa ancora in che anno. Imponibile e lordo. */
+function fatturatoPerAnno() {
+  const y0 = today().getFullYear();
+  const vive = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id));
+  const lordo = f => contiDaIncassare(f, false).totale;
+  const anni = {};
+  const riga = a => anni[a] = anni[a] || { anno: a, fatt: [], prev: [] };
+  vive.filter(f => ISA_FATTURATE.indexOf(f.stato) >= 0 && (annoDi4(f.data_fattura) || 0) >= y0)
+    .forEach(f => riga(annoDi4(f.data_fattura)).fatt.push(f));
+  riga(y0);
+  const senza = [];
+  vive.filter(fattAperta).forEach(f => {
+    if (f.proforma_numero || f.stato === 'pronta' || (f.data_prevista && f.data_prevista <= fineAnno(y0))) riga(y0).prev.push(f);
+    else if (f.data_prevista) riga(annoDi4(f.data_prevista)).prev.push(f);
+    else senza.push(f);
+  });
+  /* ogni anno, anche quelli dove per ora non c'e' niente: almeno il prossimo */
+  const ultimo = Math.max(y0 + 1, ...Object.keys(anni).map(Number));
+  for (let a = y0; a <= ultimo; a++) riga(a);
+  const tot = (arr, fn) => r2(arr.reduce((a, f) => a + fn(f), 0));
+  const fai = r => ({ anno: r.anno, nFatt: r.fatt.length, nPrev: r.prev.length,
+    fatturato: tot(r.fatt, impFattura), previsto: tot(r.prev, impFattura),
+    totale: r2(tot(r.fatt, impFattura) + tot(r.prev, impFattura)),
+    lordo: r2(tot(r.fatt, lordo) + tot(r.prev, lordo)) });
+  return { anni: Object.values(anni).sort((a, b) => a.anno - b.anno).map(fai),
+           senzaData: fai({ anno: null, fatt: [], prev: senza }) };
+}
+function tabellaFatturatoPerAnno() {
+  const d = fatturatoPerAnno(), y0 = today().getFullYear();
+  const tr = (et, r) => '<tr><td><b>' + et + '</b></td>'
+    + '<td style="text-align:right">' + feuro(r.fatturato) + (r.nFatt ? ' <span style="color:var(--mut);font-size:11px">(' + r.nFatt + ')</span>' : '') + '</td>'
+    + '<td style="text-align:right">' + feuro(r.previsto) + (r.nPrev ? ' <span style="color:var(--mut);font-size:11px">(' + r.nPrev + ')</span>' : '') + '</td>'
+    + '<td style="text-align:right"><b>' + feuro(r.totale) + '</b></td>'
+    + '<td style="text-align:right;color:var(--mut)">' + feuro(r.lordo) + '</td></tr>';
+  return '<div style="margin-top:14px" id="fatt-anni"><div style="font-size:12.5px;font-weight:700;margin-bottom:6px">Fatturato per anno '
+    + '<span style="font-weight:400;color:var(--mut)">— per data della fattura: già emesso più quello che si prevede di emettere</span></div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Anno</th><th style="text-align:right">Già fatturato</th>'
+    + '<th style="text-align:right">Da fatturare (previsto)</th><th style="text-align:right">Totale imponibile</th>'
+    + '<th style="text-align:right">Totale lordo</th></tr></thead><tbody>'
+    + d.anni.map(r => tr(r.anno + (r.anno === y0 ? ' <span style="font-weight:400;color:var(--mut);font-size:11px">entro il 31/12</span>' : ''), r)).join('')
+    + (d.senzaData.nPrev ? tr('Senza data prevista', d.senzaData) : '')
+    + '</tbody></table></div></div>';
+}
+
 /* L'ANNO FISCALE IN TESTA ALLA FATTURAZIONE
    Per l'anno di competenza X (di norma quello in corso; si scorre con ◀ ▶):
    - di competenza X, ancora da fatturare ma che si fatturera' entro l'anno
@@ -7917,6 +7969,7 @@ function riquadroAnnoFiscale() {
         ? '1 scaglione aperto non ha né anno di competenza né date: non è contato in nessun anno. Si completa aprendo lo scaglione.'
         : senzaAnno + ' scaglioni aperti non hanno né anno di competenza né date: non sono contati in nessun anno. Si completano aprendo gli scaglioni.')
         + '</div>' : '')
+    + tabellaFatturatoPerAnno()
     + '</div>';
 }
 
@@ -7952,6 +8005,7 @@ function reportIncassi(saldo) {
     feuro(somma(arr, 'iva'))].concat(conSpese ? [feuro(somma(arr, 'anticipazioni'))] : []).concat([feuro(tot)]);
   const inMora = d.emesse.concat(d.proforme).filter(x => x.f.messa_in_mora);
   const na = numeriAnno(today().getFullYear()), y = na.anno;
+  const fpa = fatturatoPerAnno(), fpa0 = fpa.anni.find(r => r.anno === y);
   const colComp = ['Commessa', 'Intestatario', 'Scaglione', 'Stato / quando', 'Imponibile', 'Lordo'];
   const rigaComp = f => [pn(f.project_id), intestatarioDi(f), f.descrizione || '', quandoScaglione(f),
     feuro(impFattura(f)), feuro(contiDaIncassare(f, false).totale)];
@@ -7967,6 +8021,8 @@ function reportIncassi(saldo) {
         ['Totale da saldare', feuro(d.totSaldare)],
         ['Fatturato ' + y + ' fino a oggi', feuro(na.fatturato.imponibile) + ' imponibile · ' + feuro(na.fatturato.lordo)
           + ' lordo  (' + na.fatturato.n + (na.fatturato.n === 1 ? ' fattura)' : ' fatture)')],
+        ['Fatturato totale ' + y + ' (emesso + da emettere entro il 31/12)', feuro(fpa0.totale) + ' imponibile · '
+          + feuro(fpa0.lordo) + ' lordo  (già fatturato ' + feuro(fpa0.fatturato) + ' + previsto ' + feuro(fpa0.previsto) + ')'],
         ['Incassato ' + y, feuro(na.incassato.importo) + '  (' + na.incassato.n + (na.incassato.n === 1 ? ' fattura' : ' fatture')
           + (na.incassato.senzaData ? '; per ' + na.incassato.senzaData + ' senza data d’incasso vale l’anno della fattura' : '') + ')'],
         ['Competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile) + ' imponibile · ' + feuro(na.totEntro.lordo) + ' lordo'],
@@ -7980,6 +8036,14 @@ function reportIncassi(saldo) {
       { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 3, totCol: 5,
           righe: d.proforme.map(riga), tot: d.proforme.length ? [totRiga('Totale proforme', d.proforme, d.totProforme)] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
+      { titolo: 'Fatturato per anno — per data della fattura: già emesso più quello che si prevede di emettere',
+        tabella: { col: ['Anno', 'Già fatturato', 'Da fatturare (previsto)', 'Totale imponibile', 'Totale lordo'],
+          dx: [1, 2, 3, 4], largo: 0,
+          righe: fpa.anni.map(r => [String(r.anno) + (r.anno === y ? ' (entro il 31/12)' : ''), feuro(r.fatturato), feuro(r.previsto),
+                                    feuro(r.totale), feuro(r.lordo)])
+            .concat(fpa.senzaData.nPrev ? [['Senza data prevista', feuro(0), feuro(fpa.senzaData.previsto),
+                                    feuro(fpa.senzaData.totale), feuro(fpa.senzaData.lordo)]] : []),
+          vuoto: 'Niente di fatturato o da fatturare.' } },
       { titolo: 'Competenza ' + y + ' — emessa e incassata entro il 31/12/' + y
           + ' (già fatturata, in proforma, pronta o prevista entro l’anno)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
           righe: ordina(na.compEntro).map(rigaComp),
