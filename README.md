@@ -64,6 +64,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 43. [`sql/044_motivo_incasso.sql`](sql/044_motivo_incasso.sql) — il motivo di un incasso diverso dal dovuto
 44. [`sql/045_pronta_diventa_richiesta.sql`](sql/045_pronta_diventa_richiesta.sql) — niente più stato «pronta»: quello che si può fatturare è una richiesta
 45. [`sql/046_accessi_sicuri.sql`](sql/046_accessi_sicuri.sql) — chi si iscrive da solo non ottiene niente; disattivato = fuori
+46. [`sql/047_fase_riaperta_toglie_richiesta.sql`](sql/047_fase_riaperta_toglie_richiesta.sql) — fase riaperta o scaglione staccato: via la richiesta automatica
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1269,6 +1270,10 @@ responsabili»), che venga da una persona o da sola:
   richiesta;
 - in tutti e due i casi, se la data prevista manca o è più avanti, diventa
   **oggi**.
+
+Se la fase **si riapre** (non è più completata), o lo scaglione viene
+**staccato** da quella fase, la richiesta automatica sparisce (migrazione
+047); quelle fatte da una persona restano sempre.
 
 È una regola del database (migrazione 045): vale anche per un browser rimasto
 aperto sulla versione di prima. I 13 scaglioni che erano «pronti» sono

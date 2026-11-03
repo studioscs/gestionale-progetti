@@ -4598,6 +4598,26 @@ function launchOpts(){
     must(!g.kpi,'c è ancora «Pronte da emettere» in testa');
     must(!/pronta/.test(g.opz),'«Pronta» si può ancora scegliere: '+g.opz);
   });
+  await t('fase riaperta o scaglione staccato: la richiesta automatica sparisce, quella di una persona resta',async()=>{
+    const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
+      const fa=(await SB.from('commessa_fasi').insert({project_id:pid,fase_key:'t47',nome:'Verifica',stato:'in_corso',ordine:98}).select().single()).data;
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,imponibile:100,stato:'da_emettere',isa_tipo:'C05',anno_competenza:2026,ordine:98},o)).select().single();
+      const a=(await ins({descrizione:'R47 a',fase_id:fa.id})).data, b=(await ins({descrizione:'R47 b',fase_id:fa.id})).data;
+      const u=(await ins({descrizione:'R47 umana',richiesta_at:new Date().toISOString(),richiesta_note:'SAL 2 approvato'})).data;
+      await SB.from('commessa_fasi').update({stato:'completata'}).eq('id',fa.id); await loadAll(true);
+      const ric=id=>!!S.fatture.find(x=>x.id===id).richiesta_at;
+      const r={chiusa:ric(a.id)&&ric(b.id)};
+      await SB.from('commessa_fatture').update({fase_id:null}).eq('id',b.id); await loadAll(true);
+      r.staccata=!ric(b.id)&&ric(a.id);
+      await SB.from('commessa_fasi').update({stato:'in_corso'}).eq('id',fa.id); await loadAll(true);
+      r.riaperta=!ric(a.id); r.umana=ric(u.id);
+      for(const x of [a,b,u]) await SB.from('commessa_fatture').delete().eq('id',x.id);
+      await SB.from('commessa_fasi').delete().eq('id',fa.id); await loadAll(true); return r; });
+    must(g.chiusa,'chiusa la fase, non sono richieste');
+    must(g.staccata,'staccato dalla fase, resta la richiesta');
+    must(g.riaperta,'riaperta la fase, resta la richiesta');
+    must(g.umana,'è sparita la richiesta fatta da una persona');
+  });
   await t('dal 2027 il numero porta l anno: 001/FE/27, 001/PA/27',async()=>{
     const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
       const r={fe0:prossimoNumero(2027,null,'FE'),pa0:prossimoNumero(2027,null,'PA'),v26:prossimoNumero(2026,null,'FE')};

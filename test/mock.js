@@ -144,8 +144,17 @@
   }
   /* Trigger della migrazione 005 (con la 045): la fase completata fa maturare
      gli scaglioni agganciati, che diventano richieste */
+  /* Migrazione 047: la richiesta nata dalla fase sparisce se la fase si
+     riapre o se lo scaglione si stacca da una fase completata */
+  const togliRichiestaFase=f=>{ f.richiesta_at=null; f.richiesta_da=null; f.richiesta_note=null; };
+  const richiestaDiFase=f=>f.stato==='da_emettere'&&!f.proforma_numero&&/^Fase «/.test(f.richiesta_note||'');
+  function controllaRichiesteDiFase(){
+    DB.commessa_fatture.filter(richiestaDiFase).forEach(f=>{
+      const fa=DB.commessa_fasi.find(x=>x.id===f.fase_id);
+      if(!fa||fa.stato!=='completata') togliRichiestaFase(f); });
+  }
   function maturaFase(fa){
-    if(fa.stato!=='completata') return;
+    if(fa.stato!=='completata') return controllaRichiesteDiFase();
     DB.commessa_fatture.filter(f=>f.fase_id===fa.id&&f.stato==='da_emettere'&&!f.richiesta_at).forEach(f=>{
       f.stato='pronta'; prontaInRichiesta(f,'Fase «'+fa.nome+'» completata il '+new Date().toLocaleDateString('it-IT')); });
   }
@@ -275,7 +284,8 @@
         if(table==='commessa_fattura_righe') DB.commessa_fatture.forEach(f=>ricalcolaImponibile(f.id));
         if(table==='commessa_fasi') DB.commessa_fasi.filter(r=>flt.every(f=>f(r)))
           .forEach(f=>{ allineaFine(f.project_id); maturaFase(f); });
-        if(table==='commessa_fatture') DB.commessa_fatture.filter(r=>flt.every(f=>f(r))).forEach(f=>prontaInRichiesta(f));
+        if(table==='commessa_fatture'){ DB.commessa_fatture.filter(r=>flt.every(f=>f(r))).forEach(f=>prontaInRichiesta(f));
+          if(api._upd&&'fase_id' in api._upd) controllaRichiesteDiFase(); }
       },
       delete(){ api._del=true; return api; },
       then(res,rej){
