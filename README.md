@@ -62,6 +62,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 41. [`sql/042_costi_ricorrenti.sql`](sql/042_costi_ricorrenti.sql) — costi che si ripetono ogni anno, con la loro scadenza
 42. [`sql/043_intestatario_fattura.sql`](sql/043_intestatario_fattura.sql) — fattura o proforma intestata a chi paga, se non è il committente
 43. [`sql/044_motivo_incasso.sql`](sql/044_motivo_incasso.sql) — il motivo di un incasso diverso dal dovuto
+44. [`sql/045_pronta_diventa_richiesta.sql`](sql/045_pronta_diventa_richiesta.sql) — niente più stato «pronta»: quello che si può fatturare è una richiesta
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -1249,12 +1250,30 @@ attesa di incasso**, **📤 Fatture emesse in attesa di incasso** (solo le
 fatture: le proforma stanno sopra), le **richieste dei responsabili**, poi
 quello che resta da fatturare diviso per anno: **⏳ entro il 31/12 dell'anno
 in corso**, **📅 dall'anno prossimo** e **❓ senza data prevista — da
-inserire** (solo scaglioni senza proforma né fattura). Non c'è più una
-sezione «Pronte da emettere»: gli scaglioni pronti stanno in queste tre,
-secondo la loro data prevista, e lo
-stato **Pronta** nella riga dice che si possono già emettere (il numero in
-testa «Pronte da emettere» resta). In fondo il controllo
-contratto/fatturazione e le parcelle degli esterni.
+inserire** (solo scaglioni senza proforma né fattura). In fondo il
+controllo contratto/fatturazione e le parcelle degli esterni.
+
+### Niente più «Pronta da emettere»
+
+Lo stato «Pronta» diceva che uno scaglione era maturato; poi sono arrivate
+la richiesta del responsabile (chi, quando, con quali note) e la data
+prevista, che decide sezione e anno, e «Pronta» era diventato un doppione.
+Ora gli scaglioni aperti sono tutti **da emettere**, e quello che si può
+fatturare subito è una **richiesta di fatturazione** («📣 Chieste dai
+responsabili»), che venga da una persona o da sola:
+
+- **chiusa la fase** a cui lo scaglione è agganciato, lo scaglione diventa
+  una richiesta con la nota «Fase «…» completata il …»;
+- **registrato un SAL** di direzione lavori, la quota che matura nasce come
+  richiesta;
+- in tutti e due i casi, se la data prevista manca o è più avanti, diventa
+  **oggi**.
+
+È una regola del database (migrazione 045): vale anche per un browser rimasto
+aperto sulla versione di prima. I 13 scaglioni che erano «pronti» sono
+diventati «da emettere» con la loro data; i 2 maturati per la chiusura di una
+fase sono diventati richieste. In testa alla pagina non c'è più il numero
+«Pronte da emettere».
 
 ### L'anno fiscale, per competenza
 
@@ -2096,14 +2115,15 @@ apre una finestra che chiede:
 - **quale scaglione**, scelto fra quelli aperti del contratto. Se serve
   fatturare qualcosa che il contratto non aveva previsto (una variante, una
   prestazione aggiuntiva), c'è **Nuovo scaglione** e lo si descrive lì: viene
-  creato già come *pronta da emettere*;
+  creato già come richiesta, da emettere con la data di oggi;
 - una **nota per l'amministrazione**: riferimenti, SAL, prescrizioni sul
   documento.
 
 Alla conferma succedono tre cose:
 
-1. lo scaglione passa a **«pronta da emettere»**, con scritto **chi** l'ha
-   chiesto, **quando** e **con quali note**;
+1. lo scaglione va fra le **richieste di fatturazione**, con scritto **chi**
+   l'ha chiesto, **quando** e **con quali note** (se la data prevista manca o
+   è più avanti, diventa oggi);
 2. parte una **notifica nel gestionale** a chi emette le fatture — gli
    amministratori e chi ha il contrassegno *«vede tutte le commesse»*;
 3. si apre il programma di posta con la **mail già scritta** a

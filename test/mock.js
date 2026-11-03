@@ -129,6 +129,25 @@
       ordine:DB.commessa_fatture.filter(f=>f.project_id===s.project_id).length+1,
       imponibile:quota,data_prevista:s.data_emissione||null,stato:'pronta',sal_id:s.id,
       created_at:new Date().toISOString()});
+    prontaInRichiesta(DB.commessa_fatture[DB.commessa_fatture.length-1]);
+  }
+  /* Trigger della migrazione 045: «pronta» non resta, diventa una richiesta
+     di fatturazione (con la nota del perche') e la data prevista va a oggi
+     se manca o e' piu' avanti. */
+  function prontaInRichiesta(f,nota){
+    if(f.stato!=='pronta') return;
+    const oggi=new Date().toISOString().slice(0,10);
+    f.stato='da_emettere';
+    if(!f.richiesta_at){ f.richiesta_at=new Date().toISOString(); f.richiesta_da=f.richiesta_da||UID;
+      f.richiesta_note=f.richiesta_note||nota||(f.sal_id?'Quota di direzione lavori maturata con il SAL':'Segnato come pronto da emettere'); }
+    if(!f.data_prevista||f.data_prevista>oggi) f.data_prevista=oggi;
+  }
+  /* Trigger della migrazione 005 (con la 045): la fase completata fa maturare
+     gli scaglioni agganciati, che diventano richieste */
+  function maturaFase(fa){
+    if(fa.stato!=='completata') return;
+    DB.commessa_fatture.filter(f=>f.fase_id===fa.id&&f.stato==='da_emettere'&&!f.richiesta_at).forEach(f=>{
+      f.stato='pronta'; prontaInRichiesta(f,'Fase «'+fa.nome+'» completata il '+new Date().toLocaleDateString('it-IT')); });
   }
   /* Trigger della migrazione 021: l'importo della commessa e' la somma degli
      atti accettati. Finche' la commessa non ha atti, resta quello scritto a
@@ -222,6 +241,7 @@
         if(table==='commessa_contratti') made.forEach(c=>ricalcolaImporto(c.project_id));
         if(table==='commessa_fattura_righe') made.forEach(r=>ricalcolaImponibile(r.fattura_id));
         if(table==='commessa_fasi') made.forEach(f=>allineaFine(f.project_id));
+        if(table==='commessa_fatture') made.forEach(f=>prontaInRichiesta(f));
         api._res=made; return api; },
       upsert(v,opt){ const arr=Array.isArray(v)?v:[v]; const keys=(opt&&opt.onConflict||'').split(',').filter(Boolean);
         const made=[];
@@ -254,7 +274,8 @@
         /* come il trigger: anche lo scaglione da cui una voce se ne va */
         if(table==='commessa_fattura_righe') DB.commessa_fatture.forEach(f=>ricalcolaImponibile(f.id));
         if(table==='commessa_fasi') DB.commessa_fasi.filter(r=>flt.every(f=>f(r)))
-          .forEach(f=>allineaFine(f.project_id));
+          .forEach(f=>{ allineaFine(f.project_id); maturaFase(f); });
+        if(table==='commessa_fatture') DB.commessa_fatture.filter(r=>flt.every(f=>f(r))).forEach(f=>prontaInRichiesta(f));
       },
       delete(){ api._del=true; return api; },
       then(res,rej){

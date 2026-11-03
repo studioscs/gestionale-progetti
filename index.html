@@ -1139,7 +1139,6 @@ tbody tr:hover td { background:#f0f4f9; }
       <div class="fg"><label class="fl">Stato</label>
         <select class="fc" id="fa-stato2">
           <option value="da_emettere">Da emettere</option>
-          <option value="pronta">Pronta da emettere</option>
           <option value="emessa">Emessa</option>
           <option value="incassata">Incassata</option>
           <option value="annullata">Annullata</option>
@@ -1566,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.20';
+const VERSIONE = '2026.11.03.21';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -3972,7 +3971,7 @@ function updBadges() {
 
   const nfa = S.fatture.filter(fattAperta).length;
   el('b-fatt').textContent = nfa;
-  el('b-fatt').classList.toggle('alert', S.fatture.some(f => f.stato === 'pronta'));
+  el('b-fatt').classList.toggle('alert', S.fatture.some(fattRichiesta));
 
 
 }
@@ -4497,7 +4496,7 @@ function rScadenzario() {
    APP, che importa file in formato FatturaPA.
    =========================================================================== */
 const ST_FATT = {
-  da_emettere:['Da emettere','bgr'], pronta:['Pronta da emettere','by'],
+  da_emettere:['Da emettere','bgr'], pronta:['Da emettere','bgr'],   // pronta: solo dati di prima della 045
   emessa:['Emessa','bb'], incassata:['Incassata','bg'], annullata:['Annullata','bgr']
 };
 
@@ -7133,7 +7132,7 @@ function contabilitaPanel(p) {
       + kpi('Compenso DL maturato', feuro(maturato), 'su ' + feuro(compenso) + ' di incarico',
             compenso ? maturato / compenso * 100 : 0, 'var(--grn)')
       + kpi('Già fatturato sui SAL', feuro(emesso),
-            daEmettere ? feuro(daEmettere) + ' pronto da emettere' : 'niente in attesa',
+            daEmettere ? feuro(daEmettere) + ' da emettere' : 'niente in attesa',
             compenso ? emesso / compenso * 100 : 0, 'var(--vio)')
       + kpi('Varianti approvate', String(varianti.filter(v => v.stato === 'approvata').length),
             feuro(varianti.filter(v => v.stato === 'approvata')
@@ -7141,7 +7140,7 @@ function contabilitaPanel(p) {
     + '</div>'
     + (daEmettere > 0
         ? '<div class="wbox mb16"><b>' + feuro(daEmettere) + ' di direzione lavori è maturato e non è ancora stato fatturato.</b> '
-          + 'Lo trovi fra gli scaglioni pronti nella scheda <b>Fatturazione</b> e nella pagina <b>Fatturazione</b>.</div>'
+          + 'Lo trovi fra le richieste di fatturazione, nella scheda <b>Fatturazione</b> e nella pagina <b>Fatturazione</b>.</div>'
         : '')
     + '<div class="card mb16"><div class="card-h"><span class="card-t">Stati di avanzamento</span>'
       + '<span class="row">'
@@ -7154,7 +7153,7 @@ function contabilitaPanel(p) {
           + '</tr></thead><tbody>' + righeSal + '</tbody></table></div>'
         : '<div class="empty"><i>📊</i><p>Nessun SAL registrato.</p>'
           + '<p style="font-size:12px;margin-top:6px">Registrando un SAL, la quota di onorario corrispondente '
-          + 'si apre da sola fra gli scaglioni pronti da emettere.</p></div>')
+          + 'si apre da sola fra le richieste di fatturazione.</p></div>')
     + '</div>'
     + '<div class="card"><div class="card-h"><span class="card-t">Varianti in corso d’opera</span>'
       + (canW() ? '<button class="btn btn-sm" data-newvar="">＋ Variante</button>' : '') + '</div>'
@@ -7607,7 +7606,7 @@ function fatturePanel(pid) {
           + '<th>Fattura</th><th>Prevista</th><th></th></tr></thead><tbody>' + righe + '</tbody></table></div>'
         : '<div class="empty"><i>💶</i><p>Nessuno scaglione definito.</p>'
           + '<p style="font-size:12px;margin-top:6px">Gli scaglioni agganciati a una fase diventano '
-          + '“pronti da emettere” non appena quella fase si chiude.</p></div>')
+          + 'richieste di fatturazione non appena quella fase si chiude.</p></div>')
     + '</div>';
 }
 
@@ -8216,7 +8215,9 @@ async function creaSaldo(pid) {
   const isa = isaDellaCommessa(pid);
   el('fa-desc').value = descr;
   el('fa-imp').value = c.scoperto;
-  el('fa-stato2').value = p.status === 'completato' ? 'pronta' : 'da_emettere';
+  /* commessa finita: il saldo e' da fatturare adesso */
+  el('fa-stato2').value = 'da_emettere';
+  if (p.status === 'completato') el('fa-prev').value = todayISO();
   el('fa-isa').innerHTML = isaOpzioni(isa.isa_tipo || '');
   aggiornaCalcolo();
   toast('Controlla tipologia ISA e anno di competenza, poi salva il saldo.', 'info');
@@ -8310,7 +8311,6 @@ function rFatturare() {
     const p = byId(S.projects, f.project_id);
     return p && !p.archiviato && fattAperta(f);
   }).sort((a, b) => {
-    if (a.stato !== b.stato) return a.stato === 'pronta' ? -1 : 1;
     const A = pd(a.data_prevista), B = pd(b.data_prevista);
     if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
   });
@@ -8319,7 +8319,6 @@ function rFatturare() {
      in questa pagina che qualcuno ha esplicitamente chiesto di fare. */
   const richieste = list.filter(fattRichiesta)
     .sort((a, b) => String(b.richiesta_at).localeCompare(String(a.richiesta_at)));
-  const pronte = list.filter(f => f.stato === 'pronta' && !fattRichiesta(f));
   const incassato = S.fatture.filter(f => f.stato === 'incassata')
     .reduce((a, f) => a + Number(f.importo_incassato || impFattura(f)), 0);
   const emesse = S.fatture.filter(f => f.stato === 'emessa');
@@ -8333,8 +8332,7 @@ function rFatturare() {
   const conProf = list.filter(f => f.proforma_numero);
   const senzaProf = f => !f.proforma_numero;
   const kRich   = richieste.filter(senzaProf);
-  const kPronte = pronte.filter(senzaProf);
-  const kAttesa = list.filter(f => f.stato !== 'pronta' && !fattRichiesta(f) && senzaProf(f));
+  const kAttesa = list.filter(f => !fattRichiesta(f) && senzaProf(f));
   const kEmesse = emesse.concat(conProf);
   const daControllare = commesseDaControllare();
   if (!list.length && !emesse.length && !daControllare.length && !proformeEmesse(true).length) {
@@ -8397,7 +8395,6 @@ function rFatturare() {
     + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
       + '<div class="kgrid">'
       + kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich)), kRich.length ? 100 : 0, 'var(--ora)')
-      + kpi('Pronte da emettere', kPronte.length, feuro(somma(kPronte)), kPronte.length ? 100 : 0, 'var(--yel)')
       + kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa)), 60, 'var(--mut2)')
       + kpi('Emesse non incassate', kEmesse.length, feuro(somma(kEmesse))
             + ' <span style="font-size:11px">· ' + emesse.length + ' fatture, ' + conProf.length + ' proforma</span>',
@@ -8427,8 +8424,8 @@ function rFatturare() {
     + tabella(kRich, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
     /* QUELLO CHE RESTA DA FATTURARE, PER ANNO: entro l'anno solare, oppure
        dopo o senza una data prevista. Niente piu' una sezione a parte per le
-       «pronte da emettere»: stanno qui con le altre, secondo la loro data,
-       e lo stato «Pronta» nella riga dice che si possono gia' emettere. */
+       «pronte da emettere» (lo stato non c'e' piu', migrazione 045: quello
+       che si puo' fatturare subito e' una richiesta). */
     + (() => { const y = today().getFullYear();
         const mat = list.filter(f => senzaProf(f) && !fattRichiesta(f));
         const entro = mat.filter(f => f.data_prevista && f.data_prevista <= fineAnno(y));
@@ -9353,7 +9350,7 @@ async function dividiScaglione(fid, pay, gruppi) {
     const isa = isaV.length && isaV.every(x => x === isaV[0]) ? isaV[0] : pay.isa_tipo;
     const nuovo = { project_id: pay.project_id, descrizione: pay.descrizione + ' — competenza ' + g.anno,
       percentuale: null, imponibile: r2(g.righe.reduce((a, r) => a + (Number(r.importo) || 0), 0)),
-      fase_id: null, data_prevista: g.data, stato: pay.stato === 'pronta' ? 'pronta' : 'da_emettere',
+      fase_id: null, data_prevista: g.data, stato: 'da_emettere',
       isa_tipo: isa, anno_competenza: g.anno, note_fattura: pay.note_fattura,
       intestatario: base.intestatario || null, ordine: ordine++, created_by: S.me.id };
     const { data, error } = await SB.from('commessa_fatture').insert(nuovo).select().single();
@@ -9422,7 +9419,7 @@ async function scaglioniStandard(pid) {
     { d:'Saldo a fine lavori',                        perc:30, fase: trova('chiusura') || trova('collaudo') || trova('esecuzione') }
   ].filter(m => m.fase || true);
   if (!confirm('Creo tre scaglioni (30% / 40% / 30%) agganciati alle fasi della commessa.\n\n'
-    + 'Diventeranno “pronti da emettere” automaticamente alla chiusura della fase collegata. Procedo?')) return;
+    + 'Alla chiusura della fase collegata diventano da sole richieste di fatturazione. Procedo?')) return;
   const rows = modello.map((m, i) => Object.assign({
     project_id: pid, descrizione: m.d, percentuale: m.perc, fase_id: m.fase,
     ordine: i, stato: 'da_emettere', created_by: S.me.id,
@@ -10889,7 +10886,7 @@ async function inviaChiedi() {
         project_id: CHIEDI_PID, descrizione: desc,
         imponibile:  fisso === '' ? null : parseFloat(fisso),
         percentuale: perc  === '' ? null : parseFloat(perc),
-        stato: 'pronta', ordine: fattureOf(CHIEDI_PID).length,
+        stato: 'da_emettere', ordine: fattureOf(CHIEDI_PID).length,
         data_prevista: todayISO(), created_by: S.me.id,
         isa_tipo: el('ch-isa').value, anno_competenza: Number(el('ch-anno').value),
         richiesta_at: new Date().toISOString(), richiesta_da: S.me.id, richiesta_note: note
@@ -10897,9 +10894,11 @@ async function inviaChiedi() {
       if (error) return sbErr(error, 'nuovo scaglione');
       fid = data.id;
     } else {
-      /* Lo stato diventa "pronta": e' il significato della richiesta. */
+      /* La richiesta dice: da fatturare adesso. La data prevista, se manca o e'
+         piu' avanti, diventa oggi (decide lei sezione e anno). */
+      const f0 = byId(S.fatture, fid) || {};
       const { error } = await SB.from('commessa_fatture').update({
-        stato: 'pronta',
+        data_prevista: !f0.data_prevista || f0.data_prevista > todayISO() ? todayISO() : f0.data_prevista,
         richiesta_at: new Date().toISOString(), richiesta_da: S.me.id, richiesta_note: note
       }).eq('id', fid);
       if (error) return sbErr(error, 'richiesta di fatturazione');
@@ -10956,7 +10955,7 @@ function mailtoAmministrazione(fid) {
     f.richiesta_note ? 'Note: ' + f.richiesta_note : '',
     f.richiesta_note ? '' : '',
     'Richiesta da ' + (S.prof.full_name || '') + ' il ' + fdate(todayISO()) + '.',
-    'Lo scaglione è segnato come «pronta da emettere» nel gestionale, sezione Fatturazione.'
+    'Lo scaglione è fra le richieste di fatturazione nel gestionale, sezione Fatturazione.'
   ].filter(x => x !== '');
   return 'mailto:' + encodeURIComponent(STUDIO.emailAmministrazione || '')
     + '?subject=' + encodeURIComponent('[' + p.name + '] Da fatturare: ' + f.descrizione)
