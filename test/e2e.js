@@ -1246,7 +1246,10 @@ function launchOpts(){
     await p.evaluate(()=>{ closeAll&&closeAll(); go('fatturare'); }); await p.waitForTimeout(400);
     const g=await p.evaluate(()=>{ const card=[...document.querySelectorAll('#page .card')].find(c=>/Proforma emesse/.test(c.textContent));
       const prima=document.querySelector('#page .card'); const f=proformeEmesse(false)[0];
-      return {c:!!card,txt:card?card.textContent:'',num:f&&f.proforma_numero,primaKgrid:!!document.querySelector('#page .kgrid + .card')&&/Proforma emesse/.test(document.querySelector('#page .kgrid + .card').textContent)}; });
+      return {c:!!card,txt:card?card.textContent:'',num:f&&f.proforma_numero,primaKgrid:(()=>{ const t=[...document.querySelectorAll('#page .card .card-t')].map(x=>x.textContent);
+        const a=t.findIndex(x=>/Anno fiscale/.test(x)), pf=t.findIndex(x=>/Proforma emesse/.test(x));
+        /* subito dopo i numeri in testa e il riquadro dell'anno fiscale */
+        return a>=0&&pf===a+1; })()}; });
     must(g.c,'riquadro delle proforma assente');
     must(g.num&&g.txt.includes(g.num),'la proforma '+g.num+' non è elencata');
     must(g.primaKgrid,'il riquadro non sta in testa alla pagina');
