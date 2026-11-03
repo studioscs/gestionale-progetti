@@ -1265,11 +1265,17 @@ function launchOpts(){
       const tabPronte=[...document.querySelectorAll('#page .card')].find(c=>/Pronte da emettere/.test(c.querySelector('.card-t')?.textContent||''));
       return {conP:conP.length,em,emKpi:kv('Emesse non incassate'),prKpi:kv('Pronte da emettere'),pronte:pronte.length,
         prontaConProf:conP.some(f=>f.stato==='pronta'),
-        inTabPronte:tabPronte?conP.some(f=>tabPronte.querySelector('[data-fatt="'+f.id+'"]')):false}; });
+        inTabPronte:tabPronte?conP.some(f=>tabPronte.querySelector('[data-fatt="'+f.id+'"]')):false,
+        tabPronte:!!tabPronte,
+        /* le pronte stanno fra quelle che matureranno, secondo la data */
+        pronteInMat:pronte.every(f=>[...document.querySelectorAll('#page .card')].some(c=>/Matureranno/.test(c.querySelector('.card-t')?.textContent||'')
+          &&c.querySelector('[data-fatt="'+f.id+'"]')))}; });
     must(g.conP>0,'nella prova non ci sono proforma emesse');
     must(g.emKpi===g.em+g.conP,'emesse non incassate '+g.emKpi+' invece di '+(g.em+g.conP)+' (fatture + proforma)');
     must(g.prKpi===g.pronte,'pronte da emettere '+g.prKpi+' invece di '+g.pronte+' (senza le proforma)');
     must(!g.inTabPronte,'uno scaglione con proforma resta nella tabella delle pronte');
+    must(!g.tabPronte,'c è ancora la sezione «Pronte da emettere»');
+    must(g.pronteInMat,'le pronte non stanno nelle sezioni «Matureranno»');
     const h=await p.evaluate(()=>{ const cards=[...document.querySelectorAll('#page .card')];
       const tit=c=>(c.querySelector('.card-t')||{}).textContent||'';
       const i=cards.findIndex(c=>/Proforma emesse in attesa di incasso/.test(tit(c)));
@@ -2676,7 +2682,7 @@ function launchOpts(){
     /* l'ordine: proforma, fatture emesse, richieste, pronte, matureranno, poi i controlli */
     const ord=await p.evaluate(()=>[...document.querySelectorAll('#page .card .card-t')].map(x=>x.textContent));
     const pos=re=>ord.findIndex(x=>re.test(x));
-    const seq=[/Proforma emesse in attesa/,/Fatture emesse in attesa/,/Chieste dai responsabili/,/Pronte da emettere/,/Matureranno/]
+    const seq=[/Proforma emesse in attesa/,/Fatture emesse in attesa/,/Chieste dai responsabili/,/Matureranno/]
       .map(pos).filter(i=>i>=0);
     must(seq.every((v,i)=>!i||seq[i-1]<v),'ordine dei riquadri: '+ord.join(' | '));
     const ctl=pos(/Contratto e fatturazione non tornano|Parcelle|esterni/i), mat=pos(/Matureranno/);
@@ -4395,6 +4401,27 @@ function launchOpts(){
     await isaScelta(); await p.click('#fa-save2'); await p.waitForTimeout(800);
     must(await p.evaluate(n=>__DB.commessa_fatture.length===n+1,prima),'con tipologia e anno non salva');
   });
+  await t('la tipologia ISA in alto si stende su tutti i servizi con un pulsante',async()=>{
+    const g=await p.evaluate(()=>{ const pid=S.projects[0].id; openFatt(null,pid);
+      const r={};
+      el('fa-isa').value='C05'; el('fa-isa').dispatchEvent(new Event('change'));
+      el('fa-addriga').click(); el('fa-addriga').click();
+      r.nuove=FATT_RIGHE.map(x=>x.isa_tipo).join(',');
+      /* una voce differenziata a mano */
+      FATT_RIGHE[1].isa_tipo='C06'; disegnaRigheFatt();
+      r.diverse=/diversi/.test(el('fa-isa-tutte').textContent);
+      /* cambiando in alto segue solo la voce non differenziata */
+      el('fa-isa').value='C07'; el('fa-isa').dispatchEvent(new Event('change'));
+      r.segue=FATT_RIGHE.map(x=>x.isa_tipo).join(',');
+      el('fa-isa-applica').click();
+      r.tutte=FATT_RIGHE.map(x=>x.isa_tipo).join(',');
+      r.ok=/✓ tutti/.test(el('fa-isa-tutte').textContent);
+      closeM('m-fatt'); return r; });
+    must(g.nuove==='C05,C05','le voci nuove non prendono la tipologia in alto: '+g.nuove);
+    must(g.diverse,'non segnala le voci diverse');
+    must(g.segue==='C07,C06','la voce differenziata a mano è stata cambiata: '+g.segue);
+    must(g.tutte==='C07,C07'&&g.ok,'il pulsante non stende la tipologia: '+g.tutte);
+  });
   await t('senza tipologia ISA la fattura non si fa: si apre lo scaglione',async()=>{
     const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
       const {data}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Vecchio senza ISA',imponibile:500,stato:'pronta',ordine:99}).select().single();
@@ -4446,7 +4473,7 @@ function launchOpts(){
       const ins=(pid,d,o)=>SB.from('commessa_fatture').insert({project_id:pid,descrizione:d,imponibile:100,stato:'pronta',ordine:o,isa_tipo:'C05',anno_competenza:2026});
       await ins(a.id,'Z-saldo',2); await ins(b.id,'A-acconto',1); await ins(a.id,'Z-acconto',1); await ins(b.id,'A-saldo',2);
       await loadAll(true); S.page='fatturare'; render();
-      const card=[...document.querySelectorAll('.card')].find(c=>/Pronte da emettere/.test(c.querySelector('.card-t')?.textContent||''));
+      const card=[...document.querySelectorAll('.card')].find(c=>/Matureranno più avanti — dal/.test(c.querySelector('.card-t')?.textContent||''));
       const righe=card?[...card.querySelectorAll('tbody tr')].map(tr=>tr.classList.contains('riga-gruppo')?'#'+tr.textContent.trim():tr.cells[0].textContent.trim()):[];
       return {righe:righe.filter(x=>/ordinamento|^[AZ]-/.test(x)).map(x=>x.startsWith('#')?(/Alfa/.test(x)?'#A':'#Z'):x.slice(0,9)),ids:[a.id,b.id]}; });
     must(JSON.stringify(g.righe)===JSON.stringify(['#A','A-acconto','A-saldo','#Z','Z-acconto','Z-saldo']),'ordine/raggruppamento: '+JSON.stringify(g.righe));

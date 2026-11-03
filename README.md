@@ -1246,9 +1246,13 @@ Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
 Dall'alto: la ricerca e i numeri di sintesi, poi **📄 Proforma emesse in
 attesa di incasso**, **📤 Fatture emesse in attesa di incasso** (solo le
-fatture: le proforma stanno sopra), le **richieste dei responsabili**, le
-**pronte da emettere** e quelle che **matureranno più avanti** (queste ultime
-tre solo per gli scaglioni senza proforma né fattura). In fondo il controllo
+fatture: le proforma stanno sopra), le **richieste dei responsabili**, poi
+quello che resta da fatturare diviso per anno: **⏳ entro il 31/12 dell'anno
+in corso** e **📅 dall'anno prossimo o senza data prevista** (solo scaglioni
+senza proforma né fattura). Non c'è più una sezione «Pronte da emettere»: gli
+scaglioni pronti stanno in queste due, secondo la loro data prevista, e lo
+stato **Pronta** nella riga dice che si possono già emettere (il numero in
+testa «Pronte da emettere» resta). In fondo il controllo
 contratto/fatturazione e le parcelle degli esterni.
 
 ### Raggruppate per commessa
@@ -1372,6 +1376,23 @@ competenza* — sono **obbligatorie**:
 
 Gli scaglioni già esistenti senza tipologia restano come sono finché non li si
 apre: alla prima modifica, o alla prima fattura, va scelta.
+
+### La tipologia ISA in alto e quella dei singoli servizi
+
+Nello scaglione la **tipologia ISA** e l'**anno di competenza** si scelgono in
+alto. Se lo scaglione elenca dei servizi:
+
+- il pulsante **⇩ Applica tipologia e anno a tutti i servizi** li stende su
+  tutte le voci (tranne le spese anticipate art. 15, che non ne hanno);
+  accanto si legge se le voci sono tutte uguali o se qualcuna è diversa;
+- le voci nuove nascono già con la tipologia e l'anno scelti in alto;
+- cambiando la scelta in alto la seguono le voci vuote o rimaste uguali alla
+  scelta di prima; quelle **differenziate a mano restano come sono**;
+- salvando, una voce rimasta senza tipologia prende quella dello scaglione.
+
+Così chi ha voci tutte della stessa casella non deve ripeterla, e chi deve
+distinguere (progettazione e direzione lavori nello stesso acconto) cambia
+solo la voce che serve.
 
 ### Il pulsante ISA
 

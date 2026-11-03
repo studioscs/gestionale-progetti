@@ -1104,6 +1104,7 @@ tbody tr:hover td { background:#f0f4f9; }
         <div class="fg"><label class="fl">Anno di competenza *</label>
           <select class="fc" id="fa-anno"></select></div>
       </div>
+      <div id="fa-isa-tutte"></div>
       <div class="hint" style="margin:-8px 0 14px">Servono a ricostruire a fine anno il quadro C del
         modello ISA senza rileggere le fatture una per una. Se elenchi i servizi qui sotto, ognuno
         pu&ograve; avere la sua tipologia e il suo anno: &egrave; il caso normale, perch&eacute; lo
@@ -1564,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.13';
+const VERSIONE = '2026.11.03.14';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8206,10 +8207,12 @@ function rFatturare() {
           + 'emetti la proforma o la fattura.</div>'
         : '')
     + tabella(kRich, '📣 Chieste dai responsabili di commessa', 'var(--ora)')
-    + tabella(kPronte, '💶 Pronte da emettere', 'var(--ora)')
-    /* quello che maturera': entro l'anno solare, o dopo (o senza una data) */
+    /* QUELLO CHE RESTA DA FATTURARE, PER ANNO: entro l'anno solare, oppure
+       dopo o senza una data prevista. Niente piu' una sezione a parte per le
+       «pronte da emettere»: stanno qui con le altre, secondo la loro data,
+       e lo stato «Pronta» nella riga dice che si possono gia' emettere. */
     + (() => { const y = today().getFullYear();
-        const mat = list.filter(f => f.stato !== 'pronta' && senzaProf(f));
+        const mat = list.filter(f => senzaProf(f) && !fattRichiesta(f));
         const entro = mat.filter(f => f.data_prevista && f.data_prevista <= fineAnno(y));
         return tabella(entro, '⏳ Matureranno più avanti — entro il 31/12/' + y, null,
                  daControllare.filter(x => x.c.problema === 'saldo'))
@@ -8780,6 +8783,7 @@ function openFatt(id, presetPid) {
   FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo,
                                             isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
                                             art15: !!r.art15, art15Mano: true }));
+  FATT_ISA_PREV = { isa: el('fa-isa').value, anno: el('fa-anno').value };
   disegnaRigheFatt();
   aggiornaIncasso();
   el('fa-goproj').style.display = pid ? 'inline-flex' : 'none';
@@ -8901,9 +8905,51 @@ function disegnaRigheFatt() {
   /* Con i servizi elencati l'imponibile e' la loro somma: lasciare modificabili
      percentuale e importo fisso farebbe credere che contino ancora. */
   const conRighe = FATT_RIGHE.length > 0;
+  barraIsaTutte();
   el('fa-box-imp').style.opacity = conRighe ? '0.45' : '';
   ['fa-perc','fa-imp'].forEach(k => el(k).disabled = conRighe);
   aggiornaCalcolo();
+}
+
+/* LA TIPOLOGIA ISA DELLO SCAGLIONE E QUELLA DEI SERVIZI
+   Si sceglie in alto. Il pulsante la stende (con l'anno) su tutti i servizi
+   elencati: e' il caso di uno scaglione fatto di voci della stessa casella.
+   Chi deve distinguere cambia poi la singola voce. Senza premere nulla: le
+   voci nuove nascono con la tipologia in alto, e cambiandola in alto la
+   seguono le voci ancora vuote o rimaste uguali a quella di prima; quelle
+   differenziate a mano restano come sono. */
+let FATT_ISA_PREV = { isa: '', anno: '' };
+const vociIsa = () => FATT_RIGHE.filter(r => !r.art15);
+function barraIsaTutte() {
+  const box = el('fa-isa-tutte'); if (!box) return;
+  const voci = vociIsa();
+  if (!voci.length) { box.innerHTML = ''; return; }
+  const isa = el('fa-isa').value, anno = String(el('fa-anno').value || '');
+  const uguali = voci.every(r => (r.isa_tipo || '') === isa && String(r.anno_competenza || '') === anno);
+  box.innerHTML = '<div class="row" style="gap:8px;margin:-6px 0 14px;flex-wrap:wrap;font-size:12px">'
+    + '<button class="btn btn-xs" type="button" id="fa-isa-applica"' + (isa ? '' : ' disabled') + '>'
+    + '&#8615; Applica tipologia e anno a tutti i servizi (' + voci.length + ')</button>'
+    + '<span style="color:' + (uguali ? 'var(--grn)' : 'var(--mut)') + '">'
+    + (uguali ? '✓ tutti i servizi hanno questa tipologia e quest’anno'
+              : 'alcuni servizi hanno una tipologia o un anno diversi') + '</span></div>';
+}
+function applicaIsaATutte() {
+  const isa = el('fa-isa').value, anno = el('fa-anno').value;
+  if (!isa) return toast('Scegli prima la tipologia ISA in alto', 'error');
+  vociIsa().forEach(r => { r.isa_tipo = isa; r.anno_competenza = anno === '' ? '' : Number(anno); });
+  disegnaRigheFatt();
+  toast('Tipologia e anno applicati a tutti i servizi', 'success');
+}
+/* Cambiata in alto: la seguono le voci vuote o uguali alla scelta di prima */
+function seguiIsaInAlto() {
+  const isa = el('fa-isa').value, anno = el('fa-anno').value;
+  vociIsa().forEach(r => {
+    if (!r.isa_tipo || r.isa_tipo === FATT_ISA_PREV.isa) r.isa_tipo = isa;
+    if (!r.anno_competenza || String(r.anno_competenza) === String(FATT_ISA_PREV.anno))
+      r.anno_competenza = anno === '' ? '' : Number(anno);
+  });
+  FATT_ISA_PREV = { isa, anno };
+  disegnaRigheFatt();
 }
 
 function aggiornaCalcolo() {
@@ -9014,8 +9060,9 @@ async function salvaRigheFatt(fid) {
     const r = FATT_RIGHE[i];
     const riga = { descrizione: String(r.descrizione).trim(),
                    importo: Number(r.importo) || 0, ordine: i,
-                   isa_tipo: r.art15 ? null : (r.isa_tipo || null),
-                   anno_competenza: r.art15 ? null : (Number(r.anno_competenza) || null),
+                   /* la voce senza una sua tipologia prende quella dello scaglione */
+                   isa_tipo: r.art15 ? null : (r.isa_tipo || el('fa-isa').value || null),
+                   anno_competenza: r.art15 ? null : (Number(r.anno_competenza) || Number(el('fa-anno').value) || null),
                    art15: !!r.art15 };
     const { error } = r.id
       ? await SB.from('commessa_fattura_righe').update(riga).eq('id', r.id)
@@ -14066,7 +14113,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* I servizi della fattura. Scrivendo si aggiorna solo il totale e non si
      ridisegna l'elenco: ridisegnarlo farebbe perdere il cursore a ogni tasto. */
   el('fa-addriga').onclick = () => {
-    FATT_RIGHE.push({ descrizione:'', importo:'', art15:false });
+    FATT_RIGHE.push({ descrizione:'', importo:'', art15:false, isa_tipo: el('fa-isa').value || '',
+                      anno_competenza: el('fa-anno').value === '' ? '' : Number(el('fa-anno').value) });
     disegnaRigheFatt();
     const campi = el('fa-righe').querySelectorAll('[data-fk="descrizione"]');
     if (campi.length) campi[campi.length - 1].focus();
@@ -14087,10 +14135,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (k === 'descrizione' && !r.art15Mano && e.type === 'change' && eAnticipazione(r.descrizione) !== !!r.art15) {
       r.art15 = eAnticipazione(r.descrizione); return disegnaRigheFatt();
     }
+    if (k === 'isa_tipo' || k === 'anno_competenza') barraIsaTutte();
     const tot = el('fa-righe').querySelector('.spread b');
     if (tot) tot.textContent = feuro(totRighe(FATT_RIGHE));
     aggiornaCalcolo();
   }));
+  el('fa-isa').addEventListener('change', seguiIsaInAlto);
+  el('fa-anno').addEventListener('change', seguiIsaInAlto);
+  el('fa-isa-tutte').addEventListener('click', e => { if (e.target.closest('#fa-isa-applica')) applicaIsaATutte(); });
   el('fa-righe').addEventListener('click', e => {
     const b = e.target.closest('[data-frigdel]'); if (!b) return;
     FATT_RIGHE.splice(Number(b.dataset.frigdel), 1);
