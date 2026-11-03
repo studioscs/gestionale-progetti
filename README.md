@@ -66,6 +66,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 45. [`sql/046_accessi_sicuri.sql`](sql/046_accessi_sicuri.sql) — chi si iscrive da solo non ottiene niente; disattivato = fuori
 46. [`sql/047_fase_riaperta_toglie_richiesta.sql`](sql/047_fase_riaperta_toglie_richiesta.sql) — fase riaperta o scaglione staccato: via la richiesta automatica
 47. [`sql/048_fasi_e_stato_commessa.sql`](sql/048_fasi_e_stato_commessa.sql) — stato della commessa e delle fasi insieme
+48. [`sql/049_allinea_stato_commesse.sql`](sql/049_allinea_stato_commesse.sql) — allineamento una tantum delle commesse già incoerenti
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
