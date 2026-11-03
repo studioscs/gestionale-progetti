@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.16';
+const VERSIONE = '2026.11.03.17';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7945,31 +7945,72 @@ function riquadroAnnoFiscale() {
   const dopo = n.compDopo.filter(fattAperta);
   const senzaData = dopo.filter(f => !f.data_prevista).length;
   const prossimo = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id) && annoCompScaglione(f) === y + 1);
-  const totY = somma(daFatt) + somma(incassate) + somma(emesse) + somma(dopo);
+  const tutto = incassate.concat(emesse, daFatt, dopo);
+  const totY = somma(tutto), giaFatt = r2(somma(incassate) + somma(emesse));
   const pc = v => totY ? v / totY * 100 : 0;
   const nn = a => a.length + (a.length === 1 ? ' scaglione' : ' scaglioni');
   const senzaAnno = S.fatture.filter(f => f.stato !== 'annullata' && fattAperta(f) && byId(S.projects, f.project_id)
     && !(byId(S.projects, f.project_id) || {}).archiviato && !annoCompScaglione(f)).length;
+  /* LE CASELLE SI CLICCANO: sotto compare l'elenco degli scaglioni che le
+     compongono, raggruppati per commessa. Di nuovo clic (o ✕) e sparisce. */
+  const gruppi = {
+    tutto:  { arr: tutto,     tit: 'Tutto il ' + y + ' di competenza' },
+    entro:  { arr: daFatt,    tit: 'Di competenza ' + y + ' da fatturare nel ' + y },
+    inc:    { arr: incassate, tit: 'Di competenza ' + y + ' fatturato e incassato' },
+    em:     { arr: emesse,    tit: 'Di competenza ' + y + ' fatturato e non incassato' },
+    dopo:   { arr: dopo,      tit: 'Di competenza ' + y + ' da fatturare nel ' + (y + 1) },
+    pross:  { arr: prossimo,  tit: 'Di competenza ' + (y + 1) }
+  };
+  const sel = gruppi[S.afFiltro] ? S.afFiltro : null;
+  const casella = (k, html) => html.replace('<div class="kpi">', '<div class="kpi" data-annofilt="' + k + '" style="cursor:pointer'
+    + (sel === k ? ';outline:2px solid var(--navy);outline-offset:-2px' : '') + '" title="Clic: elenca gli scaglioni">');
   return '<div class="card mb16"><div class="card-h"><span class="card-t">&#128197; Anno fiscale ' + y
-      + ' <span style="font-weight:400;color:var(--mut);font-size:12px">— per anno di competenza, importi imponibili</span></span>'
+      + ' <span style="font-weight:400;color:var(--mut);font-size:12px">— per anno di competenza, importi imponibili · clic su una casella per vedere gli scaglioni</span></span>'
       + '<span class="row" style="gap:6px"><button class="btn btn-xs" data-act="annofisc-" title="Anno prima">&#9664;</button>'
-      + '<b style="font-size:13px">' + feuro(r2(totY)) + '</b>'
+      + '<b style="font-size:13px">' + feuro(totY) + '</b>'
       + '<button class="btn btn-xs" data-act="annofisc+" title="Anno dopo">&#9654;</button></span></div>'
     + '<div class="kgrid" style="margin-bottom:0">'
-    + kpi('Di competenza ' + y + ' · da fatturare nel ' + y, feuro(somma(daFatt)),
-          nn(daFatt) + ' · da fatturare e incassare', pc(somma(daFatt)), 'var(--ora)')
-    + kpi('Di competenza ' + y + ' · fatturato e incassato', feuro(somma(incassate)), nn(incassate), pc(somma(incassate)), 'var(--grn)')
-    + kpi('Di competenza ' + y + ' · fatturato, non incassato', feuro(somma(emesse)), nn(emesse), pc(somma(emesse)), 'var(--blue)')
-    + kpi('Di competenza ' + y + ' · da fatturare nel ' + (y + 1), feuro(somma(dopo)),
-          nn(dopo) + (senzaData ? ' · ' + senzaData + ' senza data prevista' : ''), pc(somma(dopo)), 'var(--mut2)')
-    + kpi('Di competenza ' + (y + 1), feuro(somma(prossimo)), nn(prossimo) + ' · anno fiscale successivo',
-          prossimo.length ? 100 : 0, 'var(--vio)')
+    + casella('tutto', kpi('Totale di competenza ' + y, feuro(totY),
+          'già fatturato ' + feuro(giaFatt) + ' + da fatturare ' + feuro(r2(somma(daFatt) + somma(dopo))) + ' · ' + nn(tutto),
+          tutto.length ? 100 : 0, 'var(--navy)'))
+    + casella('entro', kpi('Di competenza ' + y + ' · da fatturare nel ' + y, feuro(somma(daFatt)),
+          nn(daFatt) + ' · da fatturare e incassare', pc(somma(daFatt)), 'var(--ora)'))
+    + casella('inc', kpi('Di competenza ' + y + ' · fatturato e incassato', feuro(somma(incassate)), nn(incassate), pc(somma(incassate)), 'var(--grn)'))
+    + casella('em', kpi('Di competenza ' + y + ' · fatturato, non incassato', feuro(somma(emesse)), nn(emesse), pc(somma(emesse)), 'var(--blue)'))
+    + casella('dopo', kpi('Di competenza ' + y + ' · da fatturare nel ' + (y + 1), feuro(somma(dopo)),
+          nn(dopo) + (senzaData ? ' · ' + senzaData + ' senza data prevista' : ''), pc(somma(dopo)), 'var(--mut2)'))
+    + casella('pross', kpi('Di competenza ' + (y + 1), feuro(somma(prossimo)), nn(prossimo) + ' · anno fiscale successivo',
+          prossimo.length ? 100 : 0, 'var(--vio)'))
     + '</div>'
+    + (sel ? elencoAnnoFiscale(gruppi[sel].tit, gruppi[sel].arr) : '')
     + (senzaAnno ? '<div class="hint" style="margin:8px 0 0">' + (senzaAnno === 1
         ? '1 scaglione aperto non ha né anno di competenza né date: non è contato in nessun anno. Si completa aprendo lo scaglione.'
         : senzaAnno + ' scaglioni aperti non hanno né anno di competenza né date: non sono contati in nessun anno. Si completano aprendo gli scaglioni.')
         + '</div>' : '')
     + tabellaFatturatoPerAnno()
+    + '</div>';
+}
+/* L'elenco della casella cliccata, raggruppato per commessa in ordine di codice */
+function elencoAnnoFiscale(titolo, arr) {
+  const tot = r2(arr.reduce((a, f) => a + impFattura(f), 0));
+  return '<div id="af-elenco" style="margin-top:14px;border:1px solid var(--bord);border-radius:8px;padding:10px 12px">'
+    + '<div class="spread" style="margin-bottom:8px"><b style="font-size:13px">' + esc(titolo)
+      + ' <span class="chip">' + arr.length + '</span></b>'
+      + '<span class="row" style="gap:8px"><b style="font-size:13px">' + feuro(tot) + '</b>'
+      + '<button class="btn btn-xs" data-annofilt="" title="Chiudi l’elenco">&#10005;</button></span></div>'
+    + (arr.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Anno comp.</th>'
+      + '<th>Stato / quando</th><th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th></tr></thead><tbody>'
+      + gruppiCommessa(arr, f => f.project_id).map(g => {
+          const voci = g.voci.slice().sort(perOrdine);
+          return rigaGruppoCommessa(g, 5, voci.length, r2(voci.reduce((a, f) => a + impFattura(f), 0)))
+            + voci.map(f => '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
+              + '<td style="padding-left:22px">' + esc(f.descrizione || '') + '</td>'
+              + '<td style="font-size:12px">' + (annoCompScaglione(f) || '—') + '</td>'
+              + '<td style="font-size:12px">' + bdg(f.stato, ST_FATT) + ' <span style="color:var(--mut)">' + esc(quandoScaglione(f)) + '</span></td>'
+              + '<td style="text-align:right"><b>' + feuro(impFattura(f)) + '</b></td>'
+              + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(contiScaglione(f)) + '</td></tr>').join(''); }).join('')
+      + '</tbody></table></div>'
+      : '<div class="hint" style="margin:0">Nessuno scaglione.</div>')
     + '</div>';
 }
 
@@ -14316,6 +14357,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
     if ((n = f('data-creasaldo'))) { e.stopPropagation(); return creaSaldo(n.dataset.creasaldo); }
+    if ((n = f('data-annofilt'))) { const k = n.dataset.annofilt;
+      S.afFiltro = !k || S.afFiltro === k ? null : k; render();
+      if (S.afFiltro && el('af-elenco')) el('af-elenco').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return; }
     if ((n = f('data-projfatt')))  { return goProject(n.dataset.projfatt, 'fatture'); }
     if ((n = f('data-soll')))      { e.stopPropagation(); return apriSolleciti(n.dataset.soll); }
     if ((n = f('data-notecomm')))  { return apriNoteCommessa(n.dataset.notecomm); }

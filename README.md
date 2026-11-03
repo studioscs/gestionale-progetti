@@ -1271,7 +1271,14 @@ l'imponibile e quanti sono:
    oltre il 31/12 o non ancora indicata (si dice quanti sono senza data);
 5. **di competenza dell'anno successivo**, tutto.
 
-In testa il totale delle prime quattro. Le regole sono quelle del Report
+La prima casella, **Totale di competenza dell'anno**, mette insieme tutto
+quello dell'anno: già fatturato (incassato e non) più da fatturare, entro
+l'anno e dopo. **Ogni casella si clicca**: sotto compare l'elenco degli
+scaglioni che la compongono, raggruppati per commessa in ordine di codice,
+con stato e importi; il clic su una riga apre lo scaglione, sull'intestazione
+la commessa. Di nuovo clic sulla casella (o ✕) e l'elenco sparisce.
+
+In testa il totale dell'anno. Le regole sono quelle del Report
 incassi, quindi i numeri tornano fra le due pagine. Gli scaglioni aperti
 senza anno di competenza né date non stanno in nessun anno: una riga sotto
 dice quanti sono.

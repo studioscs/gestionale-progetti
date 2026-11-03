@@ -4500,6 +4500,37 @@ function launchOpts(){
     must(g.dentro,'scaglioni nella divisione sbagliata');
     must(g.avanti,'il pulsante ▶ non passa all anno dopo');
   });
+  await t('anno fiscale: totale di competenza e caselle che elencano gli scaglioni',async()=>{
+    const g=await p.evaluate(async()=>{
+      const y=today().getFullYear(), pid=S.projects[0].id;
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,isa_tipo:'C05',ordine:92,anno_competenza:y},o)).select().single();
+      const mk=[await ins({descrizione:'CL incassata',imponibile:700,stato:'incassata',numero_fattura:'961/FE',data_fattura:y+'-02-01',data_incasso:y+'-02-20'}),
+        await ins({descrizione:'CL entro',imponibile:300,stato:'da_emettere',data_prevista:y+'-11-30'})].map(r=>r.data.id);
+      await loadAll(true); S.afFiltro=null; S.annoFisc=null; S.page='fatturare'; render();
+      const card=()=>[...document.querySelectorAll('#page .card')].find(c=>/Anno fiscale/.test(c.querySelector('.card-t')?.textContent||''));
+      const r={};
+      const tot=card().querySelector('[data-annofilt="tutto"]');
+      r.totale=!!tot&&/Totale di competenza/.test(tot.textContent)&&/già fatturato/.test(tot.textContent);
+      /* il totale e' la somma delle quattro caselle dell'anno */
+      const n=numeriAnno(y), sm=a=>r2(a.reduce((x,f)=>x+impFattura(f),0));
+      r.somma=tot.querySelector('.kpi-v').textContent===feuro(sm(n.compEntro.concat(n.compDopo)));
+      card().querySelector('[data-annofilt="inc"]').click();
+      const el1=document.querySelector('#af-elenco');
+      r.inc=!!el1&&/CL incassata/.test(el1.textContent)&&!/CL entro/.test(el1.textContent);
+      card().querySelector('[data-annofilt="entro"]').click();
+      const el2=document.querySelector('#af-elenco');
+      r.entro=!!el2&&/CL entro/.test(el2.textContent)&&!/CL incassata/.test(el2.textContent);
+      r.riga=!!el2.querySelector('tr.riga-gruppo')&&!!el2.querySelector('tr[data-fatt]');
+      card().querySelector('[data-annofilt="entro"]').click();
+      r.chiuso=!document.querySelector('#af-elenco');
+      for(const id of mk) await SB.from('commessa_fatture').delete().eq('id',id);
+      S.afFiltro=null; await loadAll(true); render(); return r; });
+    must(g.totale,'manca la casella del totale di competenza');
+    must(g.somma,'il totale non è la somma dell anno');
+    must(g.inc,'la casella «incassato» non elenca i suoi scaglioni');
+    must(g.entro&&g.riga,'la casella «da fatturare» non elenca i suoi scaglioni raggruppati');
+    must(g.chiuso,'il secondo clic non chiude l elenco');
+  });
   await t('fatturato per anno: quest anno e quelli a venire, nel riquadro e nel report',async()=>{
     const g=await p.evaluate(async()=>{
       const y=today().getFullYear(), pid=S.projects[0].id;
