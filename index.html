@@ -1565,7 +1565,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.24';
+const VERSIONE = '2026.11.03.25';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5828,6 +5828,72 @@ function schedaCommessa(pid) {
   };
 }
 
+/* IL REPORT GENERALE DELLE COMMESSE (pagina Progetti)
+   Per fare ordine: quali commesse sono senza importo - e fra queste quali non
+   hanno nemmeno una nota sui contratti, e le note di quelle che le hanno -,
+   quali sono attive e quali no, per stato, con l'avanzamento, chi ha un
+   responsabile e chi no, e le commesse di ciascun responsabile. Le note sui
+   contratti sono quelle della commessa e quelle scritte sui singoli atti.
+   Comprende le archiviate, segnate a parte. */
+function noteContrattiDi(p) {
+  return [String(p.note_contratti || '').trim()]
+    .concat((S.contratti || []).filter(c => c.project_id === p.id && String(c.note || '').trim())
+      .map(c => 'Atto ' + (c.numero || '') + (c.oggetto ? ' (' + c.oggetto + ')' : '') + ': ' + String(c.note).trim()))
+    .filter(Boolean);
+}
+function reportCommesse() {
+  const tutte = S.projects.slice().sort((a, b) => chiaveCommessa(a).localeCompare(chiaveCommessa(b), 'it', { numeric: true }));
+  const nome = p => (p.codice ? p.codice + ' ' : '') + (p.name || '');
+  const stato = p => p.archiviato ? 'Archiviata' : (ST_PROJ[p.status] || [p.status || '—'])[0];
+  const attiva = p => !p.archiviato && p.status === 'attivo';
+  const senzaImp = p => !(Number(p.amount) > 0);
+  const resp = p => p.owner_id ? (un(p.owner_id) !== '-' ? un(p.owner_id) : 'utente non in elenco') : '';
+  const avanz = p => { const r = progressOf(p.id); return r.tot ? r.pct + '% (' + r.done + '/' + r.tot + ')' : '—'; };
+  const n = (a, s1, s2) => a.length + ' ' + (a.length === 1 ? s1 : s2);
+  const riga = p => [p.codice || '', p.name || '', p.client || '', stato(p), avanz(p), feuro(p.amount), resp(p) || '— nessuno —'];
+  const colRiga = ['Codice', 'Commessa', 'Cliente', 'Stato', 'Avanzamento', 'Importo', 'Responsabile'];
+  const tab = (titolo, arr, vuoto) => ({ titolo: titolo + ' — ' + n(arr, 'commessa', 'commesse'),
+    tabella: { col: colRiga, dx: [5], largo: 1, righe: arr.map(riga), vuoto: vuoto || 'Nessuna.' } });
+
+  const sImp = tutte.filter(senzaImp);
+  const sImpSenzaNote = sImp.filter(p => !noteContrattiDi(p).length);
+  const sImpConNote = sImp.filter(p => noteContrattiDi(p).length);
+  const attive = tutte.filter(attiva), nonAttive = tutte.filter(p => !attiva(p));
+  const conResp = tutte.filter(p => p.owner_id), senzaResp = tutte.filter(p => !p.owner_id);
+  const stati = Object.keys(ST_PROJ).map(k => ({ k, l: ST_PROJ[k][0], arr: tutte.filter(p => !p.archiviato && p.status === k) }))
+    .concat([{ k: 'arch', l: 'Archiviate', arr: tutte.filter(p => p.archiviato) }]).filter(g => g.arr.length);
+  const responsabili = Array.from(new Set(conResp.map(p => p.owner_id)))
+    .map(id => ({ id, nome: un(id) !== '-' ? un(id) : 'utente non in elenco', arr: conResp.filter(p => p.owner_id === id) }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+
+  return {
+    titolo: 'Report commesse — ' + (STUDIO.denominazione || 'Studio').replace(/\s+(S\.?R\.?L\.?|STP|S\.?P\.?A\.?)\b.*$/i, '').trim(),
+    sottotitolo: 'Situazione al ' + fdate(todayISO()) + ' · ' + n(tutte, 'commessa', 'commesse') + ' (archiviate comprese)',
+    orizzontale: true,
+    sezioni: [
+      { titolo: 'Riepilogo', campi: [
+        ['Commesse', String(tutte.length)],
+        ['Attive / non attive', attive.length + ' attive · ' + nonAttive.length + ' non attive'],
+        ['Per stato', stati.map(g => g.l + ' ' + g.arr.length).join(' · ')],
+        ['Senza importo', n(sImp, 'commessa', 'commesse') + ' · di cui ' + sImpSenzaNote.length + ' senza note sui contratti'],
+        ['Responsabile', conResp.length + ' con responsabile · ' + senzaResp.length + ' senza']] },
+      { titolo: 'Senza importo e senza note sui contratti — ' + n(sImpSenzaNote, 'commessa', 'commesse'),
+        tabella: { col: ['Codice', 'Commessa', 'Cliente', 'Stato', 'Responsabile'], largo: 1,
+          righe: sImpSenzaNote.map(p => [p.codice || '', p.name || '', p.client || '', stato(p), resp(p) || '— nessuno —']),
+          vuoto: 'Nessuna: ogni commessa senza importo ha almeno una nota sui contratti.' } },
+      { titolo: 'Senza importo, con note sui contratti — ' + n(sImpConNote, 'commessa', 'commesse'),
+        tabella: { col: ['Codice', 'Commessa', 'Stato', 'Note sui contratti'], largo: 3,
+          righe: sImpConNote.map(p => [p.codice || '', p.name || '', stato(p), noteContrattiDi(p).join('\n')]),
+          vuoto: 'Nessuna.' } },
+      tab('Commesse attive', attive),
+      tab('Commesse non attive (in pianificazione, sospese, completate, archiviate)', nonAttive)
+    ]
+    .concat(stati.map(g => tab('Stato: ' + g.l, g.arr)))
+    .concat([tab('Senza responsabile', senzaResp, 'Tutte le commesse hanno un responsabile.')])
+    .concat(responsabili.map(r => tab('Responsabile: ' + r.nome, r.arr)))
+  };
+}
+
 /* La scelta fra carta e PDF, per qualunque scheda */
 let SCHEDA = null;
 function apriStampa(s, nomeFile) {
@@ -10006,6 +10072,7 @@ function rProjects() {
       + '<button class="' + (S.pvista === 'lista' ? '' : 'on') + '" data-vista="griglia" title="Schede">▦</button>'
       + '<button class="' + (S.pvista === 'lista' ? 'on' : '') + '" data-vista="lista" title="Elenco">☰</button>'
     + '</div>'
+    + '<button class="btn btn-sm" data-act="reportcomm" title="Commesse senza importo e note sui contratti, stato, avanzamento, responsabili: su carta o in PDF">&#128424;&#65039; Report</button>'
     + (canW() ? '<button class="btn btn-p btn-sm" data-act="newproj">＋ Nuova Commessa</button>' : '');
   el('p-ar').value = S.par || '';
   el('p-q').oninput  = e => { S.pq = e.target.value; drawProjects(); };
@@ -14649,6 +14716,7 @@ document.addEventListener('DOMContentLoaded', () => {
           + ', ' + r.schede + (r.schede === 1 ? ' scheda cliente completata' : ' schede cliente completate'), 'success');
       })();
       if (a === 'prevdacomm') return preventivoDaCommessa(S.projId);
+      if (a === 'reportcomm') return apriStampa(reportCommesse(), nomeFilePdf('Report-commesse', todayISO()));
       if (a === 'schedacomm') { const sc = schedaCommessa(S.projId), p = byId(S.projects, S.projId);
         return apriStampa(sc, nomeFilePdf('Scheda-commessa', (p && (p.codice || p.name)) || '')); }
       if (a === 'collegacli') return (async () => {

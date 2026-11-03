@@ -4601,6 +4601,33 @@ function launchOpts(){
     must(!g.kpi,'c è ancora «Pronte da emettere» in testa');
     must(!/pronta/.test(g.opz),'«Pronta» si può ancora scegliere: '+g.opz);
   });
+  await t('report commesse: senza importo, note sui contratti, stato, responsabili',async()=>{
+    const g=await p.evaluate(async()=>{
+      const mk=async o=>(await SB.from('projects').insert(Object.assign({client:'Cliente R',status:'attivo'},o)).select().single()).data;
+      const a=await mk({name:'RC senza nulla',codice:'2099_91',amount:0});
+      const b=await mk({name:'RC con nota',codice:'2099_92',amount:0,note_contratti:'Importo da definire dopo il sopralluogo',owner_id:S.me.id});
+      const c=await mk({name:'RC sospesa',codice:'2099_93',amount:5000,status:'sospeso'});
+      await loadAll(true); go('projects');
+      const r={btn:!!document.querySelector('[data-act="reportcomm"]')};
+      const sc=reportCommesse(), sez=t=>sc.sezioni.find(z=>z.titolo.startsWith(t));
+      const righe=t=>(sez(t)||{tabella:{righe:[]}}).tabella.righe.map(x=>x.join(' | ')).join('\n');
+      r.senzaNulla=/RC senza nulla/.test(righe('Senza importo e senza note'))&&!/RC con nota/.test(righe('Senza importo e senza note'));
+      r.conNota=/sopralluogo/.test(righe('Senza importo, con note'));
+      r.nonAttive=/RC sospesa/.test(righe('Commesse non attive'))&&!/RC sospesa/.test(righe('Commesse attive'));
+      r.stato=/RC sospesa/.test(righe('Stato: Sospeso'));
+      r.senzaResp=/RC senza nulla/.test(righe('Senza responsabile'));
+      r.perResp=/RC con nota/.test(righe('Responsabile: '+un(S.me.id)));
+      htmlScheda(sc);
+      document.querySelector('[data-act="reportcomm"]').click(); r.modale=el('m-stampa').classList.contains('show'); closeM('m-stampa');
+      for(const x of [a,b,c]) await SB.from('projects').delete().eq('id',x.id);
+      await loadAll(true); return r; });
+    must(g.btn,'manca il pulsante Report in Progetti');
+    must(g.senzaNulla,'commessa senza importo e senza note non elencata (o con nota elencata)');
+    must(g.conNota,'le note sui contratti non sono riportate');
+    must(g.nonAttive&&g.stato,'attive/non attive o raggruppamento per stato sbagliati');
+    must(g.senzaResp&&g.perResp,'responsabili non raggruppati');
+    must(g.modale,'il pulsante non apre la stampa');
+  });
   await t('proforma emessa e fattura ancora da emettere: il riferimento è verde',async()=>{
     const g=await p.evaluate(async()=>{ const pid=S.projects[0].id;
       const f=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'PF verde',imponibile:100,stato:'da_emettere',isa_tipo:'C05',

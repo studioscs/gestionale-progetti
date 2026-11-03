@@ -2819,3 +2819,22 @@ fare dal gestionale): *Authentication → Sign In / Providers → Email*
   *Authentication → URL Configuration* il *Site URL* deve essere l'indirizzo
   del gestionale, altrimenti il link porta altrove.
 
+## Report commesse
+
+In **Progetti**, il pulsante **🖨️ Report** prepara su carta o in PDF (pagina
+orizzontale) il quadro di tutte le commesse, archiviate comprese:
+
+- **riepilogo**: quante sono, attive e non attive, per stato, quante senza
+  importo, con e senza responsabile;
+- **senza importo e senza note sui contratti**: le commesse da sistemare;
+- **senza importo, con note sui contratti**: con il testo delle note — quelle
+  della commessa e quelle scritte sui singoli atti;
+- **attive** e **non attive** (in pianificazione, sospese, completate,
+  archiviate);
+- **per stato**, con l'avanzamento (attività fatte su quelle previste) e
+  l'importo;
+- **senza responsabile**, e poi le commesse **di ciascun responsabile**.
+
+Vede le commesse che chi lo genera può vedere: per un quadro di tutto lo
+studio va generato da un amministratore o da chi vede tutte le commesse.
+
