@@ -1150,7 +1150,10 @@ function launchOpts(){
     if(vuoto){
       await p.fill('[data-rev="data"]',(y+1)+'-01-03'); await p.waitForTimeout(200);
       const serie=await p.evaluate(()=>REV.pa?'PA':'FE');
-      must(await p.inputValue('[data-rev="numero"]')==='1/'+serie,'con la data dell anno dopo non riparte da 1/'+serie+': '+(await p.inputValue('[data-rev="numero"]')));
+      /* dal 2027 il numero porta l'anno: 001/FE/27 */
+      const atteso=(y+1)>=2027?'001/'+serie+'/'+String(y+1).slice(-2):'1/'+serie;
+      must(await p.inputValue('[data-rev="numero"]')===atteso,'con la data dell anno dopo non riparte da '+atteso+': '+(await p.inputValue('[data-rev="numero"]')));
+      await p.fill('[data-rev="data"]',y+'-01-03'); await p.waitForTimeout(200);
     }
   });
   await t('scritto a mano, il numero resta quello',async()=>{
