@@ -1550,7 +1550,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.5';
+const VERSIONE = '2026.11.03.7';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7763,10 +7763,12 @@ function reportIncassi(saldo) {
      colonna loro solo se ce ne sono. */
   const conSpese = d.emesse.concat(d.proforme).some(x => x.c.anticipazioni > 0);
   const aliqCassa = String(STUDIO.aliquotaCassa || 4).replace('.', ',');
-  const col = ['Anno rif.', 'N. fattura', 'Intestatario', 'Solleciti', 'Imponibile', 'Cassa ' + aliqCassa + '%', 'IVA']
+  const col = ['Anno rif.', 'N. fattura', 'Data', 'Intestatario', 'Solleciti', 'Imponibile', 'Cassa ' + aliqCassa + '%', 'IVA']
     .concat(conSpese ? ['Spese art. 15'] : []).concat(['Lordo']);
-  const dxIncassi = col.map((c, i) => i).filter(i => i >= 4);
-  const riga = x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), x.f ? testoSolleciti(x.f) : '',
+  const dxIncassi = col.map((c, i) => i).filter(i => i >= 5);
+  /* la data di emissione: della fattura, o della proforma */
+  const dataDoc = x => x.f ? fdate(x.f.stato === 'emessa' ? x.f.data_fattura : (x.f.proforma_data || String(x.f.proforma_at || '').slice(0, 10))) : '';
+  const riga = x => [x.anno, x.num, dataDoc(x), x.chi + (x.det ? '\n' + x.det : ''), x.f ? testoSolleciti(x.f) : '',
     feuro(x.c.imponibile), feuro(x.c.cassa), x.c.split ? 'split payment' : feuro(x.c.iva)]
     .concat(conSpese ? [x.c.anticipazioni ? feuro(x.c.anticipazioni) : '—'] : []).concat([feuro(x.importo)]);
   const somma = (arr, k) => r2(arr.reduce((a, x) => a + (k === 'iva' ? (x.c.split ? 0 : x.c.iva) : x.c[k]), 0));
@@ -7784,10 +7786,10 @@ function reportIncassi(saldo) {
         .concat(inMora.length ? [['In mora con l’avvocato', inMora.length + (inMora.length === 1 ? ' posizione, ' : ' posizioni, ')
           + feuro(r2(inMora.reduce((a, x) => a + x.importo, 0)))]] : [])
         .concat(s === null ? [] : [['Saldo + da incassare − da saldare', feuro(r2(s + d.totIncassare - d.totSaldare))]]) },
-      { titolo: 'Lista debitori — fatture emesse non ancora incassate', tabella: { col, dx: dxIncassi, largo: 2, totCol: 4,
+      { titolo: 'Lista debitori — fatture emesse non ancora incassate', tabella: { col, dx: dxIncassi, largo: 3, totCol: 5,
           righe: d.emesse.map(riga), tot: d.emesse.length ? [totRiga('Totale fatture da incassare', d.emesse, d.totEmesse)] : null,
           vuoto: 'Nessuna fattura emessa in attesa di pagamento.' } },
-      { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 2, totCol: 4,
+      { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 3, totCol: 5,
           righe: d.proforme.map(riga), tot: d.proforme.length ? [totRiga('Totale proforme', d.proforme, d.totProforme)] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
       { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
@@ -8968,9 +8970,23 @@ function prossimoNumero(anno, escludi, serie) {
 
 /* Ha l'aria di un ente pubblico? Dal nome, o dal codice destinatario di sei
    caratteri, che e' quello degli uffici della PA. Serve solo ad avvisare. */
-const RE_ENTE_PUBBLICO = /\b(comune|provincia|regione|ministero|prefettura|questura|asl|ast|asur|azienda sanitaria|azienda ospedaliera|universit[aà]|unione (dei comuni|montana)|comunit[aà] montana|consorzio di bonifica|camera di commercio|istituto comprensivo|istituto (di istruzione|tecnico|professionale)|liceo|agenzia (delle|del|per)|autorit[aà]|parco nazionale|inps|inail|demanio|soprintendenza|vigili del fuoco|genio civile|tribunale|corte dei conti|corte d.appello)(?![a-zàèéìòù])/i;
+const RE_ENTE_PUBBLICO = /\b(comune|provincia|regione|ministero|prefettura|questura|asl|ast|asur|ats|ulss|aou|arpa[a-z]*|erap|ater|ente|azienda sanitaria|azienda ospedaliera|universit[aà]|unione (dei comuni|montana)|comunit[aà] montana|consorzio di bonifica|camera di commercio|istituto comprensivo|istituto (di istruzione|tecnico|professionale)|liceo|agenzia (delle|del|per)|autorit[aà]|parco nazionale|inps|inail|demanio|soprintendenza|vigili del fuoco|genio civile|tribunale|corte dei conti|corte d.appello)(?![a-zàèéìòù])/i;
 const sembraEntePubblico = (nome, dest) => RE_ENTE_PUBBLICO.test(String(nome || ''))
   || /^[A-Z0-9]{6}$/.test(String(dest || '').trim().toUpperCase());
+/* NEL MODULO DELLA COMMESSA, MENTRE SI SCRIVE IL CLIENTE
+   Comune, Provincia, Regione, AST, Ministero...: lo si dice subito, accanto al
+   nome, con il pulsante che spunta «ente pubblico». Una fattura alla PA
+   partita come privata (IVA da incassare, niente codice ufficio, niente CIG)
+   si corregge solo con una nota di credito. */
+const avvisoEntePubblico = (nome, gia) => !gia && sembraEntePubblico(nome)
+  ? '<div class="wbox" style="font-size:12px;margin-top:6px">&#127963;&#65039; «' + esc(String(nome).trim()) + '» sembra un '
+    + '<b>ente pubblico</b>. Se lo è, segnalo: la fattura sarà verso la PA (codice ufficio, CIG, scissione dei pagamenti). '
+    + '<button class="btn btn-xs btn-p" type="button" id="w-pa-si" style="margin-left:4px">Sì, è un ente pubblico</button></div>'
+  : '';
+function aggiornaAvvisoPa() {
+  if (!el('w-pa-avviso')) return;
+  el('w-pa-avviso').innerHTML = avvisoEntePubblico(el('w-cli') ? el('w-cli').value : '', el('w-pa') && el('w-pa').checked);
+}
 
 function disegnaRevisione() {
   const d = REV;
@@ -11999,7 +12015,8 @@ function drawWizard() {
             + 'Se è nuovo, compila la scheda qui sotto: al salvataggio entra in anagrafica, completa.') + '</div></div>'
       + '<div class="fg2">'
       + fld('Denominazione / cognome e nome *', 'w-cli', d.client, 'ROSSI MARIO oppure VENTINOVE SRL')
-          .replace(/<\/div>$/, '<div class="hint">' + NOTA_NOME_CLIENTE + '</div></div>')
+          .replace(/<\/div>$/, '<div class="hint">' + NOTA_NOME_CLIENTE + '</div>'
+            + '<div id="w-pa-avviso">' + avvisoEntePubblico(d.client, d.ente_pubblico) + '</div></div>')
       + '<div class="fg"><label class="fl">Tipo</label><select class="fc" id="w-ctipo">'
         + '<option value="societa"' + (tipoCli === 'societa' ? ' selected' : '') + '>Società / ente</option>'
         + '<option value="persona"' + (tipoCli === 'persona' ? ' selected' : '') + '>Persona fisica</option></select></div>'
@@ -12033,9 +12050,6 @@ function drawWizard() {
         + '<input type="checkbox" id="w-pa"' + (d.ente_pubblico ? ' checked' : '') + '>'
         + '&nbsp;<b>Il committente è un ente pubblico</b></label>'
         + '<div class="hint">Stazione appaltante: cambia il formato della fattura.</div>'
-        + (!d.ente_pubblico && sembraEntePubblico(d.client)
-            ? '<div class="wbox" style="font-size:12px;margin-top:6px">«' + esc(d.client) + '» sembra un ente pubblico: '
-              + 'se lo è, spunta la casella. Altrimenti le fatture escono con l’IVA da incassare, senza scissione dei pagamenti.</div>' : '')
         + '</div>'
       + '<div id="w-pa-box"' + (d.ente_pubblico ? '' : ' style="display:none"') + '>' + paBoxHtml(d) + '</div>'
       + sez('Commessa')
@@ -12358,6 +12372,12 @@ async function wzSave() {
   const doppio = codiceOccupato(WZ.d.codice, WZ.edit);
   if (doppio) { WZ.step = 1; drawWizard();
     return toast('Il codice ' + WZ.d.codice + ' è già di «' + doppio.name + '».', 'error'); }
+  if (!WZ.edit && !WZ.d.ente_pubblico && sembraEntePubblico(WZ.d.client)
+      && !confirm('«' + WZ.d.client + '» sembra un ente pubblico, ma non è segnato come tale.\n\n'
+        + 'Le fatture partirebbero come a un privato: IVA da incassare, senza codice ufficio né CIG.\n\n'
+        + 'OK = salva così (non è un ente pubblico)\nAnnulla = torno indietro a spuntarlo')) {
+    WZ.step = 1; drawWizard(); return;
+  }
   setLoading('mp-save', true);
   const pay = Object.assign({}, WZ.d);
   ['id','created_at','updated_at','created_by','archiviato'].forEach(k => delete pay[k]);
@@ -13497,10 +13517,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (e.target.checked && !el('w-uff')) el('w-pa-box').innerHTML = paBoxHtml(WZ.d);
       el('w-pa-box').style.display = e.target.checked ? '' : 'none';
+      aggiornaAvvisoPa();
     }
   });
 
   /* Il codice ufficio ricompila il committente appena e' completo */
+  el('mp-body').addEventListener('input', e => { if (e.target.id === 'w-cli') aggiornaAvvisoPa(); });
   el('mp-body').addEventListener('input', e => {
     if (e.target.id !== 'w-uff') return;
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -13509,6 +13531,12 @@ document.addEventListener('DOMContentLoaded', () => {
       toast('Dati del committente ricompilati dal registro uffici');
   });
   el('mp-body').addEventListener('click', e => {
+    if (e.target.id === 'w-pa-si' && el('w-pa')) {
+      el('w-pa').checked = true;
+      el('w-pa').dispatchEvent(new Event('change', { bubbles: true }));
+      (el('w-uff') || el('w-pa')).scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return toast('Segnato come ente pubblico: completa codice ufficio e CIG', 'success');
+    }
     const t = e.target.closest('[data-tpl]');
     if (t) { WZ.tpl = t.dataset.tpl; drawWizard(); return; }
     const c = e.target.closest('[data-cond]');

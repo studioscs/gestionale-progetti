@@ -118,6 +118,20 @@ function launchOpts(){
   await t('generazione consistente',async()=>{ /* percorso privato asciutto: completo ma senza decine di micro-voci */
     must(stats.fasi>=10&&stats.att>=30&&stats.att<=95&&stats.prat>=5,JSON.stringify(stats)); });
   // --- LA COMMESSA SI MODIFICA IN TUTTI E TRE I PASSAGGI ---
+  await t('scrivendo un Comune come cliente compare subito l avviso di ente pubblico, e si spunta con un clic',async()=>{
+    await p.evaluate(()=>openNewProj()); await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(300);
+    await p.fill('#w-cli','ROSSI MARIO'); await p.waitForTimeout(100);
+    must(!(await p.locator('#w-pa-si').count()),'avviso su un privato');
+    await p.fill('#w-cli','COMUNE DI RECANATI'); await p.waitForTimeout(100);
+    must(await p.isVisible('#w-pa-si'),'nessun avviso scrivendo «COMUNE DI RECANATI»');
+    await p.fill('#w-cli','AST ANCONA'); await p.waitForTimeout(100);
+    must(await p.isVisible('#w-pa-si'),'nessun avviso per l AST');
+    await p.click('#w-pa-si'); await p.waitForTimeout(250);
+    must(await p.isChecked('#w-pa'),'il pulsante non spunta «ente pubblico»');
+    must(await p.isVisible('#w-pa-box'),'non compaiono i dati della PA (codice ufficio, CIG)');
+    must(!(await p.locator('#w-pa-si').count()),'l avviso resta dopo aver spuntato');
+    await p.evaluate(()=>closeM('m-proj'));
+  });
   await t('il codice commessa è obbligatorio e viene proposto',async()=>{
     await p.evaluate(()=>openNewProj());
     await p.waitForSelector('#m-proj.show'); await p.waitForTimeout(400);

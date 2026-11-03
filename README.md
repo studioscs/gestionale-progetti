@@ -376,6 +376,13 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
   affidamento e oggetto del servizio. Digitando un codice ufficio già usato, i
   dati del committente si ricompilano da soli. La fattura esce in formato FPA12
   con CIG e CUP al posto giusto e la scissione dei pagamenti.
+  **Il gestionale lo propone da solo**: scrivendo il cliente, se il nome
+  sembra un ente pubblico (Comune, Provincia, Regione, AST/ASL/ATS/ULSS,
+  Ministero, Prefettura, ARPA, ERAP, università, istituti scolastici,
+  Soprintendenza, Genio civile…) compare subito sotto il nome un avviso con il
+  pulsante **Sì, è un ente pubblico**, che spunta la casella e apre i campi
+  della PA. Salvando una commessa nuova con un nome così e la casella vuota,
+  il gestionale chiede conferma.
 - **Ogni fattura si rivede prima di generarla**: il pulsante 📥 apre una finestra
   dove ogni campo dell'XML è modificabile e i totali si ricalcolano mentre scrivi.
   Finché manca un dato obbligatorio il pulsante *Genera* resta spento e la
@@ -847,7 +854,7 @@ studio teneva a mano:
   spese anticipate, meno l'eventuale ritenuta; per gli enti in scissione dei
   pagamenti senza l'IVA, che l'ente versa all'erario). Conta l'importo
   intero finché la fattura non è segnata *incassata*.
-- Per ogni fattura e proforma le colonne **Imponibile** (il netto), **Cassa
+- Per ogni fattura e proforma la **data di emissione** e le colonne **Imponibile** (il netto), **Cassa
   4%**, **IVA** — oppure *split payment* quando la versa l'ente —, **Spese
   art. 15** (solo se ce ne sono) e **Lordo**, cioè quello che il committente
   deve versare allo studio; in fondo il totale di ogni colonna. Il report si
