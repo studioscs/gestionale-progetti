@@ -403,6 +403,13 @@ tbody tr:hover td { background:#f0f4f9; }
 .tpl.on { border-color:var(--navy); background:var(--bluelt); box-shadow:0 0 0 1px var(--navy); }
 .tpl .tt { font-size:13px; font-weight:700; color:var(--navy); }
 .tpl .td { font-size:11.5px; color:var(--mut); margin-top:3px; line-height:1.45; }
+/* SOLA LETTURA (commercialista, viewer): nelle finestre si guarda, non si scrive */
+body.ro .ov:not(.ro-ok) .mb input:not(.ro-ok), body.ro .ov:not(.ro-ok) .mb select:not(.ro-ok),
+body.ro .ov:not(.ro-ok) .mb textarea:not(.ro-ok) { pointer-events:none; background:var(--bg); }
+body.ro .ov:not(.ro-ok) .mf .btn:not([data-close]):not(.ro-ok),
+body.ro .ov:not(.ro-ok) .mb button:not(.ro-ok):not(.mx) { display:none !important; }
+body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e stampare, non modificare.'; display:block;
+  background:var(--bluelt); color:var(--navy); border-radius:6px; padding:8px 12px; margin-bottom:14px; font-size:12.5px; font-weight:600; }
 </style>
 </head>
 <body>
@@ -657,7 +664,7 @@ tbody tr:hover td { background:#f0f4f9; }
 </div>
 
 <!-- Stampa di una scheda: carta o PDF -->
-<div class="ov" id="m-stampa">
+<div class="ov ro-ok" id="m-stampa">
   <div class="modal" style="max-width:440px">
     <div class="mh"><h3>Stampa scheda</h3><button class="mx" data-close="m-stampa">&#10005;</button></div>
     <div class="mb">
@@ -766,7 +773,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="left row">
         <button class="btn" id="rev-reset">Ripristina i dati della commessa</button>
         <button class="btn" id="rev-ant">&#128065; Anteprima XML</button>
-        <button class="btn" id="rev-goproj" type="button" title="Apri la commessa di questa fattura">&#128193; Commessa</button>
+        <button class="btn ro-ok" id="rev-goproj" type="button" title="Apri la commessa di questa fattura">&#128193; Commessa</button>
         <button class="btn" id="rev-anag" type="button" title="Correggi i dati del cliente: valgono per tutte le fatture">&#9999;&#65039; Anagrafica</button>
       </span>
       <button class="btn" data-close="m-rev">Annulla</button>
@@ -1026,22 +1033,27 @@ tbody tr:hover td { background:#f0f4f9; }
   </div>
 </div>
 
-<div class="ov" id="m-isa">
+<div class="ov ro-ok" id="m-isa">
   <div class="modal modal-lg">
     <div class="mh"><h3>ISA &mdash; quadro C, tipologia dell&rsquo;attivit&agrave;</h3>
       <button class="mx" data-close="m-isa">&#10005;</button></div>
     <div class="mb">
       <div class="row mb16" style="gap:10px;flex-wrap:wrap">
         <label class="fl" style="margin:0">Anno di competenza</label>
-        <select class="sel" id="isa-anno" style="min-width:120px"></select>
-        <span class="hint" style="margin:0">I totali e le percentuali sono quelli da riportare nelle
-          due colonne di destra del modello.</span>
+        <select class="sel ro-ok" id="isa-anno" style="min-width:120px"></select>
+        <label class="row" style="gap:6px;font-size:12.5px;cursor:pointer">
+          <input type="checkbox" class="ro-ok" id="isa-tutti" checked>
+          Tutta la competenza dell&rsquo;anno, anche non ancora fatturata (proforma, da emettere)</label>
       </div>
+      <div class="hint" style="margin:-8px 0 14px">I totali e le percentuali sono quelli da riportare nelle
+        due colonne di destra del modello. Per la dichiarazione conta la <b>competenza</b>: lascia la casella
+        spuntata. Togliendola restano solo le fatture emesse o incassate.</div>
       <div id="isa-body"></div>
     </div>
     <div class="mf">
       <button class="btn" data-close="m-isa">Chiudi</button>
-      <button class="btn btn-p" id="isa-stampa">&#128424; Stampa</button>
+      <button class="btn ro-ok" id="isa-senza" title="Le commesse con scaglioni o servizi senza tipologia ISA, su carta o in PDF">&#128203; Report senza ISA</button>
+      <button class="btn btn-p ro-ok" id="isa-stampa">&#128424; Stampa</button>
     </div>
   </div>
 </div>
@@ -1172,7 +1184,7 @@ tbody tr:hover td { background:#f0f4f9; }
       <span class="left row">
         <button class="btn btn-d" id="fa-del2" style="display:none">Elimina</button>
         <button class="btn" id="fa-xml" title="Apre la revisione: da li' proforma PDF o fattura XML">&#128196; Proforma / XML</button>
-        <button class="btn" id="fa-goproj" type="button" title="Apri la commessa di questo scaglione">&#128193; Commessa</button>
+        <button class="btn ro-ok" id="fa-goproj" type="button" title="Apri la commessa di questo scaglione">&#128193; Commessa</button>
         <button class="btn" id="fa-anag" type="button" title="Correggi i dati del cliente (indirizzo, CAP, P.IVA, SDI, PEC...)">&#9999;&#65039; Anagrafica</button>
       </span>
       <button class="btn" data-close="m-fatt">Chiudi</button>
@@ -1565,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.03.26';
+const VERSIONE = '2026.11.04.01';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1584,6 +1596,28 @@ const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
    il necessario, funziona aprendolo da qualunque dispositivo, ed e' il
    formato per cui e' scritta tutta la schermata di recupero qui sotto. */
 const SB = supabase.createClient(SURL, SKEY, { auth: { flowType: 'implicit' } });
+/* SOLA LETTURA (commercialista e viewer)
+   Il database rifiuta comunque le loro scritture, ma in silenzio: un
+   aggiornamento bloccato dalle regole d'accesso non da' errore, tocca zero
+   righe, e l'applicazione diceva «salvato». Qui ogni scrittura di chi non e'
+   Admin o Collaboratore si ferma prima di partire, con un messaggio chiaro.
+   Restano le poche cose personali: segnare lette le proprie notifiche, il
+   proprio profilo. */
+const TABELLE_PERSONALI = ['notifiche', 'profiles'];
+const ERR_SOLA_LETTURA = { message: 'Il tuo account è in sola lettura: puoi consultare e stampare, non modificare.', code: 'sola_lettura' };
+(function proteggiScritture() {
+  const from = SB.from.bind(SB);
+  const bloccato = new Proxy(function () {}, {
+    get: (t, k) => k === 'then' ? (ok => Promise.resolve({ data: null, error: ERR_SOLA_LETTURA }).then(ok)) : () => bloccato,
+    apply: () => bloccato
+  });
+  SB.from = tabella => {
+    const q = from(tabella);
+    if (!S.prof || canW() || TABELLE_PERSONALI.indexOf(tabella) >= 0) return q;
+    ['insert', 'update', 'upsert', 'delete'].forEach(m => { q[m] = () => bloccato; });
+    return q;
+  };
+})();
 
 /* --------------------------------- STORE --------------------------------- */
 const S = {
@@ -1721,6 +1755,16 @@ function toast(msg, t) {
   setTimeout(() => d.remove(), t === 'error' || t === 'warning' ? 6000 : 3200);
 }
 function openM(id) { el(id).classList.add('show'); }
+/* Nelle finestre, chi e' in sola lettura vede tutto ma non scrive: i campi
+   non si toccano e i pulsanti che salvano, eliminano o generano documenti
+   spariscono (CSS «body.ro»). Le finestre di sola consultazione o stampa
+   hanno la classe ro-ok e restano come sono. */
+document.addEventListener('keydown', e => {
+  if (!document.body.classList.contains('ro')) return;
+  const t = e.target;
+  if (t && t.closest && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !t.classList.contains('ro-ok')
+      && t.closest('.ov:not(.ro-ok) .mb') && e.key !== 'Tab' && e.key !== 'Escape') e.preventDefault();
+}, true);
 function closeM(id) { el(id).classList.remove('show'); }
 function closeAll() { qsa('.ov.show').forEach(o => o.classList.remove('show')); }
 
@@ -3717,6 +3761,7 @@ async function boot() {
     toast('Profilo creato in sola lettura. Chiedi a un amministratore di attivarti come Collaboratore.', 'error');
   } else {
     S.prof = prof;
+    document.body.classList.toggle('ro', !canW());
     if (!prof.email && user.email) {
       SB.from('profiles').update({ email:user.email }).eq('id', user.id);
       S.prof.email = user.email;
@@ -4700,8 +4745,11 @@ function percentualiA100(valori) {
 /* IL QUADRO C PER UN ANNO: una riga per tipologia, con numero di incarichi,
    importo e percentuale. Le tipologie senza niente non compaiono - nel modello
    si lasciano in bianco. */
-function isaRiepilogo(anno) {
-  const voci = isaVoci(anno);
+/* tutti = anche gli scaglioni non ancora fatturati (da emettere, in proforma)
+   di competenza dell'anno: e' il conto che serve al commercialista per la
+   dichiarazione, che guarda la competenza e non la data della fattura. */
+function isaRiepilogo(anno, tutti) {
+  const voci = isaVoci(anno, !!tutti);
   const classificate = voci.filter(v => v.tipo);
   const senzaTipo    = voci.filter(v => !v.tipo);
 
@@ -4719,7 +4767,7 @@ function isaRiepilogo(anno) {
 
   /* con la stessa competenza ma non ancora fatturato: si dice, non si conta */
   const nonFatt = isaVoci(anno, true).filter(v => { const f = byId(S.fatture, v.fid); return f && ISA_FATTURATE.indexOf(f.stato) < 0; });
-  return { anno: Number(anno), righe,
+  return { anno: Number(anno), righe, tutti: !!tutti,
            nonFatturato: r2(nonFatt.reduce((a, v) => a + v.importo, 0)), nonFatturatoN: nonFatt.length,
            totale: r2(righe.reduce((a, g) => a + g.importo, 0)),
            incarichiTotali: new Set(classificate.map(v => v.pid)).size,
@@ -7832,9 +7880,10 @@ function riquadroProforme() {
   if (!tutte.length) return '';
   const list = S.pfTutte ? tutte : aperte;
   const tot = r2(list.reduce((a, f) => a + contiScaglione(f).totale, 0));
+  const totImp = r2(list.reduce((a, f) => a + impFattura(f), 0));
   return '<div class="card mb16"><div class="card-h"><span class="card-t" style="color:var(--blue)">&#128196; Proforma emesse in attesa di incasso '
       + '<span class="chip">' + list.length + '</span></span>'
-      + '<span class="row" style="gap:10px"><b style="font-size:13px">' + feuro(tot) + '</b>'
+      + '<span class="row" style="gap:10px"><span style="font-size:12.5px">imponibile <b>' + feuro(totImp) + '</b> · totale ' + feuro(tot) + '</span>'
       + '<button class="btn btn-xs" data-act="pftutte">' + (S.pfTutte ? 'Solo da fatturare'
           : 'Anche già fatturate (' + (tutte.length - aperte.length) + ')') + '</button></span></div>'
     + '<div class="hint" style="margin:-6px 0 10px">' + (S.pfTutte
@@ -8066,7 +8115,7 @@ function riquadroAnnoFiscale() {
   const casella = (k, html) => html.replace('<div class="kpi">', '<div class="kpi" data-annofilt="' + k + '" style="cursor:pointer'
     + (sel === k ? ';outline:2px solid var(--navy);outline-offset:-2px' : '') + '" title="Clic: elenca gli scaglioni">');
   return '<div class="card mb16"><div class="card-h"><span class="card-t">&#128197; Anno fiscale ' + y
-      + ' <span style="font-weight:400;color:var(--mut);font-size:12px">— per anno di competenza, importi imponibili · clic su una casella per vedere gli scaglioni</span></span>'
+      + ' <span style="font-weight:400;color:var(--mut);font-size:12px">— per anno di competenza (proforma e richieste comprese), importi imponibili · clic su una casella per vedere gli scaglioni</span></span>'
       + '<span class="row" style="gap:6px"><button class="btn btn-xs" data-act="annofisc-" title="Anno prima">&#9664;</button>'
       + '<b style="font-size:13px">' + feuro(totY) + '</b>'
       + '<button class="btn btn-xs" data-act="annofisc+" title="Anno dopo">&#9654;</button></span></div>'
@@ -8119,6 +8168,19 @@ function elencoAnnoFiscale(titolo, arr) {
     + '</div>';
 }
 
+/* LA COLONNA «DOCUMENTO»: numero e data della fattura, o della proforma
+   (in verde se e' partita e la fattura e' ancora da emettere) */
+function cellaDocumento(f) {
+  if (f.numero_fattura) return '<b>' + esc(f.numero_fattura) + '</b>'
+    + (f.data_fattura ? '<div style="font-size:11px;color:var(--mut)">del ' + fdate(f.data_fattura) + '</div>' : '');
+  if (f.proforma_numero) {
+    const aperta = fattAperta(f);
+    return '<span style="color:' + (aperta ? 'var(--grn);font-weight:700' : 'var(--mut)') + '">' + (aperta ? '&#10003; ' : '')
+      + 'Proforma ' + esc(f.proforma_numero) + '</span>'
+      + (f.proforma_data ? '<div style="font-size:11px;color:var(--mut)">del ' + fdate(f.proforma_data) + '</div>' : '');
+  }
+  return '<span style="color:var(--mut2)">—</span>';
+}
 /* IL RIFERIMENTO ALLA PROFORMA, IN VERDE QUANDO E' GIA' PARTITA
    Scaglione ancora da fatturare ma con la proforma emessa: e' gia' stato
    chiesto al committente, e il verde lo distingue a colpo d'occhio da quelli
@@ -8457,11 +8519,12 @@ function rFatturare() {
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
       + '<td style="padding-left:22px">' + esc(f.descrizione)
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
-      + '<td>' + bdg(f.stato, ST_FATT) + rifProformaHtml(f)
+      + '<td>' + bdg(f.stato, ST_FATT)
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
             + '📣 ' + esc(un(f.richiesta_da)) + ' · ' + fdate(String(f.richiesta_at).split('T')[0]) + '</div>'
             + (f.richiesta_note ? '<div style="font-size:11px;color:var(--mut);white-space:normal;max-width:280px">'
                 + esc(f.richiesta_note) + '</div>' : '') : '') + chipSolleciti(f) + '</td>'
+      + '<td style="font-size:12px;white-space:nowrap">' + cellaDocumento(f) + '</td>'
       + '<td style="text-align:right"><b>' + feuro(c.imponibile) + '</b></td>'
       + '<td style="text-align:right;font-size:12px;color:var(--mut)">' + cellaTotale(c) + '</td>'
       + '<td style="font-size:12px;color:var(--mut)">' + (f.data_prevista || !fattAperta(f) ? fdate(f.data_prevista)
@@ -8472,25 +8535,36 @@ function rFatturare() {
         + '<button class="btn btn-xs" data-fxml="' + f.id + '" title="Genera XML FatturaPA">&#128229;</button>' : '') + '</td></tr>';
   };
   /* extra: i saldi che mancano, come righe in rosso fra quelli che matureranno */
-  const tabella = (arr, titolo, colore, extra) => !arr.length && !(extra && extra.length) ? '' :
-      '<div class="card mb16"><div class="card-h"><span class="card-t"' + (colore ? ' style="color:' + colore + '"' : '') + '>'
-    + titolo + ' <span class="chip">' + (arr.length + (extra ? extra.length : 0)) + '</span></span>'
-    + '<b style="font-size:13px">' + feuro(r2(arr.reduce((a, f) => a + impFattura(f), 0)
-        + (extra || []).reduce((a, x) => a + x.c.scoperto, 0))) + '</b></div>'
-    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th>'
+  /* I TOTALI DI OGNI SEZIONE: in testa e in fondo l'imponibile (lo stesso
+     dei numeri di riepilogo) e il totale documento (con cassa e IVA); i saldi
+     mancanti, che non sono scaglioni, si sommano a parte. */
+  const totLordo = arr => r2(arr.reduce((a, f) => a + contiScaglione(f).totale, 0));
+  const tabella = (arr, titolo, colore, extra) => { if (!arr.length && !(extra && extra.length)) return '';
+    const imp = somma(arr), lordo = totLordo(arr), scop = r2((extra || []).reduce((a, x) => a + x.c.scoperto, 0));
+    return '<div class="card mb16"><div class="card-h"><span class="card-t"' + (colore ? ' style="color:' + colore + '"' : '') + '>'
+    + titolo + ' <span class="chip">' + arr.length + '</span>'
+      + (extra && extra.length ? ' <span class="chip" style="color:var(--red)" title="Commesse senza lo scaglione di saldo">+ ' + extra.length + ' saldi mancanti</span>' : '') + '</span>'
+    + '<span style="font-size:12.5px;text-align:right">imponibile <b>' + feuro(imp) + '</b> · totale ' + feuro(lordo)
+      + (scop ? '<div style="color:var(--red)">+ saldi mancanti ' + feuro(scop) + '</div>' : '') + '</span></div>'
+    + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th><th>N. fattura / proforma</th>'
     + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
     + '<th>Prevista</th><th></th></tr></thead><tbody>'
     + gruppiCommessa(arr.map(f => ({ f, pid: f.project_id }))
         .concat((extra || []).map(x => ({ x, pid: x.p.id }))), v => v.pid).map(g => {
         const fatt = g.voci.filter(v => v.f).map(v => v.f).sort(perOrdine), ex = g.voci.filter(v => v.x).map(v => v.x);
-        return rigaGruppoCommessa(g, 6, fatt.length + ex.length,
+        return rigaGruppoCommessa(g, 7, fatt.length + ex.length,
                  r2(fatt.reduce((a, f) => a + impFattura(f), 0) + ex.reduce((a, x) => a + x.c.scoperto, 0)))
           + fatt.map(riga).join('') + ex.map(rigaSaldo).join(''); }).join('')
-    + '</tbody></table></div></div>';
+    + '</tbody><tfoot><tr style="border-top:2px solid var(--bord)"><td colspan="3"><b>Totale sezione</b> — '
+      + arr.length + (arr.length === 1 ? ' scaglione' : ' scaglioni') + '</td>'
+      + '<td style="text-align:right"><b>' + feuro(imp) + '</b></td><td style="text-align:right">' + feuro(lordo) + '</td><td colspan="2"></td></tr>'
+    + (scop ? '<tr><td colspan="3" style="color:var(--red)">Saldi mancanti (da inserire negli scaglioni)</td>'
+      + '<td style="text-align:right;color:var(--red)"><b>' + feuro(scop) + '</b></td><td colspan="3"></td></tr>' : '')
+    + '</tfoot></table></div></div>'; };
   function rigaSaldo(x) { return '<tr class="riga-saldo" data-projfatt="' + x.p.id + '" style="cursor:pointer">'
         + '<td style="padding-left:22px"><b style="color:var(--red)">' + (x.c.nScag ? 'Saldo finale mancante' : 'Nessuno scaglione') + '</b>'
           + '<div style="font-size:11px;color:var(--mut)">contratto ' + feuro(x.c.imp) + ', negli scaglioni ' + feuro(x.c.piano) + '</div></td>'
-        + '<td><span class="bdg br">Da inserire</span></td>'
+        + '<td><span class="bdg br">Da inserire</span></td><td></td>'
         + '<td style="text-align:right;color:var(--red)"><b>' + feuro(x.c.scoperto) + '</b></td>'
         + '<td></td><td></td>'
         + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>'; }
@@ -8498,10 +8572,12 @@ function rFatturare() {
   el('page').innerHTML = barraCercaFatt()
     + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
       + '<div class="kgrid">'
-      + kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich)), kRich.length ? 100 : 0, 'var(--ora)')
-      + kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa)), 60, 'var(--mut2)')
+      + kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich))
+            + ' <span style="font-size:11px">imponibile · sezione «Chieste dai responsabili»</span>', kRich.length ? 100 : 0, 'var(--ora)')
+      + kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa))
+            + ' <span style="font-size:11px">imponibile · le sezioni «Matureranno» e «Senza data», senza i saldi mancanti</span>', 60, 'var(--mut2)')
       + kpi('Emesse non incassate', kEmesse.length, feuro(somma(kEmesse))
-            + ' <span style="font-size:11px">· ' + emesse.length + ' fatture, ' + conProf.length + ' proforma</span>',
+            + ' <span style="font-size:11px">imponibile · ' + emesse.length + ' fatture + ' + conProf.length + ' proforma (le due sezioni in alto)</span>',
             kEmesse.length ? 100 : 0, 'var(--blue)')
       + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
       + (() => { const sz = daControllare.filter(x => x.c.problema === 'saldo');
@@ -8533,7 +8609,10 @@ function rFatturare() {
     + (() => { const y = today().getFullYear();
         const mat = list.filter(f => senzaProf(f) && !fattRichiesta(f));
         const entro = mat.filter(f => f.data_prevista && f.data_prevista <= fineAnno(y));
-        return tabella(entro, '⏳ Matureranno più avanti — entro il 31/12/' + y, null,
+        return '<div class="hint" style="margin:0 0 8px">Le sezioni qui sotto vanno per <b>data prevista</b>, di qualunque anno di '
+            + 'competenza, e non comprendono richieste e proforma (sono più in alto): per questo non coincidono con le caselle '
+            + 'dell’<b>Anno fiscale</b>, che vanno per anno di competenza e le comprendono.</div>'
+          + tabella(entro, '⏳ Matureranno più avanti — entro il 31/12/' + y, null,
                  daControllare.filter(x => x.c.problema === 'saldo'))
           + tabella(mat.filter(f => entro.indexOf(f) < 0 && f.data_prevista), '📅 Matureranno più avanti — dal ' + (y + 1), null)
           + tabella(mat.filter(f => !f.data_prevista), '❓ Senza data prevista — da inserire', 'var(--red)'); })()
@@ -8801,12 +8880,14 @@ function openIsa(anno) {
     + (a === Number(scelto) ? ' selected' : '') + '>' + a
     + (conDati.indexOf(a) >= 0 ? '' : ' (nessun dato)') + '</option>').join('');
   el('isa-anno').onchange = () => disegnaIsa(el('isa-anno').value);
+  el('isa-tutti').onchange = () => disegnaIsa(el('isa-anno').value);
   disegnaIsa(scelto);
   openM('m-isa');
 }
 
+const isaTutti = () => !el('isa-tutti') || el('isa-tutti').checked;
 function disegnaIsa(anno) {
-  const r = isaRiepilogo(anno);
+  const r = isaRiepilogo(anno, isaTutti());
 
   const righe = r.righe.map(g =>
     '<tr>'
@@ -8846,7 +8927,10 @@ function disegnaIsa(anno) {
           + '<td style="text-align:right"><b>' + feuro(r.totale) + '</b></td>'
           + '<td style="text-align:right"><b>' + somma.toFixed(2).replace('.', ',') + ' %</b></td>'
         + '</tr></tfoot></table></div>'
-      + (r.nonFatturato ? '<div class="ibox" style="margin-top:10px;font-size:12px">Contano solo le fatture '
+      + (r.tutti ? '<div class="ibox" style="margin-top:10px;font-size:12px">Contano <b>tutti</b> gli scaglioni di competenza '
+          + esc(String(r.anno)) + ', fatturati e no' + (r.nonFatturato ? ': ' + feuro(r.nonFatturato) + ' in ' + r.nonFatturatoN
+          + (r.nonFatturatoN === 1 ? ' scaglione' : ' scaglioni') + ' non sono ancora fatturati (da emettere o in proforma)' : '') + '.</div>'
+        : r.nonFatturato ? '<div class="ibox" style="margin-top:10px;font-size:12px">Contano solo le fatture '
           + '<b>emesse o incassate</b>. Con competenza ' + esc(String(r.anno)) + ' ci sono anche <b>'
           + feuro(r.nonFatturato) + '</b> in ' + r.nonFatturatoN + (r.nonFatturatoN === 1 ? ' scaglione' : ' scaglioni')
           + ' non ancora fatturati: entreranno quando la fattura sarà emessa.</div>' : '')
@@ -8859,10 +8943,37 @@ function disegnaIsa(anno) {
       + '</div>';
 }
 
+/* IL REPORT DEGLI SCAGLIONI SENZA TIPOLOGIA ISA
+   Per l'anno di competenza scelto, fatturati e no: le commesse con almeno uno
+   scaglione (o un servizio dello scaglione) senza tipologia, raggruppate, con
+   lo stato e il documento. E' l'elenco da completare prima della
+   dichiarazione: ogni voce qui manca dal quadro C. */
+function reportSenzaIsa(anno) {
+  const voci = isaVoci(anno, true).filter(v => !v.tipo);
+  const gruppi = gruppiCommessa(voci, v => v.pid);
+  const doc = f => f.numero_fattura ? 'Fattura ' + f.numero_fattura + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '')
+    : f.proforma_numero ? 'Proforma ' + f.proforma_numero + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '')
+    : f.data_prevista ? 'prevista ' + fdate(f.data_prevista) : 'data da inserire';
+  const tot = r2(voci.reduce((a, v) => a + v.importo, 0));
+  return {
+    titolo: 'ISA — scaglioni senza tipologia, competenza ' + anno, orizzontale: true,
+    sottotitolo: 'Situazione al ' + fdate(todayISO()) + ' · fatturati e non ancora fatturati · '
+      + voci.length + (voci.length === 1 ? ' voce' : ' voci') + ' in ' + gruppi.length + (gruppi.length === 1 ? ' commessa' : ' commesse')
+      + ' · ' + feuro(tot),
+    sezioni: gruppi.length ? gruppi.map(g => ({
+      titolo: nomeConCodice(g.p) + (g.p.client ? ' — ' + g.p.client : ''),
+      tabella: { col: ['Scaglione', 'Servizio', 'Stato', 'Documento', 'Imponibile'], dx: [4], largo: 0, totCol: 4,
+        righe: g.voci.map(v => { const f = byId(S.fatture, v.fid) || {};
+          return [f.descrizione || '', v.cosa && v.cosa !== f.descrizione ? v.cosa : '', (ST_FATT[f.stato] || [f.stato])[0], doc(f), feuro(v.importo)]; }),
+        tot: [['Totale senza tipologia', feuro(r2(g.voci.reduce((a, v) => a + v.importo, 0)))]] } }))
+      : [{ titolo: 'Tutto classificato', testo: 'Nessuno scaglione di competenza ' + anno + ' è senza tipologia ISA.' }]
+  };
+}
+
 /* La stampa: la stessa tabella su una pagina pulita, da tenere accanto mentre
    si compila il modello. */
 function stampaIsa() {
-  const r = isaRiepilogo(el('isa-anno').value);
+  const r = isaRiepilogo(el('isa-anno').value, isaTutti());
   const w = window.open('', '_blank');
   if (!w) return toast('Il browser ha bloccato la finestra di stampa.', 'error');
   w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">'
@@ -8888,9 +8999,11 @@ function stampaIsa() {
     + (r.senzaTipo.length ? '<p style="margin-top:14px;color:#b00;font-size:11px">Attenzione: '
         + r.senzaTipo.length + ' voci senza tipologia (' + feuro(r.importoSenzaTipo)
         + ') non sono comprese in questi totali.</p>' : '')
-    + '<p style="margin-top:10px;color:#555;font-size:11px">Contano le fatture emesse o incassate.'
-    + (r.nonFatturato ? ' Con questa competenza ci sono anche ' + feuro(r.nonFatturato)
-        + ' in scaglioni non ancora fatturati, esclusi.' : '') + '</p>'
+    + '<p style="margin-top:10px;color:#555;font-size:11px">' + (r.tutti
+        ? 'Contano tutti gli scaglioni di competenza ' + esc(String(r.anno)) + ', fatturati e no'
+          + (r.nonFatturato ? ' (' + feuro(r.nonFatturato) + ' non ancora fatturati, compresi)' : '') + '.'
+        : 'Contano le fatture emesse o incassate.' + (r.nonFatturato ? ' Con questa competenza ci sono anche ' + feuro(r.nonFatturato)
+          + ' in scaglioni non ancora fatturati, esclusi.' : '')) + '</p>'
     + '</body></html>');
   w.document.close();
   setTimeout(() => w.print(), 250);
@@ -14475,6 +14588,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   el('fa-save').onclick = saveFase;
   el('isa-stampa').onclick = stampaIsa;
+  el('isa-senza').onclick = () => { const a = el('isa-anno').value;
+    closeM('m-isa'); apriStampa(reportSenzaIsa(a), nomeFilePdf('ISA-senza-tipologia', a)); };
   el('co-save').onclick = saveCosto;
   el('co-del').onclick  = delCosto;
   el('co-pag').onchange = disegnaCosto;

@@ -4619,6 +4619,70 @@ function launchOpts(){
     must(g.riaperta==='attivo','riaperta una fase la commessa è '+g.riaperta);
     must(g.fasi==='a=completata,b=completata,c=non_applicabile','commessa completata, fasi: '+g.fasi);
   });
+  await t('commercialista in sola lettura: vede lo scaglione ma non lo modifica',async()=>{
+    const g=await p.evaluate(async()=>{
+      const pid=S.projects[0].id;
+      const f=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'RO prova',imponibile:100,stato:'da_emettere',isa_tipo:'C05',anno_competenza:2026,ordine:99}).select().single()).data;
+      await loadAll(true);
+      const prima={role:S.prof.role,vt:S.prof.vede_tutto};
+      S.prof.role='viewer'; S.prof.vede_tutto=true; document.body.classList.add('ro');
+      openFatt(f.id);
+      const vis=id=>getComputedStyle(el(id)).display!=='none';
+      const r={salva:vis('fa-save2'),xml:vis('fa-xml'),commessa:vis('fa-goproj'),
+        campo:getComputedStyle(el('fa-desc')).pointerEvents,
+        avviso:/Sola lettura/.test(getComputedStyle(document.querySelector('#m-fatt .mb'),'::before').content)};
+      const {error}=await SB.from('commessa_fatture').update({descrizione:'cambiata'}).eq('id',f.id);
+      r.bloccato=!!error&&error.code==='sola_lettura';
+      r.invariato=__DB.commessa_fatture.find(x=>x.id===f.id).descrizione==='RO prova';
+      closeM('m-fatt');
+      /* la stampa resta: report e ISA */
+      openIsa(); r.isa=vis('isa-stampa')&&vis('isa-senza'); closeM('m-isa');
+      S.prof.role=prima.role; S.prof.vede_tutto=prima.vt; document.body.classList.remove('ro');
+      await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); return r; });
+    must(!g.salva&&!g.xml,'il commercialista vede ancora Salva o Proforma/XML');
+    must(g.commessa,'non può più aprire la commessa');
+    must(g.campo==='none','i campi sono ancora modificabili');
+    must(g.avviso,'manca l avviso «sola lettura»');
+    must(g.bloccato&&g.invariato,'la scrittura del commercialista non è stata fermata');
+    must(g.isa,'non può più stampare l ISA');
+  });
+  await t('fatturazione: colonna del documento e totali di sezione che tornano',async()=>{
+    const g=await p.evaluate(async()=>{ const y=today().getFullYear(), pid=S.projects[0].id;
+      const f=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'DOC prova',imponibile:1000,stato:'da_emettere',isa_tipo:'C05',
+        anno_competenza:y,ordine:99,data_prevista:y+'-12-15'}).select().single()).data;
+      await loadAll(true); S.page='fatturare'; render();
+      const card=[...document.querySelectorAll('#page .card')].find(c=>/entro il 31\/12/.test(c.querySelector('.card-t')?.textContent||''));
+      const th=[...card.querySelectorAll('thead th')].map(x=>x.textContent);
+      const imp=[...card.querySelectorAll('tbody tr[data-fatt]')].reduce((a,tr)=>a+impFattura(byId(S.fatture,tr.dataset.fatt)),0);
+      const foot=card.querySelector('tfoot tr td:nth-child(2)').textContent;
+      const r={col:th.includes('N. fattura / proforma'),tot:foot===feuro(r2(imp)),
+        doc:cellaDocumento({numero_fattura:'59/FE',data_fattura:y+'-10-07'}).includes('59/FE'),
+        pf:/Proforma 2026\/1/.test(cellaDocumento({proforma_numero:'2026/1',stato:'da_emettere'}))};
+      await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); render(); return r; });
+    must(g.col,'manca la colonna N. fattura / proforma');
+    must(g.tot,'il totale della sezione non è la somma delle righe');
+    must(g.doc&&g.pf,'la colonna non mostra fattura o proforma');
+  });
+  await t('ISA: per competenza anche il non fatturato, e il report degli scaglioni senza tipologia',async()=>{
+    const g=await p.evaluate(async()=>{ const y=today().getFullYear(), pid=S.projects[0].id;
+      const c05=r=>(r.righe.find(x=>x.tipo==='C05')||{importo:0}).importo;
+      const solo0=c05(isaRiepilogo(y,false)), tutti0=c05(isaRiepilogo(y,true));
+      const ins=o=>SB.from('commessa_fatture').insert(Object.assign({project_id:pid,ordine:99,anno_competenza:y},o)).select().single();
+      const a=(await ins({descrizione:'ISA emessa',imponibile:1000,stato:'emessa',isa_tipo:'C05',numero_fattura:'981/FE',data_fattura:y+'-03-01'})).data;
+      const b=(await ins({descrizione:'ISA da emettere',imponibile:500,stato:'da_emettere',isa_tipo:'C05'})).data;
+      const c=(await ins({descrizione:'ISA senza tipologia',imponibile:300,stato:'da_emettere',proforma_numero:'2026/981'})).data;
+      await loadAll(true);
+      const solo=isaRiepilogo(y,false), tutti=isaRiepilogo(y,true);
+      const rep=reportSenzaIsa(y), testo=JSON.stringify(rep.sezioni);
+      openIsa(y); const def=el('isa-tutti').checked; closeM('m-isa');
+      const r={dSolo:r2(c05(solo)-solo0), dTutti:r2(c05(tutti)-tutti0), senza:/ISA senza tipologia/.test(testo)&&/Proforma 2026\/981/.test(testo)&&!/ISA da emettere/.test(testo), def};
+      for(const x of [a,b,c]) await SB.from('commessa_fatture').delete().eq('id',x.id);
+      await loadAll(true); return r; });
+    must(g.dSolo===1000,'solo emesse: '+g.dSolo);
+    must(g.dTutti===1500,'per competenza il non fatturato non si conta: '+g.dTutti);
+    must(g.senza,'il report senza ISA non elenca lo scaglione (con la proforma)');
+    must(g.def,'la competenza completa non è la scelta proposta');
+  });
   await t('report commesse: senza importo, note sui contratti, stato, responsabili',async()=>{
     const g=await p.evaluate(async()=>{
       const mk=async o=>(await SB.from('projects').insert(Object.assign({client:'Cliente R',status:'attivo'},o)).select().single()).data;

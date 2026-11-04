@@ -2859,3 +2859,48 @@ Riaprire la commessa non riapre le fasi: quali riaprire lo decide chi ci
 lavora. Le commesse che erano già incoerenti prima di questa regola non
 sono state toccate.
 
+## Commercialista e viewer: sola lettura
+
+Chi non è Admin o Collaboratore (il commercialista, i viewer) **consulta e
+stampa, non modifica**:
+
+- apre ogni scheda e ogni finestra, ma i campi non si possono cambiare e i
+  pulsanti che salvano, eliminano o generano documenti (proforma, XML) non ci
+  sono; in alto la finestra dice «Sola lettura»;
+- restano tutte le stampe e i report: scheda commessa, report commesse,
+  report incassi, ISA (con il report senza tipologia);
+- anche se una modifica partisse lo stesso, il gestionale la ferma prima di
+  inviarla con un messaggio chiaro — e il database la rifiuterebbe comunque.
+  Prima un salvataggio rifiutato dal database poteva dire «salvato».
+
+## Fatturazione: documento e totali
+
+Le tabelle della pagina Fatturazione hanno la colonna **N. fattura /
+proforma** con la data di emissione (la proforma in verde se è partita e la
+fattura è ancora da emettere). Ogni sezione ha in testa e in fondo
+l'**imponibile** — lo stesso dei numeri di riepilogo — e il **totale
+documento** (con cassa e IVA); i saldi mancanti, che non sono scaglioni, si
+sommano a parte. I numeri in testa dicono quali sezioni sommano:
+
+- «Chieste dai tecnici» = la sezione delle richieste;
+- «In attesa di maturare» = le sezioni «Matureranno» e «Senza data» (senza i
+  saldi mancanti);
+- «Emesse non incassate» = fatture emesse + proforma emesse.
+
+Le sezioni «Matureranno» vanno per **data prevista**, di qualunque anno di
+competenza, e non contengono richieste e proforma; le caselle dell'**Anno
+fiscale** vanno per **anno di competenza** e le contengono: per questo i due
+numeri non coincidono, e la pagina lo dice.
+
+## ISA per competenza e report senza tipologia
+
+Nella finestra ISA la casella **«Tutta la competenza dell'anno, anche non
+ancora fatturata»** è spuntata di partenza: conta tutti gli scaglioni di
+competenza dell'anno — fatture, proforma e da emettere — come serve alla
+dichiarazione. Togliendola restano le sole fatture emesse o incassate.
+
+Il pulsante **📋 Report senza ISA** prepara, su carta o in PDF, l'elenco delle
+commesse con scaglioni (o servizi) di competenza dell'anno **senza
+tipologia ISA**, fatturati e no, con stato, documento e importo: sono le
+voci da completare prima della dichiarazione.
+
