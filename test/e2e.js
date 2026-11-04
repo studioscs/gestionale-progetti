@@ -4683,6 +4683,23 @@ function launchOpts(){
     must(g.senza,'il report senza ISA non elenca lo scaglione (con la proforma)');
     must(g.def,'la competenza completa non è la scelta proposta');
   });
+  await t('fatturazione: i numeri in testa si cliccano e mostrano i loro scaglioni',async()=>{
+    const g=await p.evaluate(async()=>{ const y=today().getFullYear(), pid=S.projects[0].id;
+      const f=(await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'KPI richiesta',imponibile:100,stato:'da_emettere',isa_tipo:'C05',
+        anno_competenza:y,ordine:99,richiesta_at:new Date().toISOString(),richiesta_note:'prova'}).select().single()).data;
+      await loadAll(true); S.fzFiltro=null; S.page='fatturare'; render();
+      const kp=k=>document.querySelector('#page [data-fzfilt="'+k+'"]');
+      const r={tutte:['rich','attesa','emesse','incassato','saldo'].every(k=>!!kp(k))};
+      kp('rich').click();
+      r.elenco=!!el('fz-elenco')&&/KPI richiesta/.test(el('fz-elenco').textContent);
+      kp('saldo').click(); r.saldo=!!el('fz-elenco')&&/senza lo scaglione di saldo/.test(el('fz-elenco').textContent);
+      kp('saldo').click(); r.chiuso=!el('fz-elenco');
+      await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); render(); return r; });
+    must(g.tutte,'non tutte le caselle si cliccano');
+    must(g.elenco,'la casella delle richieste non elenca lo scaglione');
+    must(g.saldo,'la casella dei saldi mancanti non elenca le commesse');
+    must(g.chiuso,'il secondo clic non chiude l elenco');
+  });
   await t('report commesse: senza importo, note sui contratti, stato, responsabili',async()=>{
     const g=await p.evaluate(async()=>{
       const mk=async o=>(await SB.from('projects').insert(Object.assign({client:'Cliente R',status:'attivo'},o)).select().single()).data;

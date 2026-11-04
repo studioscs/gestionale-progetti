@@ -2887,6 +2887,11 @@ sommano a parte. I numeri in testa dicono quali sezioni sommano:
   saldi mancanti);
 - «Emesse non incassate» = fatture emesse + proforma emesse.
 
+**I numeri in testa si cliccano** (come le caselle dell'Anno fiscale): sotto
+compare l'elenco di quello che sommano — scaglioni raggruppati per commessa,
+o per «Senza saldo» le commesse con il contratto, quanto è negli scaglioni,
+lo scoperto e il pulsante «+ Saldo». Di nuovo clic (o ✕) e l'elenco sparisce.
+
 Le sezioni «Matureranno» vanno per **data prevista**, di qualunque anno di
 competenza, e non contengono richieste e proforma; le caselle dell'**Anno
 fiscale** vanno per **anno di competenza** e le contengono: per questo i due

@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.04.01';
+const VERSIONE = '2026.11.04.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8143,13 +8143,35 @@ function riquadroAnnoFiscale() {
     + '</div>';
 }
 /* L'elenco della casella cliccata, raggruppato per commessa in ordine di codice */
-function elencoAnnoFiscale(titolo, arr) {
+/* Le commesse senza lo scaglione di saldo (casella «Senza saldo in fatturazione») */
+function elencoSaldiMancanti(sz) {
+  return '<div id="fz-elenco" style="margin:0 0 16px;border:1px solid var(--bord);border-radius:8px;padding:10px 12px">'
+    + '<div class="spread" style="margin-bottom:8px"><b style="font-size:13px">Commesse senza lo scaglione di saldo <span class="chip">' + sz.length + '</span></b>'
+    + '<span class="row" style="gap:8px"><span style="font-size:12.5px">scoperti <b>' + feuro(r2(sz.reduce((a, x) => a + x.c.scoperto, 0))) + '</b></span>'
+    + '<button class="btn btn-xs" data-fzfilt="" title="Chiudi l’elenco">&#10005;</button></span></div>'
+    + (sz.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Commessa</th><th style="text-align:right">Contratto</th>'
+      + '<th style="text-align:right">Negli scaglioni</th><th style="text-align:right">Scoperto</th><th></th></tr></thead><tbody>'
+      + sz.slice().sort((a, b) => chiaveCommessa(a.p).localeCompare(chiaveCommessa(b.p), 'it', { numeric: true }))
+        .map(x => '<tr data-projfatt="' + x.p.id + '" style="cursor:pointer"><td><b>' + esc(nomeConCodice(x.p)) + '</b>'
+          + '<div style="font-size:11px;color:var(--mut)">' + esc(x.p.client || '') + '</div></td>'
+          + '<td style="text-align:right">' + feuro(x.c.imp) + '</td><td style="text-align:right">' + feuro(x.c.piano) + '</td>'
+          + '<td style="text-align:right;color:var(--red)"><b>' + feuro(x.c.scoperto) + '</b></td>'
+          + '<td class="ac">' + (canW() ? '<button class="btn btn-xs btn-p" data-creasaldo="' + x.p.id + '">&#43; Saldo</button>' : '') + '</td></tr>').join('')
+      + '</tbody></table></div>' : '<div class="hint" style="margin:0">Nessuna.</div>')
+    + '</div>';
+}
+/* L'elenco degli scaglioni di una casella cliccata (Anno fiscale, numeri in
+   testa a Fatturazione): raggruppato per commessa, in ordine di codice.
+   o.id e o.attr: dove sta e quale attributo lo chiude; o.testa: un totale
+   diverso dall'imponibile da mostrare in testa (es. l'incassato). */
+function elencoAnnoFiscale(titolo, arr, o) {
+  o = o || {};
   const tot = r2(arr.reduce((a, f) => a + impFattura(f), 0));
-  return '<div id="af-elenco" style="margin-top:14px;border:1px solid var(--bord);border-radius:8px;padding:10px 12px">'
+  return '<div id="' + (o.id || 'af-elenco') + '" style="margin-top:14px;border:1px solid var(--bord);border-radius:8px;padding:10px 12px">'
     + '<div class="spread" style="margin-bottom:8px"><b style="font-size:13px">' + esc(titolo)
       + ' <span class="chip">' + arr.length + '</span></b>'
-      + '<span class="row" style="gap:8px"><b style="font-size:13px">' + feuro(tot) + '</b>'
-      + '<button class="btn btn-xs" data-annofilt="" title="Chiudi l’elenco">&#10005;</button></span></div>'
+      + '<span class="row" style="gap:8px"><span style="font-size:12.5px">' + (o.testa ? o.testa + ' · ' : '') + 'imponibile <b>' + feuro(tot) + '</b></span>'
+      + '<button class="btn btn-xs" data-' + (o.attr || 'annofilt') + '="" title="Chiudi l’elenco">&#10005;</button></span></div>'
     + (arr.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Anno comp.</th>'
       + '<th>Stato / quando</th><th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th></tr></thead><tbody>'
       + gruppiCommessa(arr, f => f.project_id).map(g => {
@@ -8571,22 +8593,39 @@ function rFatturare() {
 
   el('page').innerHTML = barraCercaFatt()
     + '<div id="fz-resto"' + (S.fzQ ? ' style="display:none"' : '') + '>'
-      + '<div class="kgrid">'
-      + kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich))
-            + ' <span style="font-size:11px">imponibile · sezione «Chieste dai responsabili»</span>', kRich.length ? 100 : 0, 'var(--ora)')
-      + kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa))
-            + ' <span style="font-size:11px">imponibile · le sezioni «Matureranno» e «Senza data», senza i saldi mancanti</span>', 60, 'var(--mut2)')
-      + kpi('Emesse non incassate', kEmesse.length, feuro(somma(kEmesse))
+      + (() => {
+        /* I NUMERI IN TESTA SI CLICCANO: sotto compare l'elenco di quello che
+           sommano, come per le caselle dell'Anno fiscale. */
+        const sz = daControllare.filter(x => x.c.problema === 'saldo');
+        const mora = S.fatture.filter(f => sollecitabile(f) && f.messa_in_mora);
+        const inc = S.fatture.filter(f => f.stato === 'incassata' && byId(S.projects, f.project_id));
+        const filtri = {
+          rich: { t: 'Chieste dai responsabili di commessa', arr: kRich },
+          attesa: { t: 'In attesa di maturare (senza proforma né richiesta)', arr: kAttesa },
+          emesse: { t: 'Emesse non incassate: fatture e proforma', arr: kEmesse },
+          incassato: { t: 'Incassato (totale storico)', arr: inc, testa: 'incassato <b>' + feuro(r2(incassato)) + '</b>' },
+          mora: { t: 'In mora con l’avvocato', arr: mora }
+        };
+        const sel = S.fzFiltro;
+        const casella = (k, html) => html.replace('<div class="kpi">', '<div class="kpi" data-fzfilt="' + k + '" style="cursor:pointer'
+          + (sel === k ? ';outline:2px solid var(--navy);outline-offset:-2px' : '') + '" title="Clic: elenca gli scaglioni">');
+        return '<div class="kgrid">'
+      + casella('rich', kpi('Chieste dai tecnici', kRich.length, feuro(somma(kRich))
+            + ' <span style="font-size:11px">imponibile · sezione «Chieste dai responsabili»</span>', kRich.length ? 100 : 0, 'var(--ora)'))
+      + casella('attesa', kpi('In attesa di maturare', kAttesa.length, feuro(somma(kAttesa))
+            + ' <span style="font-size:11px">imponibile · le sezioni «Matureranno» e «Senza data», senza i saldi mancanti</span>', 60, 'var(--mut2)'))
+      + casella('emesse', kpi('Emesse non incassate', kEmesse.length, feuro(somma(kEmesse))
             + ' <span style="font-size:11px">imponibile · ' + emesse.length + ' fatture + ' + conProf.length + ' proforma (le due sezioni in alto)</span>',
-            kEmesse.length ? 100 : 0, 'var(--blue)')
-      + kpi('Incassato', incassato.toFixed(0) + ' €', 'totale storico', 100, 'var(--grn)')
-      + (() => { const sz = daControllare.filter(x => x.c.problema === 'saldo');
-          return kpi('Senza saldo in fatturazione', sz.length,
-            feuro(r2(sz.reduce((a, x) => a + x.c.scoperto, 0))) + ' scoperti', sz.length ? 100 : 0, sz.length ? 'var(--red)' : 'var(--grn)'); })()
-      + (() => { const m = S.fatture.filter(f => sollecitabile(f) && f.messa_in_mora);
-          return m.length ? kpi('In mora con l’avvocato', m.length,
-            feuro(r2(m.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)') : ''; })()
+            kEmesse.length ? 100 : 0, 'var(--blue)'))
+      + casella('incassato', kpi('Incassato', feuro(r2(incassato)), 'totale storico, con cassa e IVA', 100, 'var(--grn)'))
+      + casella('saldo', kpi('Senza saldo in fatturazione', sz.length,
+            feuro(r2(sz.reduce((a, x) => a + x.c.scoperto, 0))) + ' scoperti', sz.length ? 100 : 0, sz.length ? 'var(--red)' : 'var(--grn)'))
+      + (mora.length ? casella('mora', kpi('In mora con l’avvocato', mora.length,
+            feuro(r2(mora.reduce((a, f) => a + daIncassareDi(f, false), 0))), 100, 'var(--red)')) : '')
       + '</div>'
+      + (sel === 'saldo' ? elencoSaldiMancanti(sz)
+        : filtri[sel] ? elencoAnnoFiscale(filtri[sel].t, filtri[sel].arr, { id: 'fz-elenco', attr: 'fzfilt', testa: filtri[sel].testa }) : '');
+      })()
     + riquadroAnnoFiscale()
     + (STUDIO.piva ? '' : '<div class="wbox mb16">Per generare l’XML della fattura compila il blocco '
         + '<b>STUDIO</b> in cima a <code>index.html</code> con i dati fiscali dello studio.</div>')
@@ -14788,6 +14827,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((n = f('data-prevmail')))  { e.stopPropagation(); return apriInvioPreventivo(n.dataset.prevmail); }
     if ((n = f('data-prevdup')))   { e.stopPropagation(); return duplicaPreventivo(n.dataset.prevdup); }
     if ((n = f('data-creasaldo'))) { e.stopPropagation(); return creaSaldo(n.dataset.creasaldo); }
+    if ((n = f('data-fzfilt'))) { const k = n.dataset.fzfilt;
+      S.fzFiltro = !k || S.fzFiltro === k ? null : k; render();
+      if (S.fzFiltro && el('fz-elenco')) el('fz-elenco').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return; }
     if ((n = f('data-annofilt'))) { const k = n.dataset.annofilt;
       S.afFiltro = !k || S.afFiltro === k ? null : k; render();
       if (S.afFiltro && el('af-elenco')) el('af-elenco').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
