@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.11.01';
+const VERSIONE = '2026.11.11.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1702,9 +1702,15 @@ function dueLabel(d) {
   if (n <= 14) return 'tra ' + n + ' gg';
   return fdate(d);
 }
+/* Scritto a mano: con toLocaleString i browser recenti non mettono il punto
+   delle migliaia sui numeri di 4 cifre (2808,00 invece di 2.808,00). */
 function feuro(n) {
   if (n === null || n === undefined || n === '') return '-';
-  return Number(n).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+  const v = Number(n);
+  if (!isFinite(v)) return 'NaN €';
+  const x = Math.round(Math.abs(v) * 100) / 100, neg = v < 0 && x > 0;
+  const [i, d] = x.toFixed(2).split('.');
+  return (neg ? '-' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + d + ' €';
 }
 const byId = (arr, id) => { for (const x of arr) if (x.id === id) return x; return null; };
 const pn = id => { const p = byId(S.projects, id); return p ? p.name : '-'; };
