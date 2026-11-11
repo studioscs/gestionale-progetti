@@ -20,7 +20,7 @@ function build() {
 }
 function launchOpts() {
   for (const p of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-                   '/opt/pw-browsers/chromium/chrome-linux/chrome'])
+                   '/opt/pw-browsers/chromium/chrome-linux/chrome','/opt/pw-browsers/chromium'])
     if (fs.existsSync(p)) return { executablePath: p };
   return {};
 }

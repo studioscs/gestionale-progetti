@@ -2,7 +2,7 @@
    Ogni caso vive in una scheda separata perche' dipende dall'URL di apertura. */
 const {chromium}=require('playwright');const fs=require('fs'),path=require('path');
 function launchOpts(){
-  for(const q of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome'])
+  for(const q of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome','/opt/pw-browsers/chromium'])
     if(fs.existsSync(q)) return {executablePath:q};
   return {};
 }

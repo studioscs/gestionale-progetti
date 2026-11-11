@@ -4,7 +4,7 @@
    - su iPhone la barra diventa un cassetto, e quello che conta e' che si apra,
      si chiuda da sola quando serve, e non lasci niente fuori dal bordo. */
 const {chromium}=require('playwright');const fs=require('fs'),path=require('path');
-function launchOpts(){for(const q of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome'])if(fs.existsSync(q))return{executablePath:q};return{};}
+function launchOpts(){for(const q of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome','/opt/pw-browsers/chromium'])if(fs.existsSync(q))return{executablePath:q};return{};}
 
 const SCHERMI=[
   ['iPhone SE',           320,568,  'telefono'],

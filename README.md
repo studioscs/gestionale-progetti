@@ -875,7 +875,8 @@ studio teneva a mano:
   assicurazioni e abbonamenti, in ordine di **scadenza** («SCADE 31/03/2026»).
   L'anno di un costo è quello della scadenza, se c'è, altrimenti quello di
   competenza: restano fuori le rate già preparate per l'anno dopo e i costi
-  degli anni passati.
+  degli anni passati. Nel foglio questa tabella viene **subito dopo le
+  proforme**; sotto restano il fatturato per anno e le tabelle di competenza.
 
 **Segnare l'incasso.** Sulle fatture emesse c'è il pulsante **✓ Incassata**
 (o, nella finestra dello scaglione, lo stato *Incassata*): si compilano da

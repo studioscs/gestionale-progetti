@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.04.02';
+const VERSIONE = '2026.11.11.01';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8281,6 +8281,10 @@ function reportIncassi(saldo) {
       { titolo: 'Proforme in attesa di pagamento', tabella: { col, dx: dxIncassi, largo: 3, totCol: 5,
           righe: d.proforme.map(riga), tot: d.proforme.length ? [totRiga('Totale proforme', d.proforme, d.totProforme)] : null,
           vuoto: 'Nessuna proforma in attesa.' } },
+      { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
+          righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
+          tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
+          vuoto: 'Niente da pagare: costi generali ed esterni sono saldati.' } },
       { titolo: 'Fatturato per anno — per data della fattura: già emesso più quello che si prevede di emettere',
         tabella: { col: ['Anno', 'Già fatturato', 'Da fatturare (previsto)', 'Totale imponibile', 'Totale lordo'],
           dx: [1, 2, 3, 4], largo: 0,
@@ -8303,11 +8307,7 @@ function reportIncassi(saldo) {
           tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
           righe: ordina(na.compSenza).map(rigaComp),
           tot: na.compSenza.length ? [['Totale competenza ' + y + ' senza data', feuro(na.totSenza.imponibile), feuro(na.totSenza.lordo)]] : null,
-          vuoto: 'Tutti gli scaglioni di competenza ' + y + ' hanno la data prevista.' } },
-      { titolo: 'Da saldare — ' + nome + ' (costi generali del ' + today().getFullYear() + ' non ancora pagati, parcelle degli esterni)', tabella: { col: ['Anno rif.', 'Documento / scadenza', 'Intestatario', 'Importo'], dx: [3], largo: 2,
-          righe: d.daSaldare.map(x => [x.anno, x.num, x.chi + (x.det ? '\n' + x.det : ''), feuro(x.importo)]),
-          tot: d.daSaldare.length ? [['Totale da saldare', feuro(d.totSaldare)]] : null,
-          vuoto: 'Niente da pagare: costi generali ed esterni sono saldati.' } }
+          vuoto: 'Tutti gli scaglioni di competenza ' + y + ' hanno la data prevista.' } }
     ]
   };
 }

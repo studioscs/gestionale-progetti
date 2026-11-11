@@ -15,7 +15,7 @@ function build(){
 }
 /* Usa il chromium preinstallato se presente, altrimenti quello di playwright */
 function launchOpts(){
-  for(const p of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome'])
+  for(const p of ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome','/opt/pw-browsers/chromium/chrome-linux/chrome','/opt/pw-browsers/chromium'])
     if(fs.existsSync(p)) return {executablePath:p};
   return {};
 }
@@ -4278,9 +4278,11 @@ function launchOpts(){
     /* la fine del blocco si cerca dopo il suo inizio: «Competenza» c'e' anche nel riepilogo */
     const blocco=(da,a)=>{ const i=h.indexOf(da); return h.slice(i,a?h.indexOf(a,i+1):undefined); };
     const emesse=blocco('Lista debitori — fatture emesse','Proforme in attesa');
-    /* dopo le proforme vengono le due tabelle di competenza, poi i debiti */
-    const prof=blocco('Proforme in attesa','Competenza ');
-    const deb=blocco('Da saldare');
+    /* subito dopo le proforme vengono i debiti dello studio, poi il fatturato per anno e la competenza */
+    const prof=blocco('Proforme in attesa','Da saldare — ');
+    const deb=blocco('Da saldare — ','Fatturato per anno');
+    must(h.indexOf('Proforme in attesa')<h.indexOf('Da saldare — ')&&h.indexOf('Da saldare — ')<h.indexOf('Fatturato per anno'),
+      '«Da saldare» non è subito dopo le proforme');
     must(/BL-1\/PA/.test(emesse)&&/COMUNE DI PROVA BL/.test(emesse)&&emesse.indexOf(BL.pa)>=0,'fattura PA non riportata o importo diverso da '+BL.pa);
     must(!/BL-0/.test(emesse+prof),'fra i debitori compare una fattura già incassata');
     must(/PROFORMA BL7/.test(prof)&&prof.indexOf(BL.pf1)>=0,'proforma con le spese aperte: atteso '+BL.pf1);
