@@ -3595,6 +3595,19 @@ function launchOpts(){
     must(g.costiInLista===g.nonPagati,'i costi da pagare dell anno non sono tutti nella lista debitori: '+g.costiInLista+' su '+g.nonPagati);
     must(g.tot===g.somma,'il totale da saldare non torna');
   });
+  await t('uno scaglione «Art. 1 OGGETTO DEL SERVIZIO» si legge con i suoi servizi',async()=>{
+    const r=await p.evaluate(()=>{ const f={id:'art1-x',descrizione:'Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA ROMA_SALDO'};
+      const g={id:'art1-y',descrizione:'Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA ROMA'};
+      const prima=S.fattRighe; S.fattRighe=prima.concat([
+        {id:'r1',fattura_id:'art1-x',descrizione:'A. Fine Lavori',ordine:0},
+        {id:'r2',fattura_id:'art1-x',descrizione:'B. Aggiornamento catastale',ordine:1},
+        {id:'r3',fattura_id:'art1-x',descrizione:'Diritti di segreteria',ordine:2,art15:true}]);
+      const out={x:descScaglione(f),y:descScaglione(g),z:descScaglione({id:'q',descrizione:'1° ACCONTO progetto'})};
+      S.fattRighe=prima; return out; });
+    must(r.x==='SALDO - Fine Lavori · Aggiornamento catastale','con i servizi: '+r.x);
+    must(r.y==='Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA ROMA','senza servizi resta com è: '+r.y);
+    must(r.z==='1° ACCONTO progetto','le altre descrizioni non cambiano: '+r.z);
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });

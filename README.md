@@ -595,6 +595,14 @@ servizio` mette una riga, ognuna con la sua descrizione e il suo importo.
   lo stesso numero.
 - **Lasciare l'elenco vuoto va benissimo**: la fattura esce a voce unica, con la
   descrizione dello scaglione, esattamente come prima.
+- **«Art. 1 OGGETTO DEL SERVIZIO…» si legge con i servizi.** Quando la
+  descrizione dello scaglione è la prima riga del preventivo («Art. 1 OGGETTO
+  DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN…»), negli elenchi di
+  *Fatturazione*, nella lista debitori, nei report e nei solleciti al suo posto
+  compaiono i servizi dello scaglione (senza le lettere A., B. e senza le spese
+  anticipate), con «SALDO -» o «ACCONTO -» davanti se la descrizione lo dice.
+  Il testo salvato non cambia: resta nella finestra dello scaglione, nella
+  scheda della commessa (dove i servizi sono già elencati sotto) e in fattura.
 
 Il gestionale si rifiuta di generare l'XML se un servizio è senza descrizione
 (uscirebbe una riga vuota) o se le righe non sommano l'imponibile del documento

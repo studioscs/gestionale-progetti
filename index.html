@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.23.01';
+const VERSIONE = '2026.11.23.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4586,6 +4586,24 @@ const r2 = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
    uno per riga. Tenute in una mappa perche' l'imponibile lo chiedono in tanti
    posti - situazione economica, "Da fatturare", redditivita', XML - e scorrere
    ogni volta l'elenco intero sarebbe una scansione per ogni cella. */
+/* COSA SI FATTURA, DETTO IN CHIARO
+   Molti scaglioni hanno come descrizione la prima riga del preventivo, «Art. 1
+   OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN ...»: dice dove, non
+   che cosa. Negli elenchi e nei report si leggono invece i servizi dello
+   scaglione (senza le lettere A., B. e senza le spese anticipate), con
+   l'eventuale «SALDO»/«ACCONTO» della descrizione. Il dato salvato non cambia:
+   nella finestra dello scaglione e in fattura resta com'e'. */
+const RE_ART1 = /^\s*art\.?\s*1\b[\s.:-]*oggetto del servizio/i;
+function descScaglione(f) {
+  const t = String((f && f.descrizione) || '');
+  if (!RE_ART1.test(t)) return t;
+  const servizi = righeFattura(f.id).filter(r => !r.art15)
+    .map(r => String(r.descrizione || '').replace(/^\s*[A-Z]{1,2}\s*[.)]\s*/, '').replace(/[\s_\-–—]+$/, '').trim())
+    .filter(Boolean);
+  if (!servizi.length) return t;
+  const rata = (t.match(/[\s_\-–—]+((?:\d+\s*[°^ªo]?\s*)?(?:saldo|acconto|anticipo))\s*$/i) || [])[1];
+  return (rata ? rata.toUpperCase() + ' - ' : '') + servizi.join(' · ');
+}
 let _MAPRIG = null, _MAPRIG_SRC = null;
 function righeFattura(fid) {
   if (!fid) return [];
@@ -5881,7 +5899,7 @@ function schedaCommessa(pid) {
       { titolo: 'Note sui contratti', testo: p.note_contratti || '' },
       { titolo: 'Fatturazione', tabella: { col: ['Scaglione', 'Stato', 'Fattura', 'Imponibile', 'Totale'], dx: [3, 4], largo: 0,
           righe: ff.map(f => { const c = contiScaglione(f);
-            return [f.descrizione || '', (ST_FATT[f.stato] || [f.stato])[0],
+            return [descScaglione(f), (ST_FATT[f.stato] || [f.stato])[0],
               f.numero_fattura ? f.numero_fattura + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '') : (f.data_prevista ? 'prevista ' + fdate(f.data_prevista) : ''),
               feuro(c.imponibile), feuro(c.totale)]; }),
           tot: ff.length ? [['Fatturato (emesse e incassate), imponibile', feuro(somma(f => ['emessa', 'incassata'].indexOf(f.stato) >= 0))],
@@ -7792,7 +7810,7 @@ function apriSolleciti(fid) {
   const doc = f.stato === 'emessa' ? 'Fattura ' + (f.numero_fattura || '') + (f.data_fattura ? ' del ' + fdate(f.data_fattura) : '')
     : 'Proforma ' + f.proforma_numero + (f.proforma_data ? ' del ' + fdate(f.proforma_data) : '');
   el('mso-t').textContent = 'Solleciti — ' + intestatarioDi(f);
-  el('mso-doc').innerHTML = '<b>' + esc(doc) + '</b> · ' + esc(pn(f.project_id)) + ' · ' + esc(f.descrizione || '')
+  el('mso-doc').innerHTML = '<b>' + esc(doc) + '</b> · ' + esc(pn(f.project_id)) + ' · ' + esc(descScaglione(f))
     + '<br>Da incassare: <b>' + feuro(daIncassareDi(f, f.stato !== 'emessa')) + '</b>';
   el('mso-1').value = f.sollecito_1 || ''; el('mso-2').value = f.sollecito_2 || '';
   el('mso-3').value = f.messa_in_mora || ''; el('mso-avv').value = f.avvocato || '';
@@ -7910,7 +7928,7 @@ function riquadroProforme() {
             + '<td style="font-size:12px">' + fdate(f.proforma_data || String(f.proforma_at || '').slice(0, 10)) + '</td>'
             + '<td style="font-size:12px">' + esc(intestatarioDi(f))
               + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</td>'
-            + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
+            + '<td style="font-size:12px">' + esc(descScaglione(f)) + '</td>'
             + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
             + '<td>' + bdg(f.stato, ST_FATT) + (f.numero_fattura && !fattAperta(f)
                 ? '<div style="font-size:11px;color:var(--mut);margin-top:3px">fattura ' + esc(f.numero_fattura) + '</div>' : '')
@@ -8184,7 +8202,7 @@ function elencoAnnoFiscale(titolo, arr, o) {
           const voci = g.voci.slice().sort(perOrdine);
           return rigaGruppoCommessa(g, 5, voci.length, r2(voci.reduce((a, f) => a + impFattura(f), 0)))
             + voci.map(f => '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
-              + '<td style="padding-left:22px">' + esc(f.descrizione || '') + '</td>'
+              + '<td style="padding-left:22px">' + esc(descScaglione(f)) + '</td>'
               + '<td style="font-size:12px">' + (annoCompScaglione(f) || '—') + '</td>'
               + '<td style="font-size:12px">' + bdg(f.stato, ST_FATT) + ' <span style="' + (senzaDataPrevista(f)
                   ? 'color:var(--red);font-weight:600' : f.proforma_numero && fattAperta(f) ? 'color:var(--grn);font-weight:700'
@@ -8256,7 +8274,7 @@ function reportIncassi(saldo) {
   const na = numeriAnno(today().getFullYear()), y = na.anno;
   const fpa = fatturatoPerAnno(), fpa0 = fpa.anni.find(r => r.anno === y);
   const colComp = ['Commessa', 'Intestatario', 'Scaglione', 'Stato / quando', 'Imponibile', 'Lordo'];
-  const rigaComp = f => [pn(f.project_id), intestatarioDi(f), f.descrizione || '', quandoScaglione(f),
+  const rigaComp = f => [pn(f.project_id), intestatarioDi(f), descScaglione(f), quandoScaglione(f),
     feuro(impFattura(f)), feuro(contiDaIncassare(f, false).totale)];
   /* Prima quello che c'e' gia' (incassate, fatture emesse, proforme non
      incassate), poi quello solo previsto; dentro ogni gruppo per data. */
@@ -8457,7 +8475,7 @@ function riquadroNumeri() {
       + 'Apri lo scaglione e correggi: se non è stato emesso, togli il numero; se lo è, segnalo emesso o incassato.</div>'
     + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th><th>Da verificare</th></tr></thead><tbody>'
     + gruppiCommessa(el_, x => x.f.project_id).map(g => rigaGruppoCommessa(g, 3, g.voci.length, r2(g.voci.reduce((a, x) => a + impFattura(x.f), 0)))
-        + g.voci.map(x => '<tr data-fatt="' + x.f.id + '" style="cursor:pointer"><td style="padding-left:22px">' + esc(x.f.descrizione || '')
+        + g.voci.map(x => '<tr data-fatt="' + x.f.id + '" style="cursor:pointer"><td style="padding-left:22px">' + esc(descScaglione(x.f))
           + (x.f.numero_fattura ? ' <b>' + esc(x.f.numero_fattura) + '</b>' : '') + '</td>'
           + '<td>' + bdg(x.f.stato, ST_FATT) + '</td>'
           + '<td style="font-size:12px;color:var(--red)">' + x.p.map(esc).join('<br>') + '</td></tr>').join('')).join('')
@@ -8549,7 +8567,7 @@ function rFatturare() {
     const c = contiScaglione(f);
     const fa = f.fase_id ? byId(S.fasi, f.fase_id) : null;
     return '<tr data-fatt="' + f.id + '" style="cursor:pointer">'
-      + '<td style="padding-left:22px">' + esc(f.descrizione)
+      + '<td style="padding-left:22px">' + esc(descScaglione(f))
         + (fa ? '<div style="font-size:11px;color:var(--mut)">' + esc(fa.nome) + ' — ' + (ST_FASE[fa.stato] || [''])[0] + '</div>' : '') + '</td>'
       + '<td>' + bdg(f.stato, ST_FATT)
         + (fattRichiesta(f) ? '<div style="font-size:11px;color:var(--ora);font-weight:600;margin-top:3px">'
@@ -8719,7 +8737,7 @@ function risultatiCercaFatt() {
             + (f.proforma_data ? '<div style="font-size:11px;color:var(--mut)">' + fdate(f.proforma_data) + '</div>' : '') + '</td>'
           + '<td style="font-size:12px"><b>' + esc(p.name || '') + '</b>' + bottoneCommessa(f.project_id) + '<div style="color:var(--mut)">' + esc(intestatarioDi(f))
               + (f.intestatario && f.intestatario.cliente ? ' <span title="Intestatario diverso dal committente">&#128100;</span>' : '') + '</div></td>'
-          + '<td style="font-size:12px">' + esc(f.descrizione) + '</td>'
+          + '<td style="font-size:12px">' + esc(descScaglione(f)) + '</td>'
           + '<td style="text-align:right">' + cellaTotale(c) + '</td>'
           + '<td>' + bdg(f.stato, ST_FATT) + '</td>'
           + '<td class="ac" style="white-space:nowrap">' + (canW() ? '<button class="btn btn-xs" data-fproforma="' + f.id + '" title="Proforma PDF">&#128196;</button> '
@@ -9013,7 +9031,7 @@ function reportSenzaIsa(anno) {
       titolo: nomeConCodice(g.p) + (g.p.client ? ' — ' + g.p.client : ''),
       tabella: { col: ['Scaglione', 'Servizio', 'Stato', 'Documento', 'Imponibile'], dx: [4], largo: 0, totCol: 4,
         righe: g.voci.map(v => { const f = byId(S.fatture, v.fid) || {};
-          return [f.descrizione || '', v.cosa && v.cosa !== f.descrizione ? v.cosa : '', (ST_FATT[f.stato] || [f.stato])[0], doc(f), feuro(v.importo)]; }),
+          return [descScaglione(f), v.cosa && v.cosa !== f.descrizione ? v.cosa : '', (ST_FATT[f.stato] || [f.stato])[0], doc(f), feuro(v.importo)]; }),
         tot: [['Totale senza tipologia', feuro(r2(g.voci.reduce((a, v) => a + v.importo, 0)))]] } }))
       : [{ titolo: 'Tutto classificato', testo: 'Nessuno scaglione di competenza ' + anno + ' è senza tipologia ISA.' }]
   };
@@ -10080,7 +10098,7 @@ function aggiornaTotali() {
      ma va detto prima, non scoperto quando lo SdI scarta il documento. */
   const dF = numeroDoppio('numero_fattura', 'data_fattura', d.numero, annoDi(d.data), d.fattId);
   const dP = numeroDoppio('proforma_numero', 'proforma_data', d.proformaNumero, annoDi(d.proformaData), d.fattId);
-  const desc = f => '«' + (f.descrizione || '') + '» di ' + pn(f.project_id);
+  const desc = f => '«' + descScaglione(f) + '» di ' + pn(f.project_id);
   const fRev = byId(S.fatture, d.fattId), diverso = fRev ? intestatarioDiverso(d, fRev) : null;
   if (diverso)
     el('rev-err').innerHTML += '<div class="ibox mb16" style="font-size:12.5px">&#128100; Intestato a <b>'
@@ -11106,7 +11124,7 @@ function openChiedi(pid, fid) {
   const aperte = fattureOf(pid).filter(fattAperta);
   fillSel('ch-fatt', aperte.map(f => ({
     v: f.id,
-    l: f.descrizione + ' — ' + feuro(impFattura(f))
+    l: descScaglione(f) + ' — ' + feuro(impFattura(f))
        + (f.richiesta_at ? ' (già richiesta il ' + fdate(String(f.richiesta_at).split('T')[0]) + ')' : '')
   })), fid || (aperte[0] && aperte[0].id) || 'nuovo', null);
   /* L'opzione per crearne uno che il contratto non aveva previsto */
@@ -11187,7 +11205,7 @@ async function inviaChiedi() {
 
     /* Dentro il gestionale, a chi emette le fatture */
     await notifica(chiFattura(), 'Da fatturare: ' + p.name,
-      (f ? f.descrizione + ' — ' + feuro(impFattura(f)) : '') + (note ? ' · ' + note : ''),
+      (f ? descScaglione(f) + ' — ' + feuro(impFattura(f)) : '') + (note ? ' · ' + note : ''),
       CHIEDI_PID);
 
     closeM('m-chiedi'); render();
