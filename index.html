@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.11.02';
+const VERSIONE = '2026.11.23.01';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8258,8 +8258,12 @@ function reportIncassi(saldo) {
   const colComp = ['Commessa', 'Intestatario', 'Scaglione', 'Stato / quando', 'Imponibile', 'Lordo'];
   const rigaComp = f => [pn(f.project_id), intestatarioDi(f), f.descrizione || '', quandoScaglione(f),
     feuro(impFattura(f)), feuro(contiDaIncassare(f, false).totale)];
-  const ordina = arr => arr.slice().sort((a, b) => String(a.data_fattura || a.data_prevista || '9999')
-    .localeCompare(String(b.data_fattura || b.data_prevista || '9999')));
+  /* Prima quello che c'e' gia' (incassate, fatture emesse, proforme non
+     incassate), poi quello solo previsto; dentro ogni gruppo per data. */
+  const gruppo = f => f.stato === 'incassata' ? 0 : f.stato === 'emessa' ? 1 : f.proforma_numero ? 2 : 3;
+  const ordina = arr => arr.slice().sort((a, b) => gruppo(a) - gruppo(b)
+    || String(a.data_fattura || a.proforma_data || a.data_prevista || '9999')
+      .localeCompare(String(b.data_fattura || b.proforma_data || b.data_prevista || '9999')));
   return {
     titolo: 'Lista debitori — ' + nome, orizzontale: true,
     sottotitolo: 'Situazione al ' + fdate(todayISO()) + ': chi ci deve pagare e chi dobbiamo pagare',

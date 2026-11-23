@@ -896,7 +896,9 @@ parziale…), che resta scritto sullo scaglione (migrazione
 - due tabelle **ragionate per competenza, come l'ISA**:
   - **Competenza dell'anno — emessa e incassata entro il 31/12**: già
     fatturata, con la proforma mandata, pronta da emettere o con la data
-    prevista entro l'anno;
+    prevista entro l'anno. In ordine: prima le **incassate**, poi le fatture
+    emesse non ancora incassate e le **proforme** non pagate, in fondo le
+    **previste**; dentro ogni gruppo per data;
   - **Competenza dell'anno — si fatturerà e incasserà dall'anno dopo**: data
     prevista oltre l'anno, o non ancora indicata.
 
