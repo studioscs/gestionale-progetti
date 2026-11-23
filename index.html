@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.23.03';
+const VERSIONE = '2026.11.23.04';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -5716,7 +5716,7 @@ const testoScheda = v => (v === null || v === undefined || String(v).trim() === 
 
 function htmlScheda(s) {
   const e = x => esc(testoScheda(x));
-  const sezione = z => '<section><h2>' + esc(z.titolo) + '</h2>'
+  const sezione = z => '<section' + (z.sotto ? ' class="sotto"' : '') + '>' + (z.sotto ? '<h3>' + esc(z.titolo) + '</h3>' : '<h2>' + esc(z.titolo) + '</h2>')
     + (z.barra !== undefined ? '<div class="barra"><div style="width:' + Math.max(0, Math.min(100, z.barra)) + '%"></div></div>'
         + '<div class="pct">' + esc(z.barraTesto || (z.barra + '%')) + '</div>' : '')
     + (z.campi && z.campi.length ? '<table class="campi">' + z.campi.map(c => '<tr><th>' + esc(c[0]) + '</th><td>'
@@ -5741,6 +5741,7 @@ function htmlScheda(s) {
     + 'header img{height:52px}header .st{font-size:9pt;color:#5b6673}header .st b{color:#1d2733;font-size:10.5pt}'
     + 'h1{font-size:16pt;margin:4px 0 2px;color:#1f3a5f}.sub{color:#5b6673;font-size:10pt;margin-bottom:10px}'
     + 'h2{font-size:11pt;text-transform:uppercase;letter-spacing:.05em;color:#2f6fb2;border-bottom:1px solid #d5dbe2;padding-bottom:3px;margin:16px 0 6px}'
+    + 'h3{font-size:10pt;color:#1f3a5f;margin:12px 0 4px}section.sotto{margin-left:14px}'
     + 'section{break-inside:avoid-page}table{border-collapse:collapse;width:100%}'
     + '.campi th{text-align:left;font-weight:normal;color:#5b6673;width:34%;padding:2px 8px 2px 0;vertical-align:top}.campi td{padding:2px 0}'
     + '.tab th{background:#eef1f4;text-align:left;font-size:9pt;padding:4px 6px}.tab td{border-bottom:1px solid #e3e7ec;padding:4px 6px;font-size:10pt;vertical-align:top}'
@@ -5769,7 +5770,8 @@ function pdfScheda(s) {
   ];
   if (s.sottotitolo) cont.push({ text: s.sottotitolo, color: grigio, margin: [0, 2, 0, 4] });
   s.sezioni.forEach(z => {
-    cont.push({ text: String(z.titolo).toUpperCase(), color: blu, bold: true, fontSize: 10, margin: [0, 12, 0, 4] });
+    cont.push(z.sotto ? { text: z.titolo, color: '#1f3a5f', bold: true, fontSize: 9.5, margin: [10, 9, 0, 3] }
+      : { text: String(z.titolo).toUpperCase(), color: blu, bold: true, fontSize: 10, margin: [0, 12, 0, 4] });
     if (z.barra !== undefined) {
       const w = 515 * Math.max(0, Math.min(100, z.barra)) / 100;
       cont.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 8, r: 4, color: '#e3e7ec' }]
@@ -8282,6 +8284,27 @@ function reportIncassi(saldo) {
   /* Prima quello che c'e' gia' (incassate, fatture emesse, proforme non
      incassate), poi quello solo previsto; dentro ogni gruppo per data. */
   const gruppo = f => f.stato === 'incassata' ? 0 : f.stato === 'emessa' ? 1 : f.proforma_numero ? 2 : 3;
+  const sommaImp = arr => r2(arr.reduce((a, f) => a + impFattura(f), 0));
+  const sommaLordo = arr => r2(arr.reduce((a, f) => a + lordoDi(f), 0));
+  const totTesto = arr => feuro(sommaImp(arr)) + ' imponibile · ' + feuro(sommaLordo(arr)) + ' lordo  ('
+    + arr.length + (arr.length === 1 ? ' scaglione)' : ' scaglioni)');
+  const perGruppo = g => na.compEntro.filter(f => gruppo(f) === g);
+  const compParti = [
+    { nome: 'Incassate', titolo: 'Competenza ' + y + ' · 1. Incassate', voci: perGruppo(0),
+      vuoto: 'Nessuno scaglione di competenza ' + y + ' incassato.' },
+    { nome: 'Fatture emesse da incassare', titolo: 'Competenza ' + y + ' · 2. Fatture emesse, non ancora incassate', voci: perGruppo(1),
+      vuoto: 'Nessuna fattura di competenza ' + y + ' in attesa di pagamento.' },
+    { nome: 'Proforme emesse da incassare', titolo: 'Competenza ' + y + ' · 3. Proforme emesse, non ancora pagate', voci: perGruppo(2),
+      vuoto: 'Nessuna proforma di competenza ' + y + ' in attesa.' },
+    { nome: 'Previste entro il 31/12/' + y, titolo: 'Competenza ' + y + ' · 4. Previste — da emettere entro il 31/12/' + y, voci: perGruppo(3),
+      vuoto: 'Nessuno scaglione previsto entro il 31/12/' + y + '.' },
+    { nome: 'Previste dal ' + (y + 1), titolo: 'Competenza ' + y + ' · 5. Previste — si fattureranno dal ' + (y + 1)
+        + ' (data prevista oltre il ' + y + ')', voci: na.compDopo,
+      vuoto: 'Niente di competenza ' + y + ' rimandato al ' + (y + 1) + '.' },
+    { nome: 'Previste senza data (da inserire)', titolo: 'Competenza ' + y + ' · 6. Previste — DATA PREVISTA DA INSERIRE'
+        + ' (non si sa ancora in che anno si fatturerà)', voci: na.compSenza,
+      vuoto: 'Tutti gli scaglioni di competenza ' + y + ' hanno la data prevista.' }];
+  const compTutte = compParti.reduce((a, x) => a.concat(x.voci), []);
   const ordina = arr => arr.slice().sort((a, b) => gruppo(a) - gruppo(b)
     || String(a.data_fattura || a.proforma_data || a.data_prevista || '9999')
       .localeCompare(String(b.data_fattura || b.proforma_data || b.data_prevista || '9999')));
@@ -8324,22 +8347,16 @@ function reportIncassi(saldo) {
             .concat(fpa.senzaData.nPrev ? [['Senza data prevista', feuro(0), feuro(fpa.senzaData.previsto),
                                     feuro(fpa.senzaData.totale), feuro(fpa.senzaData.lordo)]] : []),
           vuoto: 'Niente di fatturato o da fatturare.' } },
-      { titolo: 'Competenza ' + y + ' — emessa e incassata entro il 31/12/' + y
-          + ' (già fatturata, in proforma o con la data prevista entro l’anno)', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
-          righe: ordina(na.compEntro).map(rigaComp),
-          tot: na.compEntro.length ? [['Totale competenza ' + y + ' entro l’anno', feuro(na.totEntro.imponibile), feuro(na.totEntro.lordo)]] : null,
-          vuoto: 'Nessuno scaglione di competenza ' + y + '.' } },
-      { titolo: 'Competenza ' + y + ' — si fatturerà e incasserà dal ' + (y + 1)
-          + ' (data prevista oltre il ' + y + ')', tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
-          righe: ordina(na.compDopo).map(rigaComp),
-          tot: na.compDopo.length ? [['Totale competenza ' + y + ' dal ' + (y + 1), feuro(na.totDopo.imponibile), feuro(na.totDopo.lordo)]] : null,
-          vuoto: 'Niente di competenza ' + y + ' rimandato al ' + (y + 1) + '.' } },
-      { titolo: 'Competenza ' + y + ' — DATA PREVISTA DA INSERIRE (non si sa ancora in che anno si fatturerà)',
-          tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
-          righe: ordina(na.compSenza).map(rigaComp),
-          tot: na.compSenza.length ? [['Totale competenza ' + y + ' senza data', feuro(na.totSenza.imponibile), feuro(na.totSenza.lordo)]] : null,
-          vuoto: 'Tutti gli scaglioni di competenza ' + y + ' hanno la data prevista.' } }
-    ]
+      /* LA COMPETENZA DELL'ANNO, DIVISA PER STATO
+         Un titolo con il riepilogo, poi un sotto-elenco per ciascuno stato:
+         incassate, fatture da incassare, proforme mandate e, a parte, le
+         previste (entro il 31/12, dall'anno dopo, senza data). */
+      { titolo: 'Competenza ' + y + ' — divisa per stato', campi: compParti.map(x => [x.nome, totTesto(x.voci)])
+          .concat([['Totale competenza ' + y, totTesto(compTutte)]]) }
+    ].concat(compParti.map(x => ({ titolo: x.titolo, sotto: true, tabella: { col: colComp, dx: [4, 5], largo: 2, totCol: 4,
+          righe: ordina(x.voci).map(rigaComp),
+          tot: x.voci.length ? [['Totale ' + x.nome.toLowerCase(), feuro(sommaImp(x.voci)), feuro(sommaLordo(x.voci))]] : null,
+          vuoto: x.vuoto } })))
   };
 }
 const SALDO_KEY = 'scs.saldoConto';

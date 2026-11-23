@@ -901,16 +901,18 @@ parziale…), che resta scritto sullo scaglione (migrazione
 - **Incassato**: fatture incassate con data d'incasso nell'anno (per quelle in
   cui la data d'incasso non è stata segnata vale l'anno della fattura, e il
   report dice quante sono: conviene compilarla);
-- due tabelle **ragionate per competenza, come l'ISA**:
-  - **Competenza dell'anno — emessa e incassata entro il 31/12**: già
-    fatturata, con la proforma mandata, pronta da emettere o con la data
-    prevista entro l'anno. In ordine: prima le **incassate**, poi le fatture
-    emesse non ancora incassate e le **proforme** non pagate, in fondo le
-    **previste**; dentro ogni gruppo per data. Il **lordo** di queste tabelle
-    (e del fatturato per anno) per gli enti in **split payment** è senza IVA,
-    come nella lista dei debitori: l'IVA la versa l'ente all'erario;
-  - **Competenza dell'anno — si fatturerà e incasserà dall'anno dopo**: data
-    prevista oltre l'anno, o non ancora indicata.
+- la **competenza dell'anno, ragionata come l'ISA**: un riquadro con i totali
+  e poi un **sotto-elenco per stato**, ciascuno con il suo totale:
+  1. **incassate**;
+  2. **fatture emesse** non ancora incassate;
+  3. **proforme emesse** non ancora pagate;
+  4. **previste** da emettere entro il 31/12;
+  5. **previste** dall'anno dopo (data prevista oltre l'anno);
+  6. **previste senza data** (da inserire).
+
+  Dentro ogni elenco l'ordine è per data. Il **lordo** (anche nel fatturato
+  per anno) per gli enti in **split payment** è senza IVA, come nella lista
+  dei debitori: l'IVA la versa l'ente all'erario.
 
 **La previsione si indica sullo scaglione**: nel campo *Data prevista* la data
 concordata con il cliente o, se si sa solo l'anno, un clic su *Entro fine

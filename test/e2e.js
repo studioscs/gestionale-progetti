@@ -4946,12 +4946,18 @@ function launchOpts(){
     await p.click('#mst-carta'); await p.waitForTimeout(700);
     const h=await p.evaluate(()=>window.__STAMPA||'');
     must(new RegExp('Fatturato '+y+' fino a oggi').test(h)&&new RegExp('Incassato '+y).test(h),'nel report mancano fatturato e incassato dell anno');
-    must(new RegExp('Competenza '+y+' — emessa e incassata entro').test(h)&&new RegExp('Competenza '+y+' — si fatturerà e incasserà dal '+(y+1)).test(h),'mancano le due tabelle di competenza');
-    must(/Saldo previsto anno prossimo/.test(h.slice(h.indexOf('si fatturerà e incasserà'))),'lo scaglione non è nella tabella dell anno dopo');
-    /* nella competenza entro l'anno: prima incassate, fatture e proforme, poi le previste */
-    const ord=await p.evaluate(y=>{ const sez=reportIncassi('').sezioni.find(x=>x.titolo.indexOf('Competenza '+y+' — emessa')===0);
-      return sez.tabella.righe.map(r=>/^incassata/.test(r[3])?0:/^fattura/.test(r[3])?1:/^proforma/.test(r[3])?2:3); },y);
-    must(ord.length&&ord.every((g,i)=>!i||ord[i-1]<=g),'ordine della competenza: '+ord.join());
+    const tit=['divisa per stato','· 1. Incassate','· 2. Fatture emesse','· 3. Proforme emesse','· 4. Previste — da emettere entro','· 5. Previste — si fattureranno dal '+(y+1),'· 6. Previste — DATA PREVISTA DA INSERIRE'];
+    const pos=tit.map(x=>h.indexOf('Competenza '+y+' '+(x[0]==='d'?'— ':'')+x));
+    must(pos.every((x,i)=>x>=0&&(!i||x>pos[i-1])),'sotto-elenchi della competenza mancanti o fuori ordine: '+pos.join());
+    must(/Saldo previsto anno prossimo/.test(h.slice(pos[5],pos[6])),'lo scaglione non è fra le previste dal '+(y+1));
+    /* ogni sotto-elenco tiene solo il suo stato, e insieme fanno tutta la competenza */
+    const gs=await p.evaluate(y=>{ const sz=reportIncassi('').sezioni.filter(x=>x.sotto);
+      const st=r=>/^incassata/.test(r[3])?0:/^fattura/.test(r[3])?1:/^proforma/.test(r[3])?2:3;
+      const na=numeriAnno(y);
+      return {stati:sz.slice(0,4).map(x=>x.tabella.righe.map(st)), n:sz.reduce((a,x)=>a+x.tabella.righe.length,0),
+        tot:na.compEntro.length+na.compDopo.length+na.compSenza.length}; },y);
+    must(gs.stati.every((a,i)=>a.every(x=>x===i)),'stati nei sotto-elenchi: '+JSON.stringify(gs.stati));
+    must(gs.n===gs.tot,'righe nei sotto-elenchi '+gs.n+' invece di '+gs.tot);
     await p.evaluate(async()=>{ closeAll&&closeAll(); const f=S.fatture.find(x=>x.descrizione==='Saldo previsto anno prossimo');
       await SB.from('commessa_fatture').delete().eq('id',f.id); await loadAll(true); });
   });
