@@ -1577,7 +1577,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.23.02';
+const VERSIONE = '2026.11.23.03';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7964,6 +7964,9 @@ function contiDaIncassare(f, conSpeseAperte) {
   return calcolaFattura(impFattura(f), spese, !!p.split_payment);
 }
 const daIncassareDi = (f, conSpeseAperte) => contiDaIncassare(f, conSpeseAperte).netto;
+/* Il lordo di uno scaglione nei riepiloghi: imponibile, cassa, IVA e spese;
+   con la scissione dei pagamenti senza l'IVA, che l'ente versa all'erario. */
+const lordoDi = f => { const c = contiDaIncassare(f, false); return c.split ? r2(c.totale - c.iva) : c.totale; };
 function datiReportIncassi() {
   const perData = k => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''));
   const emesse = S.fatture.filter(f => f.stato === 'emessa').sort(perData('data_fattura'))
@@ -8027,7 +8030,7 @@ function numeriAnno(y) {
   const vive = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id));
   const fatturate = vive.filter(f => ISA_FATTURATE.indexOf(f.stato) >= 0 && annoDi4(f.data_fattura) === y);
   const incassate = vive.filter(f => f.stato === 'incassata' && (annoDi4(f.data_incasso) || annoDi4(f.data_fattura)) === y);
-  const lordo = f => contiDaIncassare(f, false).totale;
+  const lordo = lordoDi;
   const incasso = f => Number(f.importo_incassato) || contiDaIncassare(f, false).netto;
   const somma = (arr, fn) => r2(arr.reduce((a, f) => a + fn(f), 0));
   const comp = vive.filter(f => annoCompScaglione(f) === y);
@@ -8055,7 +8058,7 @@ function numeriAnno(y) {
 function fatturatoPerAnno() {
   const y0 = today().getFullYear();
   const vive = S.fatture.filter(f => f.stato !== 'annullata' && byId(S.projects, f.project_id));
-  const lordo = f => contiDaIncassare(f, false).totale;
+  const lordo = lordoDi;
   const anni = {};
   const riga = a => anni[a] = anni[a] || { anno: a, fatt: [], prev: [] };
   vive.filter(f => ISA_FATTURATE.indexOf(f.stato) >= 0 && (annoDi4(f.data_fattura) || 0) >= y0)
@@ -8275,7 +8278,7 @@ function reportIncassi(saldo) {
   const fpa = fatturatoPerAnno(), fpa0 = fpa.anni.find(r => r.anno === y);
   const colComp = ['Commessa', 'Intestatario', 'Scaglione', 'Stato / quando', 'Imponibile', 'Lordo'];
   const rigaComp = f => [pn(f.project_id), intestatarioDi(f), descScaglione(f), quandoScaglione(f),
-    feuro(impFattura(f)), feuro(contiDaIncassare(f, false).totale)];
+    feuro(impFattura(f)), feuro(lordoDi(f))];
   /* Prima quello che c'e' gia' (incassate, fatture emesse, proforme non
      incassate), poi quello solo previsto; dentro ogni gruppo per data. */
   const gruppo = f => f.stato === 'incassata' ? 0 : f.stato === 'emessa' ? 1 : f.proforma_numero ? 2 : 3;

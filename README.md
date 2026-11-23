@@ -906,7 +906,9 @@ parziale…), che resta scritto sullo scaglione (migrazione
     fatturata, con la proforma mandata, pronta da emettere o con la data
     prevista entro l'anno. In ordine: prima le **incassate**, poi le fatture
     emesse non ancora incassate e le **proforme** non pagate, in fondo le
-    **previste**; dentro ogni gruppo per data;
+    **previste**; dentro ogni gruppo per data. Il **lordo** di queste tabelle
+    (e del fatturato per anno) per gli enti in **split payment** è senza IVA,
+    come nella lista dei debitori: l'IVA la versa l'ente all'erario;
   - **Competenza dell'anno — si fatturerà e incasserà dall'anno dopo**: data
     prevista oltre l'anno, o non ancora indicata.
 

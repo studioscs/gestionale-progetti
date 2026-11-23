@@ -3608,6 +3608,14 @@ function launchOpts(){
     must(r.y==='Art. 1 OGGETTO DEL SERVIZIO DA EFFETTUARE SU IMMOBILE SITO IN VIA ROMA','senza servizi resta com è: '+r.y);
     must(r.z==='1° ACCONTO progetto','le altre descrizioni non cambiano: '+r.z);
   });
+  await t('lista debitori: con lo split payment il lordo della competenza è senza IVA',async()=>{
+    const r=await p.evaluate(()=>{ const pr=S.projects[0], prima=pr.split_payment;
+      const f={id:'split-x',project_id:pr.id,descrizione:'Prova split',imponibile:1000,stato:'da_emettere'};
+      pr.split_payment=true; const conSplit=lordoDi(f); pr.split_payment=false; const senza=lordoDi(f);
+      pr.split_payment=prima; const att=calcolaFattura(1000,0,true); return {conSplit,senza,att,senzaIva:r2(att.totale-att.iva)}; });
+    must(r.conSplit===r.senzaIva&&r.conSplit<r.senza,'lordo con split: '+JSON.stringify(r));
+    must(r.senza===r.att.totale,'lordo senza split: '+JSON.stringify(r));
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });
