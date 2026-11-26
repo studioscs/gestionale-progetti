@@ -67,6 +67,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 46. [`sql/047_fase_riaperta_toglie_richiesta.sql`](sql/047_fase_riaperta_toglie_richiesta.sql) — fase riaperta o scaglione staccato: via la richiesta automatica
 47. [`sql/048_fasi_e_stato_commessa.sql`](sql/048_fasi_e_stato_commessa.sql) — stato della commessa e delle fasi insieme
 48. [`sql/049_allinea_stato_commesse.sql`](sql/049_allinea_stato_commesse.sql) — allineamento una tantum delle commesse già incoerenti
+49. [`sql/050_ripristino_copia.sql`](sql/050_ripristino_copia.sql) — ripristino da una copia di sicurezza senza far scattare gli automatismi
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -468,10 +469,37 @@ sezione *Amministrazione*, il tasto **💾 Copia di sicurezza**:
   mostra un **«!»** rosso e all'apertura dell'app compare un promemoria. La data
   dell'ultima copia è ricordata **sul dispositivo** da cui la si scarica.
 
-Il file non si ricarica dall'app: in caso di bisogno i dati si rimettono nel
-database a partire dal file (si fa una volta, con calma, tabella per tabella).
 I file caricati nello Storage non sono nella copia: oggi ci sono solo le
 cartelle vuote delle commesse.
+
+### Ripristinare da una copia
+
+Subito sotto c'è **↺ Ripristina da copia** (solo admin, serve la migrazione
+**050**). Si sceglie il file `.json` di una copia passata e l'app lo confronta
+con i dati di adesso, tabella per tabella: quante righe **mancano adesso**
+(cancellate dopo la copia), quante sono state **modificate dopo**, quante sono
+**nuove dopo**. Poi due possibilità:
+
+- **Recupera solo quello che manca** — tornano le righe cancellate; tutto il
+  resto resta com'è adesso. È quella da usare dopo una cancellazione sbagliata.
+- **Recupera e riporta anche le modifiche** — in più le righe modificate tornano
+  come nella copia (le modifiche fatte dopo su quelle righe si perdono: lo si
+  chiede due volte).
+
+In nessuno dei due casi **si cancella qualcosa**: le righe nate dopo la copia
+restano. Prima di scrivere l'app **scarica una copia dei dati di adesso**
+(`…-prima-del-ripristino.json`): un ripristino sbagliato si annulla
+ripristinando quella. Gli utenti non si ripristinano (stanno nell'accesso di
+Supabase).
+
+Le righe le rimette il database con `ripristina_righe` (050), che per la tabella
+che sta scrivendo spegne gli automatismi del lavoro di tutti i giorni: altrimenti
+un'attività completata prenderebbe la data di oggi, un SAL rifarebbe la sua quota
+di direzione lavori (doppia), una variante si sommerebbe di nuovo all'importo.
+Restano attivi i controlli dei collegamenti e i ricalcoli delle somme (importo
+dai contratti, imponibile dalle voci). Le tabelle si rimettono nell'ordine dei
+collegamenti (clienti, commesse, fasi, attività, scaglioni, voci…); una riga che
+non si può rimettere non ferma le altre e viene elencata alla fine.
 
 ---
 

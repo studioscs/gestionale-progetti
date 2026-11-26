@@ -4138,6 +4138,57 @@ function launchOpts(){
       S.prof.role=prima; el('sn-copia').style.display=''; return r; });
     must(g==='none','il collaboratore vede il tasto');
   });
+  await t('ripristino: tornano le righe cancellate, le modifiche solo se lo si chiede, le nuove restano',async()=>{
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#sn-copia')]);
+    must(dl,'nessuna copia scaricata');
+    const file=path.join(__dirname,'copia-prova.json'); fs.copyFileSync(await dl.path(),file);
+    await p.waitForTimeout(300);
+    const pr=await p.evaluate(()=>{ const [a,b]=__DB.tasks.filter(x=>x.status==='completato').slice(0,2).length===2
+        ? __DB.tasks.filter(x=>x.status==='completato').slice(0,2) : __DB.tasks.slice(0,2);
+      const r={cancellata:a.id, compl:a.completed_at, modificata:b.id, titolo:b.title, cli:__DB.clienti[0]&&__DB.clienti[0].id};
+      __DB.tasks=__DB.tasks.filter(x=>x.id!==a.id);
+      __DB.task_messaggi=(__DB.task_messaggi||[]).filter(x=>x.task_id!==a.id);
+      b.title='MODIFICATA DOPO LA COPIA';
+      if(r.cli) __DB.clienti=__DB.clienti.filter(x=>x.id!==r.cli);
+      __DB.tasks.push({id:'nata-dopo',title:'nata dopo la copia',status:'da_fare'});
+      return r; });
+    await p.setInputFiles('#ripr-file',file);
+    await p.waitForSelector('#m-ripr.show',{timeout:15000});
+    const vista=await p.evaluate(()=>({t:el('ripr-body').textContent, att:RIPR.righe.find(r=>r.t==='tasks'),
+      cli:RIPR.righe.find(r=>r.t==='clienti'), dis:el('ripr-mancanti').disabled}));
+    must(vista.att.mancanti.length===1&&vista.att.diverse.length===1&&vista.att.nuove===1,'confronto attività: '+JSON.stringify({m:vista.att.mancanti.length,d:vista.att.diverse.length,n:vista.att.nuove}));
+    must(!pr.cli||vista.cli.mancanti.length===1,'il cliente cancellato non risulta mancante');
+    must(/Mancano adesso/.test(vista.t)&&/non si cancella niente/.test(vista.t)&&!vista.dis,'finestra: '+vista.t.slice(0,200));
+    const [prima]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#ripr-mancanti')]);
+    must(prima&&/-prima-del-ripristino\.json$/.test(prima.suggestedFilename()),'non scarica la copia di prima: '+(prima&&prima.suggestedFilename()));
+    await p.waitForTimeout(800);
+    const g1=await p.evaluate(pr=>{ const a=__DB.tasks.find(x=>x.id===pr.cancellata), b=__DB.tasks.find(x=>x.id===pr.modificata);
+      return {torna:!!a, compl:a&&a.completed_at, mod:b&&b.title, nata:!!__DB.tasks.find(x=>x.id==='nata-dopo'),
+        cli:!pr.cli||!!__DB.clienti.find(x=>x.id===pr.cli), chiusa:!el('m-ripr').classList.contains('show'),
+        inApp:!!S.tasks.find(x=>x.id===pr.cancellata)}; },pr);
+    must(g1.torna&&g1.compl===pr.compl,'l’attività cancellata non è tornata uguale: '+JSON.stringify(g1));
+    must(g1.mod==='MODIFICATA DOPO LA COPIA','«solo quello che manca» ha toccato una modifica: '+g1.mod);
+    must(g1.nata&&g1.cli&&g1.chiusa&&g1.inApp,'dopo il ripristino: '+JSON.stringify(g1));
+    /* di nuovo, riportando anche le modifiche */
+    await p.setInputFiles('#ripr-file',[]); await p.setInputFiles('#ripr-file',file);
+    await p.waitForSelector('#m-ripr.show',{timeout:15000});
+    must(await p.evaluate(()=>el('ripr-mancanti').disabled),'non manca più niente ma il tasto resta attivo');
+    await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#ripr-tutto')]);
+    await p.waitForTimeout(800);
+    const g2=await p.evaluate(pr=>({mod:(__DB.tasks.find(x=>x.id===pr.modificata)||{}).title,
+      nata:!!__DB.tasks.find(x=>x.id==='nata-dopo')}),pr);
+    must(g2.mod===pr.titolo,'la modifica non è tornata come nella copia: '+g2.mod);
+    must(g2.nata,'la riga nata dopo la copia è sparita');
+    await p.evaluate(()=>{ __DB.tasks=__DB.tasks.filter(x=>x.id!=='nata-dopo'); });
+    fs.unlinkSync(file);
+  });
+  await t('ripristino: un file che non è una copia viene rifiutato',async()=>{
+    const file=path.join(__dirname,'non-copia.json'); fs.writeFileSync(file,'{"ciao":1}');
+    ultimoDialogo=''; await p.setInputFiles('#ripr-file',[]); await p.setInputFiles('#ripr-file',file);
+    await p.waitForTimeout(600); fs.unlinkSync(file);
+    must(/non è una copia di sicurezza/.test(ultimoDialogo),'messaggio: '+ultimoDialogo);
+    must(!(await p.evaluate(()=>el('m-ripr').classList.contains('show'))),'la finestra si è aperta');
+  });
 
   /* ---------------- FIRME DEL CLIENTE SENZA L'INCARICO ---------------- */
   await t('i percorsi non chiedono più la firma dell incarico: è il preventivo',async()=>{

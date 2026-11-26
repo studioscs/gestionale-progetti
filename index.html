@@ -495,6 +495,7 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
       <button class="sn" data-page="costi"><span class="snic">&#129534;</span>Costi generali</button>
       <button class="sn" data-page="users" id="sn-users"><span class="snic">&#128101;</span>Utenti</button>
       <button class="sn" id="sn-copia" type="button" title="Scarica un file con tutti i dati del gestionale, da salvare sul server dello studio"><span class="snic">&#128190;</span>Copia di sicurezza<span class="snb alert" id="b-copia" style="display:none">!</span></button>
+      <button class="sn" id="sn-ripr" type="button" title="Rimette nel gestionale i dati di una copia di sicurezza scaricata in passato"><span class="snic">&#8634;</span>Ripristina da copia</button>
     </div>
     <div class="sfoot">
       <button class="sout" id="sout">&#8617; Esci dall'account</button>
@@ -1058,6 +1059,20 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
     </div>
   </div>
 </div>
+
+<div class="ov" id="m-ripr">
+  <div class="modal modal-lg">
+    <div class="mh"><h3>Ripristina da una copia di sicurezza</h3>
+      <button class="mx" data-close="m-ripr">&#10005;</button></div>
+    <div class="mb" id="ripr-body"></div>
+    <div class="mf">
+      <button class="btn" data-close="m-ripr">Annulla</button>
+      <button class="btn" id="ripr-mancanti">Recupera solo quello che manca</button>
+      <button class="btn btn-p" id="ripr-tutto">Recupera e riporta anche le modifiche</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="ripr-file" accept=".json,application/json" style="display:none">
 
 <div class="ov" id="m-spesa">
   <div class="modal modal-sm">
@@ -3796,6 +3811,7 @@ async function boot() {
   el('sec-admin').style.display = (isAd() || isComm()) ? 'block' : 'none';
   el('sn-users').style.display = isAd() ? '' : 'none';
   el('sn-copia').style.display = isAd() ? '' : 'none';
+  el('sn-ripr').style.display = isAd() ? '' : 'none';
   avvisoCopia(true);
   /* I preventivi li prepara chi tiene l'amministrazione, come la RLS (032) */
   el('sn-prev').style.display = vedeTutto() ? '' : 'none';
@@ -12871,6 +12887,7 @@ const TABELLE_COPIA = ['profiles', 'clienti', 'enti_pa', 'projects', 'commessa_f
   'pratiche_catalogo', 'preventivi', 'preventivo_modelli', 'costi_generali', 'profili_costi',
   'time_entries', 'project_fasi', 'project_sottofasi', 'files', 'notifiche'];
 const CHIAVE_COPIA = 'scs-ultima-copia';
+const TIPO_COPIA = 'SCS Gestionale Progetti - copia di sicurezza';
 const GIORNI_COPIA = 7;
 const PASSO_COPIA = 1000;
 
@@ -12915,53 +12932,250 @@ async function leggiTabellaIntera(t) {
   }
 }
 
-async function scaricaCopia() {
-  if (!isAd()) return toast('La copia di sicurezza la scarica un amministratore', 'error');
-  const btn = el('sn-copia');
+/* Legge tutte le tabelle, una alla volta; avanzamento(i, n) per il tasto */
+async function leggiTutteLeTabelle(avanzamento) {
+  const tabelle = {}, conteggi = {}, errori = {};
+  for (let i = 0; i < TABELLE_COPIA.length; i++) {
+    const t = TABELLE_COPIA[i];
+    if (avanzamento) avanzamento(i + 1, TABELLE_COPIA.length);
+    try {
+      tabelle[t] = await leggiTabellaIntera(t);
+      conteggi[t] = tabelle[t].length;
+    } catch (e) {
+      errori[t] = (e && e.message) || String(e);
+    }
+  }
+  return { tabelle, conteggi, errori };
+}
+
+function scaricaFileCopia(dati, suffisso) {
+  const ora = new Date();
+  const copia = {
+    tipo: TIPO_COPIA,
+    versione_app: VERSIONE,
+    creata_il: ora.toISOString(),
+    creata_da: (S.prof && S.prof.full_name) || '',
+    conteggi: dati.conteggi, errori: dati.errori, tabelle: dati.tabelle
+  };
+  const giorno = ora.getFullYear() + '-' + String(ora.getMonth() + 1).padStart(2, '0') + '-' + String(ora.getDate()).padStart(2, '0');
+  const nome = 'SCS-gestionale-copia-' + giorno + (suffisso || '') + '.json';
+  const blob = new Blob([JSON.stringify(copia)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  if (!Object.keys(dati.errori).length) {
+    try { localStorage.setItem(CHIAVE_COPIA, ora.toISOString()); } catch (e) {}
+  }
+  return nome;
+}
+
+async function conTastoOccupato(id, etichetta, fn) {
+  const btn = el(id);
   if (btn.disabled) return;
   btn.disabled = true;
   const testo = btn.innerHTML;
-  const tabelle = {}, conteggi = {}, errori = {};
   try {
-    for (let i = 0; i < TABELLE_COPIA.length; i++) {
-      const t = TABELLE_COPIA[i];
-      btn.innerHTML = '<span class="snic"><span class="spin"></span></span>Copia… ' + (i + 1) + '/' + TABELLE_COPIA.length;
-      try {
-        tabelle[t] = await leggiTabellaIntera(t);
-        conteggi[t] = tabelle[t].length;
-      } catch (e) {
-        errori[t] = (e && e.message) || String(e);
-      }
-    }
-    const ora = new Date();
-    const copia = {
-      tipo: 'SCS Gestionale Progetti - copia di sicurezza',
-      versione_app: VERSIONE,
-      creata_il: ora.toISOString(),
-      creata_da: (S.prof && S.prof.full_name) || '',
-      conteggi, errori, tabelle
-    };
-    const giorno = ora.getFullYear() + '-' + String(ora.getMonth() + 1).padStart(2, '0') + '-' + String(ora.getDate()).padStart(2, '0');
-    const nome = 'SCS-gestionale-copia-' + giorno + '.json';
-    const blob = new Blob([JSON.stringify(copia)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = nome;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    const righe = Object.values(conteggi).reduce((s, n) => s + n, 0);
-    const male = Object.keys(errori);
-    if (male.length) {
-      alert('Copia scaricata (' + nome + '), ma ' + male.length + ' tabell' + (male.length === 1 ? 'a non si è letta' : 'e non si sono lette')
-        + ':\n\n• ' + male.map(t => t + ': ' + errori[t]).join('\n• ')
-        + '\n\nIl resto dei dati è nel file. Riprova più tardi; se l’errore resta, segnalalo.');
-    } else {
-      try { localStorage.setItem(CHIAVE_COPIA, ora.toISOString()); } catch (e) {}
-      toast('Copia scaricata: ' + nome + ' (' + righe.toLocaleString('it-IT') + ' righe). Salvala sul server dello studio.', 'success');
-    }
+    return await fn((i, n) => { btn.innerHTML = '<span class="snic"><span class="spin"></span></span>' + etichetta + ' ' + i + '/' + n; });
   } finally {
     btn.innerHTML = testo;
     btn.disabled = false;
     avvisoCopia(false);
+  }
+}
+
+async function scaricaCopia() {
+  if (!isAd()) return toast('La copia di sicurezza la scarica un amministratore', 'error');
+  await conTastoOccupato('sn-copia', 'Copia…', async avanza => {
+    const dati = await leggiTutteLeTabelle(avanza);
+    const nome = scaricaFileCopia(dati);
+    const righe = Object.values(dati.conteggi).reduce((s, n) => s + n, 0);
+    const male = Object.keys(dati.errori);
+    if (male.length) {
+      alert('Copia scaricata (' + nome + '), ma ' + male.length + ' tabell' + (male.length === 1 ? 'a non si è letta' : 'e non si sono lette')
+        + ':\n\n• ' + male.map(t => t + ': ' + dati.errori[t]).join('\n• ')
+        + '\n\nIl resto dei dati è nel file. Riprova più tardi; se l’errore resta, segnalalo.');
+    } else {
+      toast('Copia scaricata: ' + nome + ' (' + righe.toLocaleString('it-IT') + ' righe). Salvala sul server dello studio.', 'success');
+    }
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   RIPRISTINO DA UNA COPIA
+   Due modi, e in nessuno dei due si cancella qualcosa:
+   - «solo quello che manca»: tornano le righe che nella copia ci sono e nel
+     database no (cancellate per sbaglio). Quello che c'e' adesso non si tocca.
+   - «anche le modifiche»: in piu' le righe che ci sono tutte e due ma sono
+     diverse tornano come nella copia. Il lavoro fatto dopo la copia su quelle
+     righe si perde, per questo lo si chiede due volte.
+   Le righe nate dopo la copia restano sempre. Prima di scrivere si scarica
+   una copia dello stato di adesso: un ripristino sbagliato si annulla
+   ripristinando quella.
+   Gli utenti (profiles) e le notifiche non si ripristinano: gli utenti
+   vivono nell'accesso di Supabase, le notifiche sono passeggere.
+   L'ordine e' quello dei collegamenti: prima chi e' richiamato da altri
+   (clienti prima delle commesse, commesse prima delle fasi, ...).
+   --------------------------------------------------------------------------- */
+const ORDINE_RIPRISTINO = ['enti_pa', 'clienti', 'projects', 'preventivi', 'commessa_contratti',
+  'commessa_fasi', 'commessa_sal', 'commessa_varianti', 'project_fasi', 'project_sottofasi',
+  'commessa_pratiche', 'tasks', 'task_messaggi', 'task_comments', 'pratica_eventi',
+  'commessa_fatture', 'commessa_fattura_righe', 'commessa_spese', 'time_entries', 'files',
+  'costi_generali', 'profili_costi', 'preventivo_modelli', 'pratiche_catalogo'];
+const NOMI_TABELLE = { enti_pa:'Enti pubblici (Indice PA)', clienti:'Clienti', projects:'Commesse',
+  preventivi:'Preventivi', commessa_contratti:'Contratti', commessa_fasi:'Fasi', commessa_sal:'SAL',
+  commessa_varianti:'Varianti', project_fasi:'Fasi (vecchio schema)', project_sottofasi:'Sottofasi (vecchio schema)',
+  commessa_pratiche:'Pratiche', tasks:'Attività', task_messaggi:'Messaggi delle attività',
+  task_comments:'Commenti delle attività', pratica_eventi:'Eventi delle pratiche',
+  commessa_fatture:'Scaglioni / fatture', commessa_fattura_righe:'Voci delle fatture',
+  commessa_spese:'Spese anticipate', time_entries:'Ore', files:'File', costi_generali:'Costi generali',
+  profili_costi:'Costi orari', preventivo_modelli:'Modelli di preventivo', pratiche_catalogo:'Catalogo pratiche' };
+let RIPR = null;
+
+const stessaRiga = (a, b) => Object.keys(a).every(k => JSON.stringify(a[k] === undefined ? null : a[k])
+                                                    === JSON.stringify(b[k] === undefined ? null : b[k]));
+
+async function apriRipristino(file) {
+  if (!isAd()) return toast('Il ripristino lo fa un amministratore', 'error');
+  let copia;
+  try { copia = JSON.parse(await file.text()); }
+  catch (e) { return alert('Il file «' + file.name + '» non si legge: non è una copia di sicurezza del gestionale.'); }
+  if (!copia || copia.tipo !== TIPO_COPIA || !copia.tabelle || typeof copia.tabelle !== 'object')
+    return alert('Il file «' + file.name + '» non è una copia di sicurezza del gestionale.');
+  await conTastoOccupato('sn-ripr', 'Confronto…', async avanza => {
+    const ora = await leggiTutteLeTabelle(avanza);
+    const male = Object.keys(ora.errori).filter(t => ORDINE_RIPRISTINO.includes(t));
+    if (male.length) {
+      alert('Non riesco a leggere i dati di adesso (' + male.map(t => NOMI_TABELLE[t] || t).join(', ')
+        + '), quindi non posso confrontarli con la copia. Riprova più tardi.');
+      return;
+    }
+    const righe = ORDINE_RIPRISTINO.filter(t => Array.isArray(copia.tabelle[t])).map(t => {
+      const qui = new Map((ora.tabelle[t] || []).map(r => [r.id, r]));
+      const mancanti = [], diverse = [];
+      copia.tabelle[t].forEach(r => {
+        if (!r || r.id == null) return;
+        const c = qui.get(r.id);
+        if (!c) mancanti.push(r);
+        else if (!stessaRiga(r, c)) diverse.push(r);
+      });
+      const idCopia = new Set(copia.tabelle[t].map(r => r && r.id));
+      const nuove = (ora.tabelle[t] || []).filter(r => !idCopia.has(r.id)).length;
+      return { t, nelFile: copia.tabelle[t].length, adesso: (ora.tabelle[t] || []).length, mancanti, diverse, nuove };
+    });
+    RIPR = { copia, ora, righe, nomeFile: file.name };
+    disegnaRipristino();
+    openM('m-ripr');
+  });
+}
+
+function disegnaRipristino() {
+  const { copia, righe, nomeFile } = RIPR;
+  const nM = righe.reduce((s, r) => s + r.mancanti.length, 0);
+  const nD = righe.reduce((s, r) => s + r.diverse.length, 0);
+  const quando = copia.creata_il ? new Date(copia.creata_il) : null;
+  const n = x => x ? '<b>' + x.toLocaleString('it-IT') + '</b>' : '<span style="color:var(--mut2)">0</span>';
+  el('ripr-body').innerHTML =
+      '<div class="ibox" style="margin-bottom:14px">Copia <b>' + esc(nomeFile) + '</b>'
+    + (quando ? ', fatta il <b>' + quando.toLocaleDateString('it-IT') + ' alle ' + quando.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) + '</b>' : '')
+    + (copia.creata_da ? ' da ' + esc(copia.creata_da) : '') + '.</div>'
+    + (nM || nD ? '' : '<div class="ibox" style="margin-bottom:14px;background:#E8F5EC">I dati di adesso contengono già tutto quello che c’è nella copia: non c’è niente da ripristinare.</div>')
+    + '<div class="tw"><table><thead><tr><th>Dati</th><th style="text-align:right">Nella copia</th><th style="text-align:right">Adesso</th>'
+    + '<th style="text-align:right" title="Righe che nella copia ci sono e adesso no: cancellate dopo la copia">Mancano adesso</th>'
+    + '<th style="text-align:right" title="Righe che ci sono tutte e due ma sono state modificate dopo la copia">Modificate dopo</th>'
+    + '<th style="text-align:right" title="Righe nate dopo la copia: restano comunque">Nuove dopo</th></tr></thead><tbody>'
+    + righe.filter(r => r.nelFile || r.adesso).map(r => '<tr><td>' + esc(NOMI_TABELLE[r.t] || r.t) + '</td>'
+        + '<td style="text-align:right">' + n(r.nelFile) + '</td><td style="text-align:right">' + n(r.adesso) + '</td>'
+        + '<td style="text-align:right">' + n(r.mancanti.length) + '</td><td style="text-align:right">' + n(r.diverse.length) + '</td>'
+        + '<td style="text-align:right">' + n(r.nuove) + '</td></tr>').join('')
+    + '</tbody></table></div>'
+    + '<div class="hint" style="margin-top:12px">'
+    + '<b>Recupera solo quello che manca</b>: tornano le ' + nM.toLocaleString('it-IT') + ' righe cancellate dopo la copia; tutto il resto resta com’è adesso.<br>'
+    + '<b>Recupera e riporta anche le modifiche</b>: in più le ' + nD.toLocaleString('it-IT') + ' righe modificate tornano come nella copia, e le modifiche fatte dopo su quelle righe si perdono.<br>'
+    + 'In tutti e due i casi <b>non si cancella niente</b>: quello che è nato dopo la copia resta. Gli utenti non si ripristinano. '
+    + 'Prima di scrivere si scarica una copia dei dati di adesso, per poter tornare indietro.</div>';
+  el('ripr-mancanti').disabled = !nM;
+  el('ripr-tutto').disabled = !(nM || nD);
+}
+
+/* Le righe le scrive il database (migrazione 050), che intanto tiene spenti
+   gli automatismi pensati per il lavoro di tutti i giorni: reinserita da qui,
+   un'attivita' completata prenderebbe la data di oggi e un SAL rifarebbe la
+   sua quota di direzione lavori. A blocchi; un blocco rifiutato si riprova
+   riga per riga, cosi' una riga sola che non va (un utente che non c'e' piu',
+   un doppione) non ferma le altre. */
+const ERR_MANCA_050 = 'manca_050';
+async function scriviRighe(t, righe, sovrascrivi, errori) {
+  let fatte = 0;
+  /* costi_generali richiama se' stessa: prima le righe senza origine */
+  if (t === 'costi_generali') righe = righe.slice().sort((a, b) => (a.origine_id ? 1 : 0) - (b.origine_id ? 1 : 0));
+  const manda = async blocco => {
+    const { data, error } = await SB.rpc('ripristina_righe', { tabella: t, righe: blocco, sovrascrivi: !!sovrascrivi });
+    if (error && /ripristina_righe|PGRST202|could not find the function/i.test(error.message || '') && !/amministratore|non si ripristina/.test(error.message || ''))
+      throw Object.assign(new Error('Manca la migrazione 050 nel database'), { code: ERR_MANCA_050 });
+    return { n: Number(data) || 0, error };
+  };
+  for (let i = 0; i < righe.length; i += 200) {
+    const blocco = righe.slice(i, i + 200);
+    const r = await manda(blocco);
+    if (!r.error) { fatte += r.n; continue; }
+    for (const riga of blocco) {
+      const r1 = await manda([riga]);
+      if (r1.error) errori.push((NOMI_TABELLE[t] || t) + ': ' + (r1.error.message || r1.error));
+      else fatte += r1.n;
+    }
+  }
+  return fatte;
+}
+
+async function eseguiRipristino(sovrascrivi) {
+  if (!RIPR || !isAd()) return;
+  const { righe } = RIPR;
+  const nM = righe.reduce((s, r) => s + r.mancanti.length, 0);
+  const nD = sovrascrivi ? righe.reduce((s, r) => s + r.diverse.length, 0) : 0;
+  if (!nM && !nD) return;
+  if (!confirm('Rimetto nel gestionale ' + nM.toLocaleString('it-IT') + ' righe mancanti'
+      + (sovrascrivi ? ' e riporto ' + nD.toLocaleString('it-IT') + ' righe come erano nella copia' : '')
+      + '.\n\nPrima scarico una copia dei dati di adesso. Procedo?')) return;
+  if (sovrascrivi && nD && !confirm('Attenzione: le modifiche fatte dopo la copia su ' + nD.toLocaleString('it-IT')
+      + ' righe andranno perse. Confermi?')) return;
+  const bM = el('ripr-mancanti'), bT = el('ripr-tutto');
+  bM.disabled = bT.disabled = true;
+  const errori = [];
+  let fatte = 0, nomeSalvata = '';
+  try {
+    /* La copia di adesso, gia' letta per il confronto */
+    nomeSalvata = scaricaFileCopia(RIPR.ora, '-prima-del-ripristino');
+    for (const r of righe) {
+      const daScrivere = sovrascrivi ? r.mancanti.concat(r.diverse) : r.mancanti;
+      if (daScrivere.length) {
+        bT.innerHTML = '<span class="spin"></span> ' + esc(NOMI_TABELLE[r.t] || r.t) + '…';
+        fatte += await scriviRighe(r.t, daScrivere, sovrascrivi, errori);
+      }
+    }
+  } catch (e) {
+    if (e && e.code === ERR_MANCA_050) {
+      closeM('m-ripr'); RIPR = null;
+      return alert('Per ripristinare manca un aggiornamento del database: va eseguita la migrazione '
+        + '050_ripristino_copia.sql (Supabase → SQL Editor). Non è stato scritto niente.'
+        + (nomeSalvata ? '\n\nLa copia dei dati di adesso è comunque in ' + nomeSalvata + '.' : ''));
+    }
+    throw e;
+  } finally {
+    bT.innerHTML = 'Recupera e riporta anche le modifiche';
+    bM.disabled = bT.disabled = false;
+  }
+  closeM('m-ripr');
+  RIPR = null;
+  await loadAll(true);
+  const tot = nM + nD;
+  if (errori.length) {
+    alert('Ripristino fatto in parte: ' + fatte.toLocaleString('it-IT') + ' righe su ' + tot.toLocaleString('it-IT') + '.\n\n'
+      + 'Non sono tornate (' + errori.length + '):\n• ' + errori.slice(0, 15).join('\n• ')
+      + (errori.length > 15 ? '\n• … e altre ' + (errori.length - 15) : '')
+      + '\n\nLa copia di prima del ripristino è in ' + nomeSalvata + '.');
+  } else {
+    toast('Ripristino fatto: ' + fatte.toLocaleString('it-IT') + ' righe. La copia di prima è in ' + nomeSalvata + '.', 'success');
   }
 }
 
@@ -14601,6 +14815,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   qsa('.sn').forEach(n => n.onclick = () => go(n.dataset.page));
   el('sn-copia').onclick = scaricaCopia;
+  el('sn-ripr').onclick = () => { if (!isAd()) return; el('ripr-file').value = ''; el('ripr-file').click(); };
+  el('ripr-file').onchange = e => { const f = e.target.files && e.target.files[0]; if (f) apriRipristino(f); };
+  el('ripr-mancanti').onclick = () => eseguiRipristino(false);
+  el('ripr-tutto').onclick = () => eseguiRipristino(true);
   qsa('[data-close]').forEach(b => b.onclick = () => closeM(b.dataset.close));
   qsa('.ov').forEach(o => o.onmousedown = e => { if (e.target === o) closeM(o.id); });
 

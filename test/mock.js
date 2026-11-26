@@ -361,6 +361,24 @@
     rpc:(nome,args)=>{
       if(nome==='assegna_progressivo')
         return Promise.resolve({data:assegnaProgressivo(args&&args.fattura),error:null});
+      /* Migrazione 050: le righe di una copia tornano senza far scattare i
+         trigger (qui: senza le imitazioni dei trigger), le esistenti restano
+         o si sovrascrivono. Solo l'admin; profiles no. */
+      if(nome==='ripristina_righe'){
+        const me=(DB.profiles||[]).find(p=>p.id===UID);
+        if(!me||me.role!=='admin') return Promise.resolve({data:null,error:{message:'Il ripristino lo fa solo un amministratore'}});
+        if(args.tabella==='profiles'||args.tabella==='notifiche') return Promise.resolve({data:null,error:{message:'Questa tabella non si ripristina: '+args.tabella}});
+        if(window.__RIPR_ERR&&window.__RIPR_ERR(args)) return Promise.resolve({data:null,error:{message:'riga rifiutata per prova'}});
+        DB[args.tabella]=DB[args.tabella]||[];
+        let n=0;
+        (args.righe||[]).forEach(r=>{ if(!r||r.id==null) return;
+          const i=DB[args.tabella].findIndex(x=>x.id===r.id);
+          if(i<0){ DB[args.tabella].push(clone(r)); n++; }
+          else if(args.sovrascrivi){ DB[args.tabella][i]=Object.assign({},DB[args.tabella][i],clone(r)); n++; } });
+        if(args.tabella==='commessa_fattura_righe') DB.commessa_fatture.forEach(f=>ricalcolaImponibile(f.id));
+        if(args.tabella==='commessa_contratti') (args.righe||[]).forEach(c=>c&&ricalcolaImporto(c.project_id));
+        return Promise.resolve({data:n,error:null});
+      }
       return Promise.resolve({data:null,error:{message:'rpc sconosciuta: '+nome}});
     },
     auth:{
