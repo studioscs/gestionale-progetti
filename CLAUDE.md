@@ -79,6 +79,22 @@ richiesta non le ripete. Il dettaglio di ogni funzione è nel `README.md`.
 - Il database finto dei test (`test/mock.js`) deve **imitare i trigger**
   delle migrazioni che cambiano dati da soli: aggiornalo insieme alla
   migrazione.
+- **Copia di sicurezza e ripristino seguono sempre lo schema.** A ogni
+  modifica del database, nello stesso lavoro:
+  - tabella nuova → aggiungila in `index.html` a `TABELLE_COPIA`, a
+    `ORDINE_RIPRISTINO` (dopo le tabelle che richiama, prima di quelle che la
+    richiamano) e a `NOMI_TABELLE`, e nell'elenco `consentite` di
+    `public.ripristina_righe` con una nuova migrazione che ridefinisce la
+    funzione (partendo dalla 050 o dall'ultima che l'ha ridefinita);
+  - trigger nuovo che crea o cambia dati: verifica che durante il ripristino
+    vada spento (lo fa da sola la funzione) o, se ricalcola una somma da
+    tutte le righe, aggiungilo a `restano_accesi`;
+  - colonna nuova: non serve niente (la copia prende tutte le colonne, il
+    ripristino di una copia vecchia lascia il valore predefinito), ma se è
+    obbligatoria senza valore predefinito il ripristino delle copie vecchie
+    fallirebbe: dagliene uno.
+  Il test `logic.js` («COPIA DI SICUREZZA E RIPRISTINO») fallisce se una
+  tabella usata dall'app manca da uno di questi elenchi.
 
 ## Test
 
@@ -104,6 +120,10 @@ XSD della FatturaPA non è nel repository (è quello ufficiale, con
   fatturare subito è una **richiesta di fatturazione** (`richiesta_at`), fatta
   da una persona o nata dalla chiusura della fase agganciata; sparisce se la
   fase si riapre (047).
+- **Copia di sicurezza** (solo admin): scarica tutte le tabelle in un JSON da
+  salvare sul NAS; **Ripristina da copia** (050) rimette le righe mancanti o
+  anche le modifiche, non cancella mai niente e prima scarica la copia di
+  adesso.
 - **Fasi e commessa** (048): tutte le fasi completate → commessa
   «completato»; commessa completata → fasi completate; fase riaperta →
   commessa di nuovo «attivo».

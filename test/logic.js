@@ -1125,5 +1125,31 @@ t('e il percorso la propone con la sua condizione',pc.pratiche.some(x=>x.k==='ca
 t('in ordine di sequenza',pc.pratiche.every((x,i,a)=>!i||(a[i-1].ord||50)<=(x.ord||50)),pc.pratiche.map(x=>x.ord));
 ctx.S.pratCat=[];
 
+/* Copia di sicurezza e ripristino devono seguire lo schema del gestionale:
+   una tabella nuova che l'app usa ma che la copia non scarica, o che il
+   ripristino non sa rimettere, si perderebbe proprio il giorno che serve. */
+console.log('\n— COPIA DI SICUREZZA E RIPRISTINO —');
+{
+  const elenco=nome=>{ const m=h.match(new RegExp('const '+nome+' = \\[([\\s\\S]*?)\\];'));
+    return m?[...m[1].matchAll(/'([a-z_]+)'/g)].map(x=>x[1]):[]; };
+  const copia=elenco('TABELLE_COPIA'), ordine=elenco('ORDINE_RIPRISTINO');
+  const nomi=(()=>{ const m=h.match(/const NOMI_TABELLE = \{([\s\S]*?)\};/); return m?[...m[1].matchAll(/([a-z_]+):'/g)].map(x=>x[1]):[]; })();
+  const usate=[...new Set([...h.matchAll(/\bSB\.from\('([a-z_]+)'\)/g)].map(x=>x[1]))].filter(n=>!/^v_/.test(n));
+  const NON_RIPRISTINATE=['profiles','notifiche'];
+  const sqlDir=require('path').join(__dirname,'..','sql');
+  const conFunzione=fs.readdirSync(sqlDir).filter(f=>/^\d{3}_.*\.sql$/.test(f)&&!/^99/.test(f)).sort()
+    .filter(f=>/function public\.ripristina_righe/.test(fs.readFileSync(require('path').join(sqlDir,f),'utf8')));
+  const ultima=conFunzione[conFunzione.length-1];
+  const consentite=ultima?(()=>{ const s=fs.readFileSync(require('path').join(sqlDir,ultima),'utf8');
+    const m=s.match(/consentite constant text\[\] := array\[([\s\S]*?)\];/); return m?[...m[1].matchAll(/'([a-z_]+)'/g)].map(x=>x[1]):[]; })():[];
+  t('ogni tabella che l’app usa è nella copia (TABELLE_COPIA)',usate.every(n=>copia.includes(n)),usate.filter(n=>!copia.includes(n)));
+  t('ogni tabella della copia si ripristina (ORDINE_RIPRISTINO), salvo utenti e notifiche',
+    copia.filter(n=>!NON_RIPRISTINATE.includes(n)).every(n=>ordine.includes(n)),copia.filter(n=>!NON_RIPRISTINATE.includes(n)&&!ordine.includes(n)));
+  t('ogni tabella del ripristino ha il suo nome leggibile (NOMI_TABELLE)',ordine.every(n=>nomi.includes(n)),ordine.filter(n=>!nomi.includes(n)));
+  t('la funzione del database ('+ultima+') accetta le stesse tabelle del ripristino',
+    ordine.length&&ordine.every(n=>consentite.includes(n))&&consentite.every(n=>ordine.includes(n)),
+    {manca_nel_db:ordine.filter(n=>!consentite.includes(n)),manca_nell_app:consentite.filter(n=>!ordine.includes(n))});
+}
+
 console.log(fail?'\n'+fail+' TEST FALLITI':'\nTUTTI I TEST PASSATI');
 process.exit(fail?1:0);
