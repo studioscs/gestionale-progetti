@@ -449,6 +449,32 @@ il problema si ripete, richiama il file con un parametro, ad esempio
 
 ---
 
+## Copia di sicurezza
+
+Il piano gratuito di Supabase **non fa copie di sicurezza**: un dato cancellato
+per sbaglio non si recupera. Per questo l'amministratore ha nel menu a sinistra,
+sezione *Amministrazione*, il tasto **💾 Copia di sicurezza**:
+
+- un clic scarica `SCS-gestionale-copia-AAAA-MM-GG.json` con **tutte** le
+  tabelle del gestionale (commesse, fasi, attività, scaglioni e voci, contratti,
+  SAL, varianti, spese, clienti, preventivi, costi, utenti…). Le tabelle si
+  leggono a pagine da 1000 righe, quindi anche le migliaia di attività ci sono
+  tutte;
+- il file va **salvato sul server dello studio** (NAS), per esempio una volta a
+  settimana: è la copia indipendente da Supabase;
+- se una tabella non si riesce a leggere la copia si scarica lo stesso, con
+  l'elenco degli errori nel file, e un messaggio lo dice subito;
+- quando l'ultima copia ha più di **7 giorni** (o non ce n'è nessuna) il tasto
+  mostra un **«!»** rosso e all'apertura dell'app compare un promemoria. La data
+  dell'ultima copia è ricordata **sul dispositivo** da cui la si scarica.
+
+Il file non si ricarica dall'app: in caso di bisogno i dati si rimettono nel
+database a partire dal file (si fa una volta, con calma, tabella per tabella).
+I file caricati nello Storage non sono nella copia: oggi ci sono solo le
+cartelle vuote delle commesse.
+
+---
+
 ## Bug corretti rispetto alla versione precedente
 
 | Punto | Problema |

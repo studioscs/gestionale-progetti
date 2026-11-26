@@ -4107,6 +4107,38 @@ function launchOpts(){
     must(!g.nuovoCosto&&!g.pagato&&!g.nuovoPrev&&!g.dup&&!g.soll&&!g.saldo,'restano pulsanti di modifica: '+JSON.stringify(g));
   });
 
+  /* ---------------- COPIA DI SICUREZZA ---------------- */
+  await t('copia di sicurezza: l’admin scarica tutte le tabelle, anche oltre le 1000 righe',async()=>{
+    const prima=await p.evaluate(()=>{ try{ localStorage.removeItem(CHIAVE_COPIA); }catch(e){}
+      avvisoCopia(false);
+      /* 2500 attivita' finte: la lettura deve andare a pagine */
+      window.__finte=[]; for(let i=0;i<2500;i++) window.__finte.push({id:'fin-'+String(i).padStart(5,'0'),title:'finta '+i,status:'da_fare'});
+      __DB.tasks.push(...window.__finte);
+      return {vis:el('sn-copia').style.display, bang:el('b-copia').style.display, tasks:__DB.tasks.length, proj:__DB.projects.length}; });
+    must(prima.vis!=='none','l’admin non vede il tasto');
+    must(prima.bang!=='none','senza copie il tasto non segnala «!»');
+    const [dl]=await Promise.all([p.waitForEvent('download',{timeout:15000}).catch(()=>null),p.click('#sn-copia')]);
+    must(dl,'nessun download: '+ultimoDialogo);
+    must(/^SCS-gestionale-copia-\d{4}-\d{2}-\d{2}\.json$/.test(dl.suggestedFilename()),'nome file: '+dl.suggestedFilename());
+    const j=JSON.parse(fs.readFileSync(await dl.path(),'utf8'));
+    await p.waitForTimeout(300);
+    const dopo=await p.evaluate(()=>{ const r={bang:el('b-copia').style.display,data:ultimaCopia()};
+      __DB.tasks=__DB.tasks.filter(x=>!/^fin-/.test(x.id)); return r; });
+    must(j.tabelle.tasks.length===prima.tasks,'attività nel file '+j.tabelle.tasks.length+' su '+prima.tasks);
+    must(new Set(j.tabelle.tasks.map(x=>x.id)).size===prima.tasks,'attività doppie nel file');
+    must(j.tabelle.projects.length===prima.proj,'commesse nel file '+j.tabelle.projects.length+' su '+prima.proj);
+    must(j.conteggi.tasks===prima.tasks&&j.versione_app&&j.creata_il,'intestazione: '+JSON.stringify({c:j.conteggi.tasks,v:j.versione_app}));
+    must(Object.keys(j.errori).length===0,'errori: '+JSON.stringify(j.errori));
+    { const serve=['profiles','projects','tasks','commessa_fasi','commessa_fatture','commessa_fattura_righe','clienti','preventivi']; must(serve.every(k=>Array.isArray(j.tabelle[k])),'mancano tabelle: '+serve.filter(k=>!Array.isArray(j.tabelle[k]))); }
+    must(dopo.bang==='none'&&dopo.data,'dopo la copia resta l’avviso: '+JSON.stringify(dopo));
+  });
+  await t('copia di sicurezza: chi non è admin non vede il tasto',async()=>{
+    const g=await p.evaluate(()=>{ const prima=S.prof.role; S.prof.role='collaboratore';
+      el('sn-copia').style.display=isAd()?'':'none'; const r=el('sn-copia').style.display;
+      S.prof.role=prima; el('sn-copia').style.display=''; return r; });
+    must(g==='none','il collaboratore vede il tasto');
+  });
+
   /* ---------------- FIRME DEL CLIENTE SENZA L'INCARICO ---------------- */
   await t('i percorsi non chiedono più la firma dell incarico: è il preventivo',async()=>{
     const g=await p.evaluate(()=>{ const v=[]; Object.keys(TEMPLATES).forEach(k=>TEMPLATES[k].fasi.forEach(f=>f.att.forEach(a=>{

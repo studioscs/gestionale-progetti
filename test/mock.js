@@ -219,7 +219,7 @@
         eventi_totali:DB.pratica_eventi.filter(e=>e.pratica_id===p.id).length}));
     }
     let rows=()=>clone(DB[table]||[]);
-    const flt=[]; let ord=null, lim=null, single=false, maybe=false;
+    const flt=[]; let ord=null, lim=null, off=0, single=false, maybe=false;
     const api={
       /* Come PostgREST: con un elenco di colonne arrivano SOLO quelle. Prima il
          finto database restituiva sempre tutto, e un elenco dimenticato
@@ -230,6 +230,7 @@
         return api; },
       order(c,o){ ord={c,asc:!o||o.ascending!==false}; return api; },
       limit(n){ lim=n; return api; },
+      range(a,b){ off=a; lim=b-a+1; return api; },
       eq(c,v){ flt.push(r=>r[c]===v); return api; },
       neq(c,v){ flt.push(r=>r[c]!==v); return api; },
       in(c,a){ flt.push(r=>a.includes(r[c])); return api; },
@@ -327,7 +328,7 @@
           if(ord) d.sort((a,b)=>{const x=a[ord.c],y=b[ord.c];
             if(x==null&&y==null)return 0; if(x==null)return 1; if(y==null)return -1;
             return (x>y?1:x<y?-1:0)*(ord.asc?1:-1);});
-          if(lim) d=d.slice(0,lim);
+          if(lim) d=d.slice(off,off+lim);
           if(api._cols){
             /* una colonna che il database non ha (migrazione non eseguita) e' un errore */
             const assenti=window.__COLONNE_ASSENTI||[];
