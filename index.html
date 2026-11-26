@@ -7,11 +7,11 @@
 <!-- App installabile (Mac, Windows, iPhone): vedi manifest.webmanifest e sw.js -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F3864">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=2">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="SCS Gestionale">
+<meta name="apple-mobile-web-app-title" content="Commesse SCS">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
@@ -144,8 +144,36 @@ textarea.fc { resize:vertical; min-height:64px; }
   .sn { padding:12px 16px; font-size:14px; min-height:44px; }
   .sout { padding:10px 0; }
 
-  #top { padding:0 12px; gap:8px; }
+  /* La barra in alto su due righe: sopra menu, titolo, campanella e
+     ricarica; sotto i pulsanti della pagina, che vanno a capo se serve.
+     Prima stava tutto su una riga: il titolo si stringeva in una colonna
+     di una parola per riga e gli ultimi pulsanti finivano fuori dal bordo. */
+  #top { padding:6px 12px 8px; gap:6px 8px; flex-wrap:wrap; min-height:0; }
+  #top > div:not(#top-act) { flex:1 1 0; min-width:0; }
   #top h2 { font-size:15px; overflow:hidden; text-overflow:ellipsis; }
+  #crumb { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11.5px; }
+  #top-act { order:10; flex:1 1 100%; margin-left:0; flex-wrap:wrap; gap:6px; }
+  #top-act:empty { display:none; }
+  #top-act .btn { flex:0 1 auto; }
+  #top-act .srch { width:100%; flex:1 1 100%; }
+
+  /* Una attivita': casella e titolo sulla prima riga, a tutta larghezza;
+     assegna, scadenza e dettagli sotto. In fila, al titolo restavano pochi
+     punti e andava a capo una parola per riga. */
+  /* (con #page davanti: le regole generali di .it e .kpi stanno piu' sotto
+     nel file e, a parita' di peso, vincerebbero loro) */
+  #page .it { flex-wrap:wrap; row-gap:4px; }
+  #page .it-m { flex:1 1 calc(100% - 34px); }
+  #page .it > .pick:first-of-type { margin-left:29px; }
+
+  /* Le cifre grandi dei riquadri: «24.000,00 €» deve stare su una riga */
+  #page .kpi { padding:12px; }
+  #page .kpi-v { font-size:21px; white-space:nowrap; }
+
+  /* Gli avvisi in alto, sotto la barra: in basso coprivano i pulsanti
+     «Salva» delle finestre. Si chiudono anche con un tocco. */
+  #tc { top:calc(8px + env(safe-area-inset-top)) !important; bottom:auto !important; left:10px !important; right:10px !important; }
+  #tc .toast { max-width:none; cursor:pointer; pointer-events:auto; }
   #page { padding:12px; }
 
   /* Due colonne su uno schermo largo come una mano non sono due colonne:
@@ -1612,7 +1640,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.26.02';
+const VERSIONE = '2026.11.26.03';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1791,6 +1819,7 @@ function toast(msg, t) {
   d.className = 'toast';
   d.style.background = t === 'error' ? '#B02A37' : t === 'success' ? '#198754' : t === 'warning' ? '#B35C00' : '#1F3864';
   d.textContent = msg;
+  d.title = 'Tocca per chiudere'; d.onclick = () => d.remove();
   el('tc').appendChild(d);
   /* gli avvisi da leggere restano di piu' */
   setTimeout(() => d.remove(), t === 'error' || t === 'warning' ? 6000 : 3200);

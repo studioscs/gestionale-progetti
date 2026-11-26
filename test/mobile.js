@@ -9,6 +9,8 @@ function launchOpts(){for(const q of ['/opt/pw-browsers/chromium-1194/chrome-lin
 const SCHERMI=[
   ['iPhone SE',           320,568,  'telefono'],
   ['iPhone 13',           390,664,  'telefono'],
+  ['iPhone 14',           390,844,  'telefono'],
+  ['Android grande',      412,915,  'telefono'],
   ['iPhone orizzontale',  664,390,  'telefono'],
   ['iPad mini verticale', 768,1024, 'tavoletta'],
   ['iPad Pro verticale',  834,1194, 'tavoletta'],
@@ -105,6 +107,26 @@ const SCHERMI=[
         await p.tap('#sidevelo',{position:{x:w-10,y:h-10}}); await p.waitForTimeout(350);
         must(!(await p.evaluate(()=>document.getElementById('side').classList.contains('aperto'))),
           'il velo non richiude il cassetto');
+      });
+      await t(nome+': la barra in alto: titolo su una riga e pulsanti dentro lo schermo',async()=>{
+        const fuori=[];
+        for(const pg of ['oggi','fatturare','preventivi','costi']){
+          await p.evaluate(x=>{ S.prof.role='admin'; S.prof.vede_tutto=true; go(x); },pg); await p.waitForTimeout(250);
+          const g=await p.evaluate(()=>{ const h=document.getElementById('ptitle').getBoundingClientRect();
+            const b=[...document.querySelectorAll('#top button, #top-act > *')].filter(x=>x.getBoundingClientRect().width>0)
+              .filter(x=>{ const r=x.getBoundingClientRect(); return r.left<-1||r.right>innerWidth+1; }).length;
+            return {alto:Math.round(h.height), b}; });
+          if(g.alto>26||g.b) fuori.push(pg+' '+JSON.stringify(g));
+        }
+        must(!fuori.length,fuori.join(' | '));
+      });
+      await t(nome+': gli avvisi stanno in alto e non coprono i pulsanti delle finestre',async()=>{
+        const g=await p.evaluate(()=>{ toast('Prova avviso','warning'); const r=document.querySelector('#tc .toast').getBoundingClientRect();
+          return {top:Math.round(r.top), h:innerHeight}; });
+        must(g.top<g.h/3,'l avviso compare in basso: '+JSON.stringify(g));
+        await p.tap('#tc .toast'); await p.waitForTimeout(100);
+        must(await p.evaluate(()=>!document.querySelector('#tc .toast')),'toccando l avviso non si chiude');
+        await p.evaluate(()=>go('projects'));
       });
       await t(nome+': i campi non fanno ingrandire la pagina da soli',async()=>{
         /* Safari di iOS ingrandisce quando si tocca un campo sotto i 16px */

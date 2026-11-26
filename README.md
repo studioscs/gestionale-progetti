@@ -452,6 +452,17 @@ accesso il collegamento *Installa l'app su questo dispositivo*):
 - **iPhone e iPad** (con Safari): pulsante *Condividi* → *Aggiungi alla
   schermata Home* → *Aggiungi*.
 
+L'icona è quella dello studio con la scritta **COMMESSE** sotto (come l'app
+dei cantieri, che ha **CANTIERI**), e sulla schermata Home il nome è
+*Commesse SCS*. Chi aveva già aggiunto l'icona prima della versione
+2026.11.26.03 la toglie e la rimette per vedere quella nuova.
+
+**Sul telefono** (iPhone, Android, larghezza fino a 760 punti) la barra in alto
+va su due righe — titolo, campanella e ricarica sopra, pulsanti della pagina
+sotto — le attività mettono il titolo a tutta larghezza e assegna/scadenza
+sotto, le cifre dei riquadri stanno su una riga, e gli avvisi compaiono in
+alto (si chiudono con un tocco) invece di coprire i pulsanti «Salva».
+
 Il pulsante sparisce quando il gestionale è già aperto come app. Gli
 aggiornamenti arrivano da soli: l'app chiede sempre prima la versione
 pubblicata e solo senza rete apre l'ultima copia salvata. Il *service worker*
@@ -611,7 +622,8 @@ metà giro e il rumore che ne segue nasconderebbe i guasti veri.
 
 ### `mobile.js` — iPad e iPhone
 
-Rifà il giro su **sei schermi** — iPhone SE, iPhone 13, iPhone in orizzontale,
+Rifà il giro su **otto schermi** — iPhone SE, iPhone 13, iPhone 14, un Android
+grande, iPhone in orizzontale,
 iPad mini e iPad Pro in verticale, iPad in orizzontale — toccando col dito, non
 cliccando col mouse. Su ognuno verifica che aprendo una commessa la scheda si
 apra davvero, che in tutte e sei le sue linguette **niente finisca oltre il
@@ -622,7 +634,9 @@ diventi un cassetto, che si arrivi in fondo al menu, che si richiuda da sola
 quando scegli dove andare, che ogni voce sia alta almeno 44 punti — la misura
 sotto la quale un dito sbaglia bersaglio — e che nessun campo abbia il testo
 sotto i 16 punti, perché sotto quella soglia Safari di iOS ingrandisce la pagina
-da solo appena tocchi una casella.
+da solo appena tocchi una casella. Controlla anche la **barra in alto** (titolo
+su una riga, pulsanti dentro lo schermo) e che gli **avvisi** compaiano in alto
+e si chiudano con un tocco, senza coprire i pulsanti delle finestre.
 
 36 controlli.
 

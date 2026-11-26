@@ -8,7 +8,7 @@
    pubblicato arriva subito. Solo se la rete non risponde si usa l'ultima
    copia salvata.
    =========================================================================== */
-const CACHE = 'scs-gestionale-v1';
+const CACHE = 'scs-gestionale-v2';
 const FILE = ['./', './manifest.webmanifest', './icons/icona-192.png', './icons/icona-512.png',
               './icons/apple-touch-icon.png', './icons/favicon-32.png'];
 

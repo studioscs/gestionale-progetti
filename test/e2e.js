@@ -3620,7 +3620,7 @@ function launchOpts(){
     const fs=require('fs'), path=require('path'), root=path.join(__dirname,'..');
     const m=JSON.parse(fs.readFileSync(path.join(root,'manifest.webmanifest'),'utf8'));
     must(m.display==='standalone'&&m.start_url==='./','manifest: '+JSON.stringify(m));
-    m.icons.forEach(i=>must(fs.existsSync(path.join(root,i.src)),'icona mancante: '+i.src));
+    m.icons.forEach(i=>must(fs.existsSync(path.join(root,i.src.split('?')[0])),'icona mancante: '+i.src));
     must(fs.existsSync(path.join(root,'sw.js'))&&fs.existsSync(path.join(root,'icons','apple-touch-icon.png')),'manca sw.js o l icona per iPhone');
     const wf=fs.readFileSync(path.join(root,'.github','workflows','pages.yml'),'utf8');
     must(/manifest\.webmanifest/.test(wf)&&/sw\.js/.test(wf)&&/icons/.test(wf),'la pubblicazione non copia i file dell app');
