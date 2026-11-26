@@ -3616,6 +3616,19 @@ function launchOpts(){
     must(r.conSplit===r.senzaIva&&r.conSplit<r.senza,'lordo con split: '+JSON.stringify(r));
     must(r.senza===r.att.totale,'lordo senza split: '+JSON.stringify(r));
   });
+  await t('app installabile: manifest, icone, service worker e istruzioni',async()=>{
+    const fs=require('fs'), path=require('path'), root=path.join(__dirname,'..');
+    const m=JSON.parse(fs.readFileSync(path.join(root,'manifest.webmanifest'),'utf8'));
+    must(m.display==='standalone'&&m.start_url==='./','manifest: '+JSON.stringify(m));
+    m.icons.forEach(i=>must(fs.existsSync(path.join(root,i.src)),'icona mancante: '+i.src));
+    must(fs.existsSync(path.join(root,'sw.js'))&&fs.existsSync(path.join(root,'icons','apple-touch-icon.png')),'manca sw.js o l icona per iPhone');
+    const wf=fs.readFileSync(path.join(root,'.github','workflows','pages.yml'),'utf8');
+    must(/manifest\.webmanifest/.test(wf)&&/sw\.js/.test(wf)&&/icons/.test(wf),'la pubblicazione non copia i file dell app');
+    const r=await p.evaluate(()=>{ PROMPT_INSTALL=null; installaApp(); const t=el('mi-testo').textContent; closeM('m-install');
+      return {t, link:!!document.querySelector('link[rel=manifest]'), apple:!!document.querySelector('link[rel=apple-touch-icon]')}; });
+    must(r.link&&r.apple,'mancano i collegamenti nella pagina');
+    must(/Installa|Aggiungi/.test(r.t),'istruzioni vuote: '+r.t);
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });

@@ -21,6 +21,8 @@ richiesta non le ripete. Il dettaglio di ogni funzione è nel `README.md`.
 
 - **`index.html`**: l'intera applicazione (HTML + CSS + JavaScript), nessun
   build. Usa Supabase dal CDN e pdfmake per i PDF.
+- **`manifest.webmanifest`, `sw.js`, `icons/`**: app installabile (Mac,
+  Windows, iPhone). Il service worker non salva mai dati del database.
 - **`sql/NNN_*.sql`**: migrazioni del database Supabase, numerate.
 - **`supabase/functions/ipa/`**: funzione Supabase per i dati dell'Indice PA.
 - **`test/`**: test Playwright e Node con un database finto (`mock.js`).

@@ -436,6 +436,29 @@ aggiungerne di fisse a quelle guidate dalle condizioni.
 
 ---
 
+## Installare l'app su Mac, Windows e iPhone
+
+Il gestionale si può installare come un'app: icona nel Dock, nel menu Start o
+sulla schermata Home, e si apre in una finestra sua, senza la barra del
+browser. È lo stesso sito: dati, accesso e aggiornamenti sono gli stessi, non
+c'è niente da scaricare a parte l'icona.
+
+Nel menu a sinistra, in fondo, c'è **📲 Installa l'app** (e nella pagina di
+accesso il collegamento *Installa l'app su questo dispositivo*):
+
+- **Mac e Windows con Chrome o Edge**: un clic su *Installa l'app* e poi
+  *Installa*. In alternativa l'icona *Installa* nella barra dell'indirizzo.
+- **Mac con Safari**: menu *File* → *Aggiungi al Dock…* → *Aggiungi*.
+- **iPhone e iPad** (con Safari): pulsante *Condividi* → *Aggiungi alla
+  schermata Home* → *Aggiungi*.
+
+Il pulsante sparisce quando il gestionale è già aperto come app. Gli
+aggiornamenti arrivano da soli: l'app chiede sempre prima la versione
+pubblicata e solo senza rete apre l'ultima copia salvata. Il *service worker*
+(`sw.js`) non salva mai dati del database: serve solo a rendere l'app
+installabile. I file sono `manifest.webmanifest`, `sw.js` e la cartella
+`icons/`, pubblicati insieme a `index.html`.
+
 ## Sto usando la versione giusta?
 
 In fondo alla barra laterale (e sotto il logo nella schermata di accesso) compare

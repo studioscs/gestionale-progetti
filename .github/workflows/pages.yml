@@ -38,12 +38,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Il sito e' tutto qui: index.html alla radice. Le cartelle sql/ e test/
+      # Il sito e' index.html alla radice, piu' i file dell'app installabile. Le cartelle sql/ e test/
       # non servono ai collaboratori e restano fuori dalla pubblicazione.
       - name: Prepara i file da pubblicare
         run: |
           mkdir -p _site
           cp index.html _site/
+          # app installabile: manifest, service worker e icone (vedi sw.js)
+          cp manifest.webmanifest sw.js _site/
+          cp -r icons _site/
           cp README.md  _site/ 2>/dev/null || true
           echo "Pubblicato: $(grep -o "const VERSIONE = '[^']*'" _site/index.html)"
 

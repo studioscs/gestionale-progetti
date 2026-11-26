@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>SCS Gestionale Progetti</title>
+<!-- App installabile (Mac, Windows, iPhone): vedi manifest.webmanifest e sw.js -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F3864">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SCS Gestionale">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
@@ -421,6 +430,7 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
       <h1>SCS Gestionale Progetti</h1>
       <p>Studio Tecnico SCS S.r.l. tra Professionisti</p>
       <p id="aver" style="font-size:10px;color:var(--mut2);margin-top:6px"></p>
+      <p><a href="#" id="a-install" style="display:none;font-size:12px;color:var(--blue)">&#128242; Installa l'app su questo dispositivo</a></p>
     </div>
     <div class="aerr" id="aerr"></div>
     <div id="loginpanel">
@@ -498,6 +508,7 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
       <button class="sn" id="sn-ripr" type="button" title="Rimette nel gestionale i dati di una copia di sicurezza scaricata in passato"><span class="snic">&#8634;</span>Ripristina da copia</button>
     </div>
     <div class="sfoot">
+      <button class="sout" id="sn-install" type="button" style="display:none;margin-bottom:6px" title="Installa il gestionale come app su questo computer o telefono">&#128242; Installa l'app</button>
       <button class="sout" id="sout">&#8617; Esci dall'account</button>
       <div id="sver" style="font-size:10px;color:rgba(255,255,255,.28);margin-top:6px"></div>
     </div>
@@ -641,6 +652,14 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
   </div>
 </div>
 
+<!-- Installare l'app (Mac, Windows, iPhone) -->
+<div class="ov ro-ok" id="m-install">
+  <div class="modal" style="max-width:520px">
+    <div class="mh"><h3>Installa l&rsquo;app</h3><button class="mx" data-close="m-install">&#10005;</button></div>
+    <div class="mb" id="mi-testo" style="font-size:13.5px;line-height:1.55"></div>
+    <div class="mf"><button class="btn" data-close="m-install">Chiudi</button></div>
+  </div>
+</div>
 <!-- Solleciti di pagamento e messa in mora -->
 <div class="ov" id="m-soll">
   <div class="modal" style="max-width:560px">
@@ -1593,7 +1612,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.26.01';
+const VERSIONE = '2026.11.26.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -7823,6 +7842,52 @@ const bottoneSolleciti = f => sollecitabile(f) && vedeTutto() && canW()
   ? '<button class="btn btn-xs' + (f.messa_in_mora ? ' btn-d' : '') + '" data-soll="' + f.id + '" title="Solleciti di pagamento e messa in mora">'
     + (f.messa_in_mora ? '&#9878;&#65039;' : '&#128276;') + (passoSollecito(f) ? ' ' + passoSollecito(f) : '') + '</button> ' : '';
 
+/* ---------------------------------------------------------------------------
+   APP INSTALLABILE
+   Il gestionale si installa come un'app (icona sul Dock, nel menu Start, sulla
+   schermata Home) e si apre in una finestra sua, senza barra del browser. Il
+   service worker (sw.js) serve solo a questo e non salva dati. Chrome ed Edge
+   (Mac e Windows) installano con un clic; Safari va guidato a mano.
+   --------------------------------------------------------------------------- */
+let PROMPT_INSTALL = null;
+const giaInstallata = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const suIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const suSafari = () => /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|CriOS|Edg|FxiOS|Firefox/.test(navigator.userAgent);
+function mostraInstalla() {
+  const vedi = !giaInstallata() && (!!PROMPT_INSTALL || suIOS() || suSafari());
+  ['sn-install', 'a-install'].forEach(id => { const b = el(id); if (b) b.style.display = vedi ? '' : 'none'; });
+}
+function istruzioniInstalla() {
+  if (suIOS()) return '<p><b>Su iPhone e iPad</b> (con Safari):</p><ol style="margin:8px 0 0 20px">'
+    + '<li>tocca il pulsante <b>Condividi</b> (il quadrato con la freccia verso l&rsquo;alto);</li>'
+    + '<li>scorri e scegli <b>Aggiungi alla schermata Home</b>;</li>'
+    + '<li>conferma con <b>Aggiungi</b>.</li></ol>'
+    + '<p style="margin-top:10px;color:var(--mut)">Se usi Chrome sull&rsquo;iPhone, apri prima il sito in Safari.</p>';
+  if (suSafari()) return '<p><b>Su Mac con Safari</b>:</p><ol style="margin:8px 0 0 20px">'
+    + '<li>menu <b>File</b> &rarr; <b>Aggiungi al Dock&hellip;</b>;</li><li>conferma con <b>Aggiungi</b>.</li></ol>'
+    + '<p style="margin-top:10px;color:var(--mut)">L&rsquo;icona compare nel Dock e nella cartella Applicazioni.</p>';
+  return '<p><b>Su Mac e Windows con Chrome o Edge</b>: nella barra dell&rsquo;indirizzo, a destra, c&rsquo;&egrave; l&rsquo;icona '
+    + '<b>Installa</b> (un monitor con la freccia). In alternativa: menu &#8942; &rarr; <b>Trasmetti, salva e condividi</b> '
+    + '&rarr; <b>Installa pagina come app</b> (Chrome), oppure menu &hellip; &rarr; <b>App</b> &rarr; <b>Installa questo sito come app</b> (Edge).</p>';
+}
+async function installaApp(e) {
+  if (e) e.preventDefault();
+  if (PROMPT_INSTALL) {
+    PROMPT_INSTALL.prompt();
+    try { await PROMPT_INSTALL.userChoice; } catch (x) {}
+    PROMPT_INSTALL = null; mostraInstalla(); return;
+  }
+  el('mi-testo').innerHTML = istruzioniInstalla();
+  openM('m-install');
+}
+function preparaInstalla() {
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
+    navigator.serviceWorker.register('sw.js').catch(x => console.warn('service worker', x));
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); PROMPT_INSTALL = e; mostraInstalla(); });
+  window.addEventListener('appinstalled', () => { PROMPT_INSTALL = null; mostraInstalla(); toast('App installata', 'success'); });
+  ['sn-install', 'a-install'].forEach(id => { const b = el(id); if (b) b.onclick = installaApp; });
+  mostraInstalla();
+}
 let SOLL = null;
 function apriSolleciti(fid) {
   const f = byId(S.fatture, fid); if (!f) return;
@@ -14780,6 +14845,7 @@ async function saveUser() {
 document.addEventListener('DOMContentLoaded', () => {
   S.openGrp = new Set();
   el('aver').textContent = 'versione ' + VERSIONE;
+  preparaInstalla();
 
   el('abtn').onclick = doLogin;
   el('apass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
