@@ -3681,6 +3681,33 @@ function launchOpts(){
     await p.selectOption('#fz-resp',''); await p.waitForTimeout(200);
     await p.evaluate(async x=>{ for(const id of [x.a,x.b]){ await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id); } S.fzResp=''; await loadAll(true); },ids);
   });
+  await t('dati dello studio: si cambiano dalla pagina e i documenti li usano',async()=>{
+    await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; go('studio'); }); await p.waitForTimeout(300);
+    must(await p.inputValue('[data-st="polizzaNumero"]')==='PI-00KS4T2550','numero di polizza di partenza: '+await p.inputValue('[data-st="polizzaNumero"]'));
+    must(await p.inputValue('[data-st="telefono"]')==='0717574632','telefono di partenza');
+    await p.fill('[data-st="polizzaNumero"]','NUOVA-123'); await p.fill('[data-st="polizzaScadenza"]','2030-12-31');
+    await p.fill('[data-st="polizzaMassimale"]','5000000'); await p.fill('[data-st="telefono"]','071 999999');
+    must(/NUOVA-123/.test(await p.textContent('#st-pol')),'l anteprima della polizza non si aggiorna');
+    await p.click('#st-save'); await p.waitForTimeout(500);
+    const g=await p.evaluate(()=>({db:__DB.studio_impostazioni[0].dati, tel:STUDIO.telefono, pol:POLIZZA_STUDIO,
+      testo:compilaTesto('polizza {{polizza}} tel {{tel_studio}}',{immobile:'x'})}));
+    must(g.db.polizzaNumero==='NUOVA-123'&&g.db.telefono==='071 999999','non salvato nel database: '+JSON.stringify(g.db));
+    must(g.tel==='071 999999'&&/NUOVA-123/.test(g.pol)&&/31\/12\/2030/.test(g.pol)&&/5\.000\.000,00/.test(g.pol),'non applicato: '+g.pol);
+    must(/NUOVA-123/.test(g.testo)&&/071 999999/.test(g.testo),'il preventivo non usa i dati nuovi: '+g.testo);
+    /* ricaricando restano */
+    await p.evaluate(async()=>{ POLIZZA_STUDIO='x'; await loadAll(true); });
+    must(/NUOVA-123/.test(await p.evaluate(()=>POLIZZA_STUDIO)),'ricaricando i dati salvati si perdono');
+    /* IBAN sbagliato: non si salva */
+    await p.evaluate(()=>go('studio')); await p.waitForTimeout(200);
+    await p.fill('[data-st="iban"]','IT00SBAGLIATO'); await p.click('#st-save'); await p.waitForTimeout(300);
+    must(await p.evaluate(()=>!__DB.studio_impostazioni[0].dati.iban||__DB.studio_impostazioni[0].dati.iban!=='IT00SBAGLIATO'),'salvato un IBAN sbagliato');
+    /* il commercialista li vede ma non li cambia */
+    await p.evaluate(()=>{ S.prof.role='viewer'; S.prof.vede_tutto=true; go('studio'); }); await p.waitForTimeout(200);
+    must(!(await p.isVisible('#st-save'))&&await p.isDisabled('[data-st="telefono"]'),'il commercialista può modificare');
+    /* si torna ai dati di partenza */
+    await p.evaluate(async()=>{ S.prof.role='admin'; __DB.studio_impostazioni[0].dati={}; await loadAll(true); });
+    must(await p.evaluate(()=>STUDIO.telefono==='0717574632'&&/PI-00KS4T2550/.test(POLIZZA_STUDIO)),'non torna ai dati di partenza');
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });

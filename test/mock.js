@@ -9,7 +9,8 @@
     project_fasi:[], project_sottofasi:[], commessa_fatture:[], clienti:[],
     profili_costi:[], enti_pa:[], commessa_sal:[], commessa_varianti:[], task_messaggi:[],
     commessa_contratti:[], commessa_fattura_righe:[], commessa_spese:[], costi_generali:[],
-    preventivi:[], preventivo_modelli:[], pratiche_catalogo:[]
+    preventivi:[], preventivo_modelli:[], pratiche_catalogo:[],
+    studio_impostazioni:[{id:1,dati:{}}]
   };
   window.__DB=DB;
   /* Colonne che il database NON ha: simula una migrazione non eseguita, come fa
@@ -272,6 +273,8 @@
         const made=[];
         arr.forEach(x=>{ const dup=keys.length&&DB[table].some(r=>keys.every(k=>r[k]===x[k]));
           if(dup&&opt&&opt.ignoreDuplicates)return;
+          /* come Postgres: con il conflitto la riga esistente si aggiorna */
+          if(dup){ const r=DB[table].find(r=>keys.every(k=>r[k]===x[k])); Object.assign(r,x); made.push(r); return; }
           const rec=Object.assign({id:uid(),created_at:new Date().toISOString()},x); DB[table].push(rec); made.push(rec); });
         if(table==='commessa_fasi') made.forEach(f=>allineaFine(f.project_id));
         api._res=made; return api; },

@@ -531,6 +531,7 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
       <span class="slbl">Amministrazione</span>
       <button class="sn" data-page="redditivita"><span class="snic">&#128200;</span>Redditivit&agrave;</button>
       <button class="sn" data-page="costi"><span class="snic">&#129534;</span>Costi generali</button>
+      <button class="sn" data-page="studio" id="sn-studio"><span class="snic">&#127970;</span>Dati dello studio</button>
       <button class="sn" data-page="users" id="sn-users"><span class="snic">&#128101;</span>Utenti</button>
       <button class="sn" id="sn-copia" type="button" title="Scarica un file con tutti i dati del gestionale, da salvare sul server dello studio"><span class="snic">&#128190;</span>Copia di sicurezza<span class="snb alert" id="b-copia" style="display:none">!</span></button>
       <button class="sn" id="sn-ripr" type="button" title="Rimette nel gestionale i dati di una copia di sicurezza scaricata in passato"><span class="snic">&#8634;</span>Ripristina da copia</button>
@@ -1641,7 +1642,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.27.02';
+const VERSIONE = '2026.11.27.03';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1882,6 +1883,7 @@ const MIGRAZIONI = {
   '022_ripartizione_soci':   ['ripartisce'],
   '023_ore_esterni':         ['esterno','costo_totale'],
   '024_righe_fattura':       ['commessa_fattura_righe','fattura_id'],
+  '051_dati_studio':         ['studio_impostazioni'],
   '025_fine_commessa':       ['allinea_fine_commessa'],
   '026_note_fattura':        ['note_fattura'],
   '027_spese_anticipate':    ['commessa_spese','data_spesa'],
@@ -2924,7 +2926,7 @@ async function loadAll(silent) {
   const btn = el('refresh');
   if (!silent && btn) btn.innerHTML = '<span class="spin dk"></span>';
   try {
-    let [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm, rpc] = await Promise.all([
+    let [rp, rj, rt, rf, rr, rn, re, rc, rfa, rcl, rco, ren, rsa, rva, rms, rct, rfr, rsp, rcg, rpv, rpm, rpc, rsi] = await Promise.all([
       SB.from('profiles').select('*').order('full_name'),
       SB.from('projects').select('*').order('created_at', {ascending:false}),
       SB.from('tasks').select(TASK_COLS + TASK_COLS_PRATICA).order('sort_order'),
@@ -2948,7 +2950,8 @@ async function loadAll(silent) {
       SB.from('costi_generali').select('*').order('data_spesa', {ascending:false}),
       SB.from('preventivi').select('*').order('anno', {ascending:false}).order('progressivo', {ascending:false}),
       SB.from('preventivo_modelli').select('*').order('ordine'),
-      SB.from('pratiche_catalogo').select('*').order('ordine')
+      SB.from('pratiche_catalogo').select('*').order('ordine'),
+      SB.from('studio_impostazioni').select('*').eq('id', 1)
     ]);
     /* Migrazione 033 non eseguita: le attivita' si ricaricano senza il collegamento */
     let rtPrat = { error: null };
@@ -2987,6 +2990,9 @@ async function loadAll(silent) {
     S.preventivi  = rpv.error ? [] : (rpv.data || []);
     S.modelliPrev = rpm.error ? [] : (rpm.data || []);
     S.pratCat     = rpc.error ? [] : (rpc.data || []);
+    /* i dati dello studio salvati dall'app (051) prendono il posto di quelli scritti qui */
+    S.studioDati  = rsi.error ? null : (((rsi.data || [])[0] || {}).dati || {});
+    if (S.studioDati) applicaDatiStudio(S.studioDati);
     S.msgRecenti = rms.error ? [] : (rms.data || []);
     S.chatTask = {};
     S.msgRecenti.forEach(m => S.chatTask[m.task_id] = (S.chatTask[m.task_id] || 0) + 1);
@@ -3000,7 +3006,7 @@ async function loadAll(silent) {
                      [rsp, 'commessa_spese'],
                      [rcg, 'costi_generali'],
                      [rpv, 'preventivi'],      [rpm, 'preventivo_modelli'],
-                     [rpc, 'pratiche_catalogo'], [rtPrat, 'pratica_ruolo']]);
+                     [rpc, 'pratiche_catalogo'], [rsi, 'studio_impostazioni'], [rtPrat, 'pratica_ruolo']]);
     S.loaded = true;
     /* i costi ricorrenti dell'anno dopo, se e' il momento (una volta per caricamento) */
     if (!S.inRicorrenti) { S.inRicorrenti = true;
@@ -3859,6 +3865,7 @@ async function boot() {
   el('srl').textContent = isComm() ? 'Commerc.' : (({admin:'Admin', collaboratore:'Collab.', viewer:'Viewer'})[S.prof.role] || '');
   el('sec-admin').style.display = (isAd() || isComm()) ? 'block' : 'none';
   el('sn-users').style.display = isAd() ? '' : 'none';
+  el('sn-studio').style.display = (isAd() || isComm()) ? '' : 'none';
   el('sn-copia').style.display = isAd() ? '' : 'none';
   el('sn-ripr').style.display = isAd() ? '' : 'none';
   avvisoCopia(true);
@@ -4048,7 +4055,7 @@ async function doLogout() {
 const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', fatturare:'Fatturazione', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
-                 costi:'Costi generali dello studio', preventivi:'Preventivi' };
+                 costi:'Costi generali dello studio', preventivi:'Preventivi', studio:'Dati dello studio' };
 
 /* IL CASSETTO DEL MENU (solo su telefono)
    Su iPad e su computer la barra laterale e' sempre li' e queste funzioni non
@@ -4093,7 +4100,7 @@ function render() {
     oggi:rOggi, scadenzario:rScadenzario, fatturare:rFatturare,
     clienti:rClienti, projects:rProjects, project:rProject,
     pratiche:rPratiche, tasks:rTasks, kanban:rKanban, timeline:rTimeline,
-    time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, preventivi:rPreventivi, users:rUsers
+    time:rTime, chat:rChat, redditivita:rRedditivita, costi:rCosti, preventivi:rPreventivi, users:rUsers, studio:rStudio
   };
   (P[S.page] || rOggi)();
   updBadges();
@@ -6081,7 +6088,7 @@ function apriStampa(s, nomeFile) {
    compilare a mano se non li conosciamo). Cambiata la polizza, si cambia una
    volta qui e non in cinque modelli.
    =========================================================================== */
-const POLIZZA_STUDIO = 'n. PI-00KS4T2550 della compagnia ARCH. INSURANCE (EU) DAC con validità sino al '
+let POLIZZA_STUDIO = 'n. PI-00KS4T2550 della compagnia ARCH. INSURANCE (EU) DAC con validità sino al '
   + '09/04/2027 e massimale pari a 3.000.000,00 €';
 
 /* Gli articoli che tutti i preventivi hanno uguali; cambiano solo esclusioni,
@@ -9278,6 +9285,113 @@ function stampaIsa() {
    Quanto costa tenere aperto lo studio in un anno, voce per voce, e quanto
    resta da pagare. Li vede e li scrive chi tiene l'amministrazione.
    --------------------------------------------------------------------------- */
+/* ===========================================================================
+   DATI DELLO STUDIO (migrazione 051)
+   Polizza, recapiti, indirizzo, IBAN: si cambiano da qui, senza toccare il
+   programma. Stanno in una riga sola del database (studio_impostazioni) e
+   all'avvio prendono il posto dei valori scritti in STUDIO e POLIZZA_STUDIO,
+   che restano come ripiego. Preventivi, proforma, fatture, solleciti e
+   intestazioni li leggono da li': cambiati qui, valgono ovunque dal primo
+   documento che si stampa dopo. Li modifica solo un amministratore; il
+   commercialista li vede.
+   Le aliquote (IVA, cassa), il regime fiscale e la ritenuta restano nel
+   programma: un errore li' fa scartare le fatture, e vanno cambiati con il
+   commercialista.
+   =========================================================================== */
+const STUDIO_BASE = JSON.parse(JSON.stringify(STUDIO));
+const POLIZZA_BASE = { polizzaNumero: 'PI-00KS4T2550', polizzaCompagnia: 'ARCH. INSURANCE (EU) DAC',
+                       polizzaScadenza: '2027-04-09', polizzaMassimale: 3000000 };
+/* chiave → [etichetta, dove sta in STUDIO, tipo, suggerimento] */
+const CAMPI_STUDIO = [
+  { sez: 'Anagrafica', campi: [
+    ['denominazione', 'Denominazione', 'denominazione', 'text', 'Come compare in fattura'],
+    ['indirizzo', 'Indirizzo', 'indirizzo'], ['civico', 'Civico', 'civico'], ['cap', 'CAP', 'cap'],
+    ['comune', 'Comune', 'comune'], ['provincia', 'Provincia (sigla)', 'provincia'],
+    ['piva', 'Partita IVA', 'piva'], ['codiceFiscale', 'Codice fiscale', 'codiceFiscale'],
+    ['reaUfficio', 'REA — ufficio (sigla)', 'rea.ufficio'], ['reaNumero', 'REA — numero', 'rea.numero'],
+    ['piePagina', 'Piè di pagina dei documenti', 'piePagina', 'textarea'] ] },
+  { sez: 'Recapiti', campi: [
+    ['telefono', 'Telefono', 'telefono'], ['email', 'Email', 'email', 'email'],
+    ['emailInfo', 'Email info (nei preventivi)', 'emailInfo', 'email'], ['pecPropria', 'PEC dello studio', 'pecPropria', 'email'],
+    ['sito', 'Sito', 'sito'], ['emailAmministrazione', 'Email dell’amministrazione', 'emailAmministrazione', 'email',
+      'Dove arrivano le richieste di fatturazione'],
+    ['codiceUnivocoProprio', 'Codice SDI dello studio', 'codiceUnivocoProprio', 'text', 'Per ricevere le fatture dei fornitori'] ] },
+  { sez: 'Pagamento', campi: [
+    ['iban', 'IBAN lavori ordinari', 'pagamento.iban'], ['ibanSisma', 'IBAN ricostruzione post-sisma', 'pagamento.ibanSisma'],
+    ['giorni', 'Giorni per il pagamento', 'pagamento.giorni', 'number', 'Scadenza di proforma e fatture'] ] },
+  { sez: 'Polizza RC professionale', campi: [
+    ['polizzaNumero', 'Numero di polizza', null], ['polizzaCompagnia', 'Compagnia', null],
+    ['polizzaScadenza', 'Valida fino al', null, 'date'], ['polizzaMassimale', 'Massimale €', null, 'number'] ] }
+];
+const percorsoGet = (o, k) => k.split('.').reduce((a, x) => a == null ? a : a[x], o);
+function percorsoSet(o, k, v) { const p = k.split('.'); let a = o;
+  p.slice(0, -1).forEach(x => { if (!a[x] || typeof a[x] !== 'object') a[x] = {}; a = a[x]; }); a[p[p.length - 1]] = v; }
+const testoPolizza = d => 'n. ' + d.polizzaNumero + ' della compagnia ' + d.polizzaCompagnia + ' con validità sino al '
+  + fdate(d.polizzaScadenza) + ' e massimale pari a ' + feuro(Number(d.polizzaMassimale) || 0);
+/* I valori in uso: quelli salvati, o in mancanza quelli scritti nel programma */
+function valoreStudio(k, dati) {
+  dati = dati || S.studioDati || {};
+  if (dati[k] !== undefined && dati[k] !== null && dati[k] !== '') return dati[k];
+  if (k in POLIZZA_BASE) return POLIZZA_BASE[k];
+  for (const g of CAMPI_STUDIO) for (const c of g.campi) if (c[0] === k && c[2]) return percorsoGet(STUDIO_BASE, c[2]);
+  return '';
+}
+function applicaDatiStudio(dati) {
+  CAMPI_STUDIO.forEach(g => g.campi.forEach(c => { if (!c[2]) return;
+    let v = valoreStudio(c[0], dati);
+    if (c[3] === 'number') v = Number(v) || percorsoGet(STUDIO_BASE, c[2]);
+    if (/iban/i.test(c[0])) v = String(v || '').replace(/\s/g, '').toUpperCase();
+    percorsoSet(STUDIO, c[2], v); }));
+  const pol = {}; Object.keys(POLIZZA_BASE).forEach(k => pol[k] = valoreStudio(k, dati));
+  POLIZZA_STUDIO = testoPolizza(pol);
+}
+function rStudio() {
+  const puo = isAd();
+  el('crumb').textContent = 'Polizza, recapiti, indirizzo e IBAN: valgono per preventivi, proforma e fatture.';
+  el('top-act').innerHTML = puo ? '<button class="btn btn-sm btn-p" id="st-save">Salva i dati</button>' : '';
+  if (S.studioDati === null) {
+    el('page').innerHTML = '<div class="wbox">Manca la migrazione <b>051_dati_studio.sql</b>: finché non è eseguita '
+      + 'valgono i dati scritti nel programma e qui non si salva niente.</div>';
+    return;
+  }
+  const campo = c => { const [k, l, , tipo, hint] = c, v = valoreStudio(k);
+    const dis = puo ? '' : ' disabled';
+    return '<div class="fg"' + (tipo === 'textarea' ? ' style="grid-column:1/-1"' : '') + '><label class="fl">' + esc(l) + '</label>'
+      + (tipo === 'textarea' ? '<textarea class="fc" data-st="' + k + '" rows="2"' + dis + '>' + esc(v) + '</textarea>'
+        : '<input class="fc" data-st="' + k + '" type="' + (tipo || 'text') + '"' + (tipo === 'number' ? ' step="any"' : '')
+          + ' value="' + esc(v) + '"' + dis + '>')
+      + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>'; };
+  el('page').innerHTML = (puo ? '' : '<div class="ibox mb16">Sola lettura: li modifica un amministratore.</div>')
+    + CAMPI_STUDIO.map(g => '<div class="card mb16"><div class="card-h"><span class="card-t">' + esc(g.sez) + '</span></div>'
+      + '<div class="fg2">' + g.campi.map(campo).join('') + '</div>'
+      + (g.sez.indexOf('Polizza') === 0 ? '<div class="ibox" style="font-size:12.5px">Nei preventivi (art. 7) si legge: '
+          + '<i id="st-pol">' + esc(POLIZZA_STUDIO) + '</i></div>' : '') + '</div>').join('')
+    + '<div class="hint">Aliquote IVA e cassa, regime fiscale e ritenuta restano nel programma: si cambiano con il '
+      + 'commercialista, perché un errore lì fa scartare le fatture. ' + (S.studioAgg ? 'Ultima modifica: ' + esc(S.studioAgg) + '.' : '') + '</div>';
+  const leggi = () => { const d = {}; qsa('[data-st]').forEach(i => { d[i.dataset.st] = i.type === 'number'
+      ? (i.value === '' ? '' : Number(i.value)) : i.value.trim(); }); return d; };
+  qsa('[data-st^="polizza"]').forEach(i => i.oninput = () => { const d = leggi(), pol = {};
+    Object.keys(POLIZZA_BASE).forEach(k => pol[k] = valoreStudio(k, d)); el('st-pol').textContent = testoPolizza(pol); });
+  if (el('st-save')) el('st-save').onclick = () => salvaStudio(leggi());
+}
+async function salvaStudio(d) {
+  if (!isAd()) return toast('Li modifica solo un amministratore.', 'error');
+  const piva = String(d.piva || '').replace(/\s/g, '');
+  if (piva && !/^\d{11}$/.test(piva)) return toast('La partita IVA deve avere 11 cifre.', 'error');
+  for (const k of ['iban', 'ibanSisma']) { const v = String(d[k] || '').replace(/\s/g, '').toUpperCase();
+    if (v && !/^IT\d{2}[A-Z]\d{10}[0-9A-Z]{12}$/.test(v)) return toast('IBAN non valido: ' + d[k], 'error'); d[k] = v; }
+  if (d.polizzaScadenza && d.polizzaScadenza < todayISO()) {
+    if (!confirm('La polizza risulta scaduta (' + fdate(d.polizzaScadenza) + '). Salvare lo stesso?')) return; }
+  setLoading('st-save', true);
+  const { error } = await SB.from('studio_impostazioni').upsert({ id: 1, dati: d, updated_at: new Date().toISOString(),
+    updated_by: S.me.id }, { onConflict: 'id' });
+  setLoading('st-save', false);
+  if (error) return sbErr(error, 'dati dello studio');
+  S.studioDati = d; applicaDatiStudio(d);
+  toast('Dati dello studio salvati: valgono dal prossimo documento.', 'success');
+  render();
+}
+
 function rCosti() {
   if (!vedeTutto()) {
     el('page').innerHTML = '<div class="card"><div class="empty"><i>🔒</i>'
@@ -13076,7 +13190,7 @@ const TABELLE_COPIA = ['profiles', 'clienti', 'enti_pa', 'projects', 'commessa_f
   'task_messaggi', 'task_comments', 'commessa_fatture', 'commessa_fattura_righe', 'commessa_contratti',
   'commessa_sal', 'commessa_varianti', 'commessa_spese', 'commessa_pratiche', 'pratica_eventi',
   'pratiche_catalogo', 'preventivi', 'preventivo_modelli', 'costi_generali', 'profili_costi',
-  'time_entries', 'project_fasi', 'project_sottofasi', 'files', 'notifiche'];
+  'time_entries', 'project_fasi', 'project_sottofasi', 'files', 'notifiche', 'studio_impostazioni'];
 const CHIAVE_COPIA = 'scs-ultima-copia';
 const TIPO_COPIA = 'SCS Gestionale Progetti - copia di sicurezza';
 const GIORNI_COPIA = 7;
@@ -13212,8 +13326,8 @@ const ORDINE_RIPRISTINO = ['enti_pa', 'clienti', 'projects', 'preventivi', 'comm
   'commessa_fasi', 'commessa_sal', 'commessa_varianti', 'project_fasi', 'project_sottofasi',
   'commessa_pratiche', 'tasks', 'task_messaggi', 'task_comments', 'pratica_eventi',
   'commessa_fatture', 'commessa_fattura_righe', 'commessa_spese', 'time_entries', 'files',
-  'costi_generali', 'profili_costi', 'preventivo_modelli', 'pratiche_catalogo'];
-const NOMI_TABELLE = { enti_pa:'Enti pubblici (Indice PA)', clienti:'Clienti', projects:'Commesse',
+  'costi_generali', 'profili_costi', 'preventivo_modelli', 'pratiche_catalogo', 'studio_impostazioni'];
+const NOMI_TABELLE = { studio_impostazioni:'Dati dello studio', enti_pa:'Enti pubblici (Indice PA)', clienti:'Clienti', projects:'Commesse',
   preventivi:'Preventivi', commessa_contratti:'Contratti', commessa_fasi:'Fasi', commessa_sal:'SAL',
   commessa_varianti:'Varianti', project_fasi:'Fasi (vecchio schema)', project_sottofasi:'Sottofasi (vecchio schema)',
   commessa_pratiche:'Pratiche', tasks:'Attività', task_messaggi:'Messaggi delle attività',

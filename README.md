@@ -68,6 +68,7 @@ Apri Supabase → **SQL Editor** → esegui **in ordine**:
 47. [`sql/048_fasi_e_stato_commessa.sql`](sql/048_fasi_e_stato_commessa.sql) — stato della commessa e delle fasi insieme
 48. [`sql/049_allinea_stato_commesse.sql`](sql/049_allinea_stato_commesse.sql) — allineamento una tantum delle commesse già incoerenti
 49. [`sql/050_ripristino_copia.sql`](sql/050_ripristino_copia.sql) — ripristino da una copia di sicurezza senza far scattare gli automatismi
+50. [`sql/051_dati_studio.sql`](sql/051_dati_studio.sql) — dati dello studio (polizza, recapiti, IBAN) modificabili dall'app; la legge ogni utente attivo, la scrive solo un amministratore
 
 (`003_permessi_pratiche.sql` è facoltativo: serve solo se vuoi che anche i
 collaboratori possano eliminare le pratiche.)
@@ -483,6 +484,32 @@ il problema si ripete, richiama il file con un parametro, ad esempio
 `index.html?v=4`.
 
 ---
+
+## Dati dello studio
+
+Nel menu *Amministrazione* c'è **🏢 Dati dello studio** (migrazione 051): qui
+si cambiano, senza toccare il programma, i dati che finiscono nei documenti:
+
+- **Anagrafica**: denominazione, indirizzo, partita IVA e codice fiscale, REA,
+  piè di pagina dei documenti;
+- **Recapiti**: telefono, email, email info, PEC, sito, email
+  dell'amministrazione (dove arrivano le richieste di fatturazione), codice
+  SDI dello studio;
+- **Pagamento**: IBAN dei lavori ordinari e della ricostruzione post-sisma,
+  giorni per il pagamento;
+- **Polizza RC professionale**: numero, compagnia, scadenza, massimale. Sotto
+  si vede la frase che compare all'art. 7 dei preventivi (`{{polizza}}`).
+
+Si preme **Salva i dati** e valgono da subito per **preventivi, proforma,
+fatture, solleciti e stampe**, anche riscaricando un documento già fatto.
+Li modifica solo un **amministratore**; il commercialista li vede. La partita
+IVA deve avere 11 cifre e l'IBAN deve essere italiano e completo, altrimenti
+non si salva; se la polizza risulta scaduta l'app chiede conferma.
+
+Restano nel programma, e si cambiano con il commercialista, le **aliquote**
+(IVA, cassa), il **regime fiscale** e la **ritenuta**: un errore lì fa
+scartare le fatture. Finché un campo resta vuoto vale il dato scritto nel
+programma. I dati entrano nella copia di sicurezza e nel ripristino.
 
 ## Copia di sicurezza
 
