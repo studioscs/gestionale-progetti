@@ -664,6 +664,17 @@ alle fasi giuste del template in uso.
 La pagina **Da fatturare** raccoglie tutto lo studio: pronte da emettere, in
 attesa di maturare, emesse non ancora incassate.
 
+### Duplicare uno scaglione
+
+Nella finestra dello scaglione c'è **⧉ Duplica** (per chi può scrivere). Apre
+uno scaglione nuovo della stessa commessa già compilato come l'originale:
+descrizione, percentuale o importo, **servizi** (comprese le spese anticipate),
+tipologia ISA, anno di competenza, data prevista, note e intestatario.
+**Non** si copiano stato, numeri e date di proforma e fattura, incasso,
+solleciti, richiesta di fatturazione e fase agganciata: la copia nasce
+*da emettere*. Si controlla, si cambia quello che serve e si preme **Salva**;
+chiudendo senza salvare non si crea niente.
+
 ### Più servizi nella stessa fattura
 
 Una fattura quasi mai copre una prestazione sola: rilievo, pratica edilizia e

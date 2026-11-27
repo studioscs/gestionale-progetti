@@ -1246,6 +1246,7 @@ body.ro .ov:not(.ro-ok) .mb::before { content:'Sola lettura: puoi consultare e s
     <div class="mf">
       <span class="left row">
         <button class="btn btn-d" id="fa-del2" style="display:none">Elimina</button>
+        <button class="btn" id="fa-dup" type="button" style="display:none" title="Crea uno scaglione nuovo uguale a questo: descrizione, importo, servizi, tipologia ISA e anno. Lo controlli e poi salvi.">&#10697; Duplica</button>
         <button class="btn" id="fa-xml" title="Apre la revisione: da li' proforma PDF o fattura XML">&#128196; Proforma / XML</button>
         <button class="btn ro-ok" id="fa-goproj" type="button" title="Apri la commessa di questo scaglione">&#128193; Commessa</button>
         <button class="btn" id="fa-anag" type="button" title="Correggi i dati del cliente (indirizzo, CAP, P.IVA, SDI, PEC...)">&#9999;&#65039; Anagrafica</button>
@@ -1640,7 +1641,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.26.03';
+const VERSIONE = '2026.11.27.01';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -9413,6 +9414,8 @@ function openFatt(id, presetPid) {
       || (f.data_fattura || f.data_prevista || '').slice(0, 4) || '') : today().getFullYear());
   fillSel('fa-fase', fasiOf(pid).map(x => ({v:x.id, l:x.nome})), f ? f.fase_id : '', '- Nessuna: maturazione manuale -');
   el('fa-del2').style.display = (id && isAd()) ? 'inline-flex' : 'none';
+  el('fa-dup').style.display  = (id && canW()) ? 'inline-flex' : 'none';
+  FATT_DUP = null;
   el('fa-xml').style.display  = id ? 'inline-flex' : 'none';
   FATT_RIGHE = righeFattura(id).map(r => ({ id:r.id, descrizione:r.descrizione, importo:r.importo,
                                             isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
@@ -9429,6 +9432,36 @@ function openFatt(id, presetPid) {
   openM('m-fatt');
 }
 let FATT_PID = null;
+/* DUPLICARE UNO SCAGLIONE
+   Si apre uno scaglione nuovo gia' compilato come l'originale: descrizione,
+   percentuale o importo, servizi (comprese le spese anticipate), tipologia
+   ISA, anno di competenza, data prevista, note e intestatario. Non si
+   copiano lo stato, i numeri e le date di proforma e fattura, l'incasso, i
+   solleciti, la richiesta di fatturazione e la fase agganciata: e' una
+   fattura ancora da fare. Niente si salva finche' non si preme «Salva». */
+let FATT_DUP = null;
+function duplicaFatt(id) {
+  const f = byId(S.fatture, id); if (!f) return;
+  if (!canW()) return toast('Sola lettura: non puoi creare scaglioni.', 'error');
+  openFatt(null, f.project_id);
+  el('mfa-t').textContent = 'Copia dello scaglione';
+  el('fa-desc').value = f.descrizione || '';
+  el('fa-perc').value = f.percentuale !== null && f.percentuale !== undefined ? f.percentuale : '';
+  el('fa-imp').value  = f.imponibile !== null && f.imponibile !== undefined ? f.imponibile : '';
+  el('fa-prev').value = f.data_prevista || '';
+  el('fa-note2').value = f.note || '';
+  el('fa-notefatt').value = f.note_fattura || '';
+  el('fa-isa').innerHTML  = isaOpzioni(f.isa_tipo || '');
+  el('fa-anno').innerHTML = isaOpzAnni(f.anno_competenza || (f.data_prevista || '').slice(0, 4) || today().getFullYear());
+  FATT_RIGHE = righeFattura(f.id).map(r => ({ descrizione:r.descrizione, importo:r.importo,
+                                              isa_tipo:r.isa_tipo || '', anno_competenza:r.anno_competenza || '',
+                                              art15: !!r.art15, art15Mano: true }));
+  FATT_ISA_PREV = { isa: el('fa-isa').value, anno: el('fa-anno').value };
+  FATT_DUP = { intestatario: f.intestatario || null };
+  disegnaRigheFatt();
+  aggiornaCalcolo();
+  toast('Copia pronta: controlla e premi Salva.', 'info');
+}
 
 /* DALLA FATTURAZIONE ALLA COMMESSA E ALL'ANAGRAFICA
    Fatturando ci si accorge che manca il CAP o il codice SDI: si va a
@@ -9744,7 +9777,8 @@ async function saveFatt() {
     if (error) { setLoading('fa-save2', false); return sbErr(error, 'scaglione'); }
   } else {
     const { data, error } = await SB.from('commessa_fatture').insert(Object.assign({
-      created_by:S.me.id, ordine: fattureOf(FATT_PID).length }, pay)).select().single();
+      created_by:S.me.id, ordine: fattureOf(FATT_PID).length },
+      FATT_DUP && FATT_DUP.intestatario ? { intestatario: FATT_DUP.intestatario } : {}, pay)).select().single();
     if (error) { setLoading('fa-save2', false); return sbErr(error, 'scaglione'); }
     fid = data.id;
   }
@@ -15124,6 +15158,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   el('fa-incimp').addEventListener('input', () => aggiornaIncasso());
   el('fa-del2').onclick  = () => delFatt(el('fa-id2').value);
+  el('fa-dup').onclick   = () => duplicaFatt(el('fa-id2').value);
   el('fa-xml').onclick   = vaiAllaFattura;
   el('fa-goproj').onclick = () => vaiAllaCommessa(FATT_PID, 'm-fatt');
   el('fa-anag').onclick   = () => apriAnagrafica(FATT_PID, 'm-fatt');

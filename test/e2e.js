@@ -3629,6 +3629,34 @@ function launchOpts(){
     must(r.link&&r.apple,'mancano i collegamenti nella pagina');
     must(/Installa|Aggiungi/.test(r.t),'istruzioni vuote: '+r.t);
   });
+  await t('duplicare uno scaglione: copia descrizione, importo e servizi, non numeri e stato',async()=>{
+    const base=await p.evaluate(async()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; const pid=S.projects[0].id;
+      const {data:f}=await SB.from('commessa_fatture').insert({project_id:pid,descrizione:'Scaglione da duplicare',imponibile:1500,
+        stato:'incassata',numero_fattura:'DUP-1/FE',data_fattura:'2026-03-01',data_incasso:'2026-03-10',importo_incassato:1903.2,
+        isa_tipo:'C01',anno_competenza:2026,data_prevista:'2026-03-01',note_fattura:'Nota in fattura',
+        intestatario:{cliente:'Altro Intestatario Srl'},proforma_numero:'2026/990',sollecito_1:'2026-04-01'}).select().single();
+      await SB.from('commessa_fattura_righe').insert([{fattura_id:f.id,descrizione:'A. Rilievo',importo:1000,ordine:0,isa_tipo:'C01',anno_competenza:2026},
+        {fattura_id:f.id,descrizione:'B. Pratica',importo:500,ordine:1,isa_tipo:'C01',anno_competenza:2026}]);
+      await loadAll(true); return f.id; });
+    await p.evaluate(id=>openFatt(id),base); await p.waitForSelector('#m-fatt.show',{timeout:3000});
+    must(await p.isVisible('#fa-dup'),'manca il pulsante Duplica');
+    await p.click('#fa-dup'); await p.waitForTimeout(300);
+    must(await p.inputValue('#fa-id2')==='','la copia non è uno scaglione nuovo');
+    must(await p.inputValue('#fa-desc')==='Scaglione da duplicare','descrizione non copiata');
+    must(await p.inputValue('#fa-stato2')==='da_emettere'&&await p.inputValue('#fa-num')==='','stato o numero copiati');
+    await p.click('#fa-save2'); await p.waitForTimeout(900);
+    const g=await p.evaluate(id=>{ const c=S.fatture.filter(x=>x.descrizione==='Scaglione da duplicare'&&x.id!==id);
+      if(c.length!==1) return {n:c.length}; const x=c[0];
+      return {n:1,imp:Number(x.imponibile),stato:x.stato,num:x.numero_fattura,pf:x.proforma_numero,sol:x.sollecito_1,inc:x.data_incasso,
+        isa:x.isa_tipo,anno:x.anno_competenza,nota:x.note_fattura,int:(x.intestatario||{}).cliente,
+        righe:righeFattura(x.id).map(r=>r.descrizione+':'+r.importo).join('|'), orig:righeFattura(id).length}; },base);
+    must(g.n===1,'copie create: '+g.n);
+    must(g.imp===1500&&g.stato==='da_emettere'&&!g.num&&!g.pf&&!g.sol&&!g.inc,'copia sbagliata: '+JSON.stringify(g));
+    must(g.isa==='C01'&&g.anno===2026&&g.nota==='Nota in fattura'&&g.int==='Altro Intestatario Srl','dati non copiati: '+JSON.stringify(g));
+    must(g.righe==='A. Rilievo:1000|B. Pratica:500'&&g.orig===2,'servizi: '+g.righe+' (originale '+g.orig+')');
+    await p.evaluate(async()=>{ closeAll(); for(const x of S.fatture.filter(f=>f.descrizione==='Scaglione da duplicare'))
+      await SB.from('commessa_fatture').delete().eq('id',x.id); await loadAll(true); });
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });
