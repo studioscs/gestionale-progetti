@@ -1641,7 +1641,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.27.01';
+const VERSIONE = '2026.11.27.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1686,7 +1686,7 @@ const ERR_SOLA_LETTURA = { message: 'Il tuo account è in sola lettura: puoi con
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '', inRicorrenti: false, senzaRicorrenti: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '', fzResp: (() => { try { return localStorage.getItem('scs.fzResp') || ''; } catch (e) { return ''; } })(), inRicorrenti: false, senzaRicorrenti: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -8015,6 +8015,46 @@ function bottoneCommessa(pid) {
     + (m ? ' — al committente mancano ' + m + (m === 1 ? ' dato' : ' dati') : '') + '">&#128193;'
     + (m ? '<span style="color:var(--ora);font-weight:700">!</span>' : '') + '</button>';
 }
+/* ---------------------------------------------------------------------------
+   FATTURAZIONE PER RESPONSABILE
+   Il Responsabile e' la persona dello studio indicata nella commessa. Dalla
+   tendina in alto in Fatturazione si sceglie:
+   - «Tutti i responsabili»: la pagina com'era;
+   - «Raggruppa per responsabile»: in ogni sezione (proforma, fatture emesse,
+     richieste, da emettere...) le righe stanno sotto il nome del
+     responsabile, con il suo totale, e in fondo «Senza responsabile»;
+   - una persona, o «Senza responsabile»: tutta la pagina (numeri in testa,
+     sezioni, anno fiscale) conta solo le sue commesse.
+   --------------------------------------------------------------------------- */
+const respCommessa = pid => (byId(S.projects, pid) || {}).owner_id || '';
+const nomeResp = id => id ? (un(id) !== '-' ? un(id) : 'utente non in elenco') : 'Senza responsabile';
+function perResponsabile(voci, pidDi) {
+  const m = new Map();
+  voci.forEach(v => { const k = respCommessa(pidDi(v)); if (!m.has(k)) m.set(k, []); m.get(k).push(v); });
+  return Array.from(m, ([id, arr]) => ({ id, nome: nomeResp(id), voci: arr }))
+    .sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.nome.localeCompare(b.nome, 'it'));
+}
+function rigaResponsabile(r, colonne, totale) {
+  return '<tr class="riga-resp"><td colspan="' + colonne + '" style="background:#DCE8F6;color:var(--navy);padding:8px 10px;'
+    + 'border-left:4px solid var(--navy);border-top:2px solid #fff">'
+    + '<div class="spread" style="gap:8px;flex-wrap:wrap"><span style="font-size:13px">&#128100; <b>' + esc(r.nome) + '</b>'
+    + ' <span class="chip">' + r.voci.length + '</span></span>'
+    + '<b style="font-size:12.5px">' + feuro(totale) + '</b></div></td></tr>';
+}
+/* Le righe di una tabella: per commessa, e se richiesto prima per responsabile */
+function righePerResponsabile(voci, pidDi, colonne, totaleDi, perCommessa) {
+  if (S.fzResp !== '_gruppi') return perCommessa(voci);
+  return perResponsabile(voci, pidDi).map(r => rigaResponsabile(r, colonne, totaleDi(r.voci)) + perCommessa(r.voci)).join('');
+}
+function sceltaResponsabile() {
+  const ids = Array.from(new Set(S.projects.filter(p => !p.archiviato && p.owner_id).map(p => p.owner_id)))
+    .sort((a, b) => nomeResp(a).localeCompare(nomeResp(b), 'it'));
+  const v = S.fzResp || '';
+  const o = (val, l) => '<option value="' + esc(val) + '"' + (v === val ? ' selected' : '') + '>' + esc(l) + '</option>';
+  return '<select class="sel" id="fz-resp" title="Raggruppa o filtra per il responsabile indicato nella commessa">'
+    + o('', '👤 Tutti i responsabili') + o('_gruppi', '👤 Raggruppa per responsabile')
+    + ids.map(id => o(id, 'Solo ' + nomeResp(id))).join('') + o('_nessuno', 'Solo senza responsabile') + '</select>';
+}
 function riquadroProforme() {
   const aperte = proformeEmesse(false), tutte = proformeEmesse(true);
   if (!tutte.length) return '';
@@ -8031,10 +8071,11 @@ function riquadroProforme() {
         : 'Le proforma scaricate e mandate al committente la cui fattura non è ancora stata emessa.') + '</div>'
     + (list.length ? '<div class="tw"><table class="tsm"><thead><tr><th>Proforma</th><th>Data</th><th>Intestatario</th>'
       + '<th>Scaglione</th><th style="text-align:right">Totale</th><th>Stato</th><th></th></tr></thead><tbody>'
-      + gruppiCommessa(list, f => f.project_id).map(g => {
+      + righePerResponsabile(list, f => f.project_id, 7, arr => r2(arr.reduce((a, f) => a + contiScaglione(f).totale, 0)),
+          arr => gruppiCommessa(arr, f => f.project_id).map(g => {
           const voci = g.voci.slice().sort(perOrdine);
           return rigaGruppoCommessa(g, 7, voci.length, r2(voci.reduce((a, f) => a + contiScaglione(f).totale, 0)))
-            + voci.map(rigaProforma).join(''); }).join('')
+            + voci.map(rigaProforma).join(''); }).join(''))
       + '</tbody></table></div>'
       : '<div class="hint" style="margin:0">Nessuna proforma in attesa di fattura.</div>')
     + '</div>';
@@ -8646,7 +8687,26 @@ function riquadroControlloFatt(elenco) {
     + '</tbody></table></div></div>';
 }
 
+/* Con una persona scelta nella tendina, la pagina si disegna come se ci
+   fossero solo le sue commesse (e i loro scaglioni). */
 function rFatturare() {
+  const v = S.fzResp || '';
+  if (!v || v === '_gruppi') return rFatturareTutto();
+  const prima = { projects: S.projects, fatture: S.fatture };
+  const tiene = p => v === '_nessuno' ? !p.owner_id : p.owner_id === v;
+  const proj = S.projects.filter(tiene), ids = new Set(proj.map(p => p.id));
+  try {
+    S.projects = proj; S.fatture = S.fatture.filter(f => ids.has(f.project_id));
+    rFatturareTutto();
+  } finally { S.projects = prima.projects; S.fatture = prima.fatture; }
+  /* la tendina elenca tutte le persone, non solo quella scelta */
+  el('fz-resp').outerHTML = sceltaResponsabile(); collegaSceltaResp();
+}
+function collegaSceltaResp() {
+  const sel = el('fz-resp'); if (!sel) return;
+  sel.onchange = () => { S.fzResp = sel.value; try { localStorage.setItem('scs.fzResp', sel.value); } catch (e) {} render(); };
+}
+function rFatturareTutto() {
   el('crumb').textContent = 'Proforma, fatture e quello che è maturato da fatturare.';
   /* Il quadro C del modello ISA si compila una volta l'anno: il pulsante sta
      qui, dove si guardano le fatture, e non in una pagina sua che nessuno
@@ -8655,7 +8715,9 @@ function rFatturare() {
       + 'title="Fatture emesse non pagate, proforme in attesa e quello che lo studio deve pagare: su carta o in PDF">'
       + '&#128424;&#65039; Report incassi</button> ' : '')
     + '<button class="btn btn-sm" id="isa-btn" '
-    + 'title="Tipologia dell’attività per il modello ISA">&#128202; ISA</button>';
+    + 'title="Tipologia dell’attività per il modello ISA">&#128202; ISA</button> '
+    + sceltaResponsabile();
+  collegaSceltaResp();
   el('isa-btn').onclick = () => openIsa();
   if (el('bl-btn')) el('bl-btn').onclick = apriReportIncassi;
   const list = S.fatture.filter(f => {
@@ -8733,12 +8795,13 @@ function rFatturare() {
     + '<div class="tw"><table class="tsm"><thead><tr><th>Commessa / scaglione</th><th>Stato</th><th>N. fattura / proforma</th>'
     + '<th style="text-align:right">Imponibile</th><th style="text-align:right">Totale</th>'
     + '<th>Prevista</th><th></th></tr></thead><tbody>'
-    + gruppiCommessa(arr.map(f => ({ f, pid: f.project_id }))
-        .concat((extra || []).map(x => ({ x, pid: x.p.id }))), v => v.pid).map(g => {
+    + righePerResponsabile(arr.map(f => ({ f, pid: f.project_id })).concat((extra || []).map(x => ({ x, pid: x.p.id }))),
+        v => v.pid, 7, vv => r2(vv.reduce((a, v) => a + (v.f ? impFattura(v.f) : v.x.c.scoperto), 0)),
+        vv => gruppiCommessa(vv, v => v.pid).map(g => {
         const fatt = g.voci.filter(v => v.f).map(v => v.f).sort(perOrdine), ex = g.voci.filter(v => v.x).map(v => v.x);
         return rigaGruppoCommessa(g, 7, fatt.length + ex.length,
                  r2(fatt.reduce((a, f) => a + impFattura(f), 0) + ex.reduce((a, x) => a + x.c.scoperto, 0)))
-          + fatt.map(riga).join('') + ex.map(rigaSaldo).join(''); }).join('')
+          + fatt.map(riga).join('') + ex.map(rigaSaldo).join(''); }).join(''))
     + '</tbody><tfoot><tr style="border-top:2px solid var(--bord)"><td colspan="3"><b>Totale sezione</b> — '
       + arr.length + (arr.length === 1 ? ' scaglione' : ' scaglioni') + '</td>'
       + '<td style="text-align:right"><b>' + feuro(imp) + '</b></td><td style="text-align:right">' + feuro(lordo) + '</td><td colspan="2"></td></tr>'

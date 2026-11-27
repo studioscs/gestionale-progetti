@@ -1364,6 +1364,24 @@ una richiesta di pagamento in sospeso, come una fattura emessa. Per questo:
 
 Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
+### Fatturazione per responsabile
+
+In alto in *Fatturazione* c'è la tendina **👤 Responsabile**, che usa il
+*Responsabile* indicato nella commessa (la persona dello studio che la segue):
+
+- **Tutti i responsabili**: la pagina come sempre.
+- **Raggruppa per responsabile**: in ogni sezione — proforma emesse, fatture
+  emesse, chieste dai responsabili, matureranno entro l'anno, dal prossimo,
+  senza data — le righe stanno sotto il **nome del responsabile**, con il suo
+  numero di scaglioni e il suo totale, e dentro per commessa. In fondo a ogni
+  sezione il gruppo **Senza responsabile** raccoglie le commesse dove non è
+  indicato nessuno.
+- **Solo «nome»** oppure **Solo senza responsabile**: tutta la pagina (numeri
+  in testa, anno fiscale, sezioni) conta solo quelle commesse.
+
+La scelta resta ricordata su quel dispositivo. Per mettere o cambiare il
+responsabile: commessa → *Modifica* → *Responsabile*.
+
 ### L'ordine della pagina Fatturazione
 
 Dall'alto: la ricerca e i numeri di sintesi, poi **📄 Proforma emesse in

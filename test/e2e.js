@@ -3657,6 +3657,30 @@ function launchOpts(){
     await p.evaluate(async()=>{ closeAll(); for(const x of S.fatture.filter(f=>f.descrizione==='Scaglione da duplicare'))
       await SB.from('commessa_fatture').delete().eq('id',x.id); await loadAll(true); });
   });
+  await t('fatturazione per responsabile: raggruppa, filtra una persona e senza responsabile',async()=>{
+    const ids=await p.evaluate(async()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; const u=S.profs.map(x=>x.id);
+      const mk=async(c,own)=>{ const {data}=await SB.from('projects').insert({codice:c,name:c+'_RESP',status:'attivo',client:'Cliente '+c,owner_id:own}).select().single(); return data.id; };
+      const a=await mk('RS_A',u[0]), b=await mk('RS_B',null);
+      await SB.from('commessa_fatture').insert([{project_id:a,descrizione:'Resp emessa A',imponibile:1111,stato:'emessa',numero_fattura:'RS-1/FE',data_fattura:'2026-10-01'},
+        {project_id:b,descrizione:'Resp emessa B',imponibile:2222,stato:'emessa',numero_fattura:'RS-2/FE',data_fattura:'2026-10-02'}]);
+      await loadAll(true); S.fzResp=''; go('fatturare'); return {a,b,u0:u[0],nome:un(u[0])}; });
+    await p.selectOption('#fz-resp','_gruppi'); await p.waitForTimeout(300);
+    const g=await p.evaluate(()=>[...document.querySelectorAll('.riga-resp')].map(x=>x.textContent));
+    must(g.some(x=>x.indexOf('Senza responsabile')>=0),'manca il gruppo Senza responsabile');
+    const pos=await p.evaluate(n=>{ const t=el('page').innerHTML; return {r:t.indexOf(n),a:t.indexOf('Resp emessa A')}; },ids.nome);
+    must(pos.r>=0&&pos.r<pos.a,'la riga A non sta sotto il suo responsabile');
+    await p.selectOption('#fz-resp',ids.u0); await p.waitForTimeout(300);
+    let t2=await p.evaluate(()=>el('page').textContent);
+    must(/Resp emessa A/.test(t2)&&!/Resp emessa B/.test(t2),'filtro per persona sbagliato');
+    await p.selectOption('#fz-resp','_nessuno'); await p.waitForTimeout(300);
+    t2=await p.evaluate(()=>el('page').textContent);
+    must(/Resp emessa B/.test(t2)&&!/Resp emessa A/.test(t2),'filtro senza responsabile sbagliato');
+    const n=await p.evaluate(()=>({f:S.fatture.filter(x=>/^Resp emessa/.test(x.descrizione)).length, opts:el('fz-resp').options.length}));
+    must(n.f===2,'dopo il filtro i dati non sono tornati tutti: '+n.f);
+    must(n.opts>=4,'la tendina ha perso le persone: '+n.opts);
+    await p.selectOption('#fz-resp',''); await p.waitForTimeout(200);
+    await p.evaluate(async x=>{ for(const id of [x.a,x.b]){ await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id); } S.fzResp=''; await loadAll(true); },ids);
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });
