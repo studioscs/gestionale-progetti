@@ -1642,7 +1642,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.27.04';
+const VERSIONE = '2026.11.27.05';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -1687,7 +1687,7 @@ const ERR_SOLA_LETTURA = { message: 'Il tuo account è in sola lettura: puoi con
 /* --------------------------------- STORE --------------------------------- */
 const S = {
   me: null, prof: null,
-  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '', fzResp: (() => { try { return localStorage.getItem('scs.fzResp') || ''; } catch (e) { return ''; } })(), inRicorrenti: false, senzaRicorrenti: false,
+  profs: [], projects: [], tasks: [], fasi: [], pratiche: [], notifiche: [], contratti: [], fattRighe: [], spese: [], costiGen: [], costiAnno: null, preventivi: [], modelliPrev: [], prevStato: '', pratCat: [], prVista: 'pratiche', senzaPraticaTask: false, clDaCompletare: false, fmTutte: false, pfTutte: false, fzQ: '', presp: (() => { try { return localStorage.getItem('scs.pResp') || ''; } catch (e) { return ''; } })(), fzResp: (() => { try { return localStorage.getItem('scs.fzResp') || ''; } catch (e) { return ''; } })(), inRicorrenti: false, senzaRicorrenti: false,
   time: [], files: [],
   page: 'oggi', projId: null, tab: 'avanzamento',
   openGrp: new Set(), chat: {}, chatTask: {}, msgRecenti: [], fatture: [], clienti: [], costi: [], enti: [], sal: [], varianti: [], loaded: false, pollTimer: null,
@@ -10609,6 +10609,7 @@ function rProjects() {
     + '<select class="sel" id="p-st"><option value="">Tutti gli stati</option>'
     + Object.keys(ST_PROJ).map(k => '<option value="' + k + '"' + (S.pst === k ? ' selected' : '') + '>' + ST_PROJ[k][0] + '</option>').join('')
     + '</select>'
+    + selRespProgetti()
     + '<select class="sel" id="p-ar"><option value="">Attive</option>'
     + '<option value="arch">Archiviate</option><option value="all">Tutte</option></select>'
     + '<div class="seg" id="p-vista">'
@@ -10621,6 +10622,8 @@ function rProjects() {
   el('p-q').oninput  = e => { S.pq = e.target.value; drawProjects(); };
   el('p-st').onchange = e => { S.pst = e.target.value; drawProjects(); };
   el('p-ar').onchange = e => { S.par = e.target.value; drawProjects(); };
+  el('p-resp').onchange = e => { S.presp = e.target.value;
+    try { localStorage.setItem('scs.pResp', S.presp); } catch (x) {} drawProjects(); };
   qsa('[data-vista]', el('p-vista')).forEach(b => b.onclick = () => {
     S.pvista = b.dataset.vista;
     try { localStorage.setItem('scs-vista-progetti', S.pvista); } catch (e) {}
@@ -10633,7 +10636,9 @@ function drawProjects() {
   const ar = S.par || '';
   const list = S.projects.filter(p => ar === 'all' ? true : ar === 'arch' ? p.archiviato : !p.archiviato)
     .filter(p => !S.pst || p.status === S.pst)
-    .filter(p => !q || (p.name + ' ' + (p.client || '') + ' ' + (p.comune || '') + ' ' + (p.codice || '')).toLowerCase().includes(q));
+    .filter(p => !q || (p.name + ' ' + (p.client || '') + ' ' + (p.comune || '') + ' ' + (p.codice || '')).toLowerCase().includes(q))
+    .filter(p => { const r = S.presp || ''; return !r || r === '_gruppi' ? true
+      : r === '_nessuno' ? !p.owner_id : p.owner_id === r; });
 
   /* Perche' l'elenco e' corto: non e' un filtro dimenticato, e' la visibilita'. */
   const nota = vedeTutto() ? '' :
@@ -10650,10 +10655,28 @@ function drawProjects() {
 
   /* Anche le schede seguono il codice: e' l'ordine con cui lo studio nomina il
      proprio lavoro, e cambiare vista non deve cambiare il posto delle cose. */
-  el('page').innerHTML = nota + (S.pvista === 'lista'
-    ? elencoProgetti(list)
-    : '<div class="g3">' + list.slice().sort((a, b) => cmpCodice(a.codice, b.codice))
-        .map(projCard).join('') + '</div>');
+  const vista = arr => S.pvista === 'lista'
+    ? elencoProgetti(arr)
+    : '<div class="g3">' + arr.slice().sort((a, b) => cmpCodice(a.codice, b.codice)).map(projCard).join('') + '</div>';
+  /* raggruppate per responsabile: un titolo per persona, sotto le sue
+     commesse; in fondo quelle senza responsabile */
+  el('page').innerHTML = nota + (S.presp === '_gruppi'
+    ? perResponsabile(list, p => p.id).map(r => '<div class="spread" style="margin:4px 0 10px;padding:8px 12px;'
+        + 'background:#DCE8F6;border-left:4px solid var(--navy);border-radius:6px;color:var(--navy)">'
+        + '<span>&#128100; <b>' + esc(r.nome) + '</b> <span class="chip">' + r.voci.length + '</span></span>'
+        + '<span style="font-size:12px">' + (r.voci.length === 1 ? '1 commessa' : r.voci.length + ' commesse') + '</span></div>'
+        + '<div class="mb16">' + vista(r.voci) + '</div>').join('')
+    : vista(list));
+}
+/* La tendina dei responsabili in Progetti: chi segue almeno una commessa */
+function selRespProgetti() {
+  const v = S.presp || '';
+  const ids = Array.from(new Set(S.projects.filter(p => p.owner_id).map(p => p.owner_id).concat(v && v[0] !== '_' ? [v] : [])))
+    .sort((a, b) => nomeResp(a).localeCompare(nomeResp(b), 'it'));
+  const o = (val, l) => '<option value="' + esc(val) + '"' + (v === val ? ' selected' : '') + '>' + esc(l) + '</option>';
+  return '<select class="sel" id="p-resp" title="Filtra o raggruppa per il responsabile della commessa">'
+    + o('', '👤 Tutti i responsabili') + o('_gruppi', '👤 Raggruppa per responsabile')
+    + ids.map(id => o(id, 'Solo ' + nomeResp(id))).join('') + o('_nessuno', 'Solo senza responsabile') + '</select>';
 }
 
 /* ---------------------------------------------------------------------------

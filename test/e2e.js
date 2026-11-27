@@ -3716,6 +3716,23 @@ function launchOpts(){
     await p.evaluate(async()=>{ S.prof.role='admin'; __DB.studio_impostazioni[0].dati={}; await loadAll(true); });
     must(await p.evaluate(()=>STUDIO.telefono==='0717574632'&&/PI-00KS4T2550/.test(POLIZZA_STUDIO)),'non torna ai dati di partenza');
   });
+  await t('progetti: filtro e raggruppamento per responsabile',async()=>{
+    const x=await p.evaluate(async()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; const u=S.profs[0].id;
+      const {data:a}=await SB.from('projects').insert({codice:'PR_RA',name:'Prog resp A',status:'attivo',owner_id:u}).select().single();
+      const {data:b}=await SB.from('projects').insert({codice:'PR_RB',name:'Prog senza resp',status:'attivo',owner_id:null}).select().single();
+      await loadAll(true); S.presp=''; go('projects'); return {a:a.id,b:b.id,u,nome:un(u)}; });
+    await p.selectOption('#p-resp',x.u); await p.waitForTimeout(200);
+    let t2=await p.evaluate(()=>el('page').textContent);
+    must(/Prog resp A/.test(t2)&&!/Prog senza resp/.test(t2),'filtro per persona sbagliato');
+    await p.selectOption('#p-resp','_nessuno'); await p.waitForTimeout(200);
+    t2=await p.evaluate(()=>el('page').textContent);
+    must(/Prog senza resp/.test(t2)&&!/Prog resp A/.test(t2),'filtro senza responsabile sbagliato');
+    await p.selectOption('#p-resp','_gruppi'); await p.waitForTimeout(200);
+    const pos=await p.evaluate(n=>{ const t=el('page').textContent; return {n:t.indexOf(n),a:t.indexOf('Prog resp A'),s:t.indexOf('Senza responsabile'),b:t.indexOf('Prog senza resp')}; },x.nome);
+    must(pos.n>=0&&pos.n<pos.a&&pos.s>=0&&pos.s<pos.b,'raggruppamento sbagliato: '+JSON.stringify(pos));
+    await p.selectOption('#p-resp',''); 
+    await p.evaluate(async x=>{ for(const id of [x.a,x.b]) await SB.from('projects').delete().eq('id',id); S.presp=''; await loadAll(true); },x);
+  });
   /* ---------------- PREVENTIVI ---------------- */
   await t('la voce Preventivi c è, con i cinque modelli',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=false; });

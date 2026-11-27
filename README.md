@@ -1391,6 +1391,15 @@ una richiesta di pagamento in sospeso, come una fattura emessa. Per questo:
 
 Prima la stessa somma compariva fra le pronte e, a parte, come proforma.
 
+### Progetti per responsabile
+
+In *Progetti*, accanto al filtro degli stati, c'è la tendina **👤**:
+**Tutti i responsabili**, **Raggruppa per responsabile** (un titolo per
+persona con le sue commesse sotto, in schede o in elenco, e in fondo
+**Senza responsabile**), **Solo «nome»** oppure **Solo senza responsabile**.
+Si combina con la ricerca, lo stato e attive/archiviate, e resta ricordata su
+quel dispositivo.
+
 ### Fatturazione per responsabile
 
 In alto in *Fatturazione* c'è la tendina **👤 Responsabile**, che usa il
