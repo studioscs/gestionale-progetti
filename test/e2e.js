@@ -3661,9 +3661,16 @@ function launchOpts(){
     const ids=await p.evaluate(async()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; const u=S.profs.map(x=>x.id);
       const mk=async(c,own)=>{ const {data}=await SB.from('projects').insert({codice:c,name:c+'_RESP',status:'attivo',client:'Cliente '+c,owner_id:own}).select().single(); return data.id; };
       const a=await mk('RS_A',u[0]), b=await mk('RS_B',null);
+      /* u[1] e' responsabile solo di una commessa senza scaglioni ma con un esterno */
+      const c=await mk('RS_C',u[1]);
+      await SB.from('time_entries').insert({project_id:a,user_id:S.me.id,entry_date:'2026-08-01',hours:0,esterno:'Esterno di RS_A',costo_totale:77,pagato:false});
+      await SB.from('time_entries').insert({project_id:c,user_id:S.me.id,entry_date:'2026-08-01',hours:0,esterno:'Esterno di RS_C',costo_totale:88,pagato:false});
       await SB.from('commessa_fatture').insert([{project_id:a,descrizione:'Resp emessa A',imponibile:1111,stato:'emessa',numero_fattura:'RS-1/FE',data_fattura:'2026-10-01'},
         {project_id:b,descrizione:'Resp emessa B',imponibile:2222,stato:'emessa',numero_fattura:'RS-2/FE',data_fattura:'2026-10-02'}]);
-      await loadAll(true); S.fzResp=''; go('fatturare'); return {a,b,u0:u[0],nome:un(u[0])}; });
+      await loadAll(true); S.fzResp=''; go('fatturare'); return {a,b,c,u0:u[0],u1:u[1],nome:un(u[0])}; });
+    const opz=await p.evaluate(()=>[...el('fz-resp').options].map(o=>o.value));
+    must(!opz.includes(ids.u1)||await p.evaluate(u=>S.projects.some(x=>x.owner_id===u&&S.fatture.some(f=>f.project_id===x.id)),ids.u1),
+      'nella tendina c è chi non ha commesse con scaglioni');
     await p.selectOption('#fz-resp','_gruppi'); await p.waitForTimeout(300);
     const g=await p.evaluate(()=>[...document.querySelectorAll('.riga-resp')].map(x=>x.textContent));
     must(g.some(x=>x.indexOf('Senza responsabile')>=0),'manca il gruppo Senza responsabile');
@@ -3672,6 +3679,7 @@ function launchOpts(){
     await p.selectOption('#fz-resp',ids.u0); await p.waitForTimeout(300);
     let t2=await p.evaluate(()=>el('page').textContent);
     must(/Resp emessa A/.test(t2)&&!/Resp emessa B/.test(t2),'filtro per persona sbagliato');
+    must(/Esterno di RS_A/.test(t2)&&!/Esterno di RS_C/.test(t2),'filtrando una persona compaiono gli esterni di altre commesse');
     await p.selectOption('#fz-resp','_nessuno'); await p.waitForTimeout(300);
     t2=await p.evaluate(()=>el('page').textContent);
     must(/Resp emessa B/.test(t2)&&!/Resp emessa A/.test(t2),'filtro senza responsabile sbagliato');
@@ -3679,7 +3687,7 @@ function launchOpts(){
     must(n.f===2,'dopo il filtro i dati non sono tornati tutti: '+n.f);
     must(n.opts>=4,'la tendina ha perso le persone: '+n.opts);
     await p.selectOption('#fz-resp',''); await p.waitForTimeout(200);
-    await p.evaluate(async x=>{ for(const id of [x.a,x.b]){ await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id); } S.fzResp=''; await loadAll(true); },ids);
+    await p.evaluate(async x=>{ for(const id of [x.a,x.b,x.c]){ await SB.from('commessa_fatture').delete().eq('project_id',id); await SB.from('time_entries').delete().eq('project_id',id); await SB.from('projects').delete().eq('id',id); } S.fzResp=''; await loadAll(true); },ids);
   });
   await t('dati dello studio: si cambiano dalla pagina e i documenti li usano',async()=>{
     await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; go('studio'); }); await p.waitForTimeout(300);

@@ -1406,6 +1406,11 @@ In alto in *Fatturazione* c'è la tendina **👤 Responsabile**, che usa il
 - **Solo «nome»** oppure **Solo senza responsabile**: tutta la pagina (numeri
   in testa, anno fiscale, sezioni) conta solo quelle commesse.
 
+Nella tendina compaiono solo i responsabili che hanno commesse **con scaglioni
+di fatturazione**. Scegliendo una persona si vedono anche solo le ore e le
+parcelle degli esterni delle sue commesse; se le sue commesse non hanno
+scaglioni lo dice in cima, con il loro elenco.
+
 La scelta resta ricordata su quel dispositivo. Per mettere o cambiare il
 responsabile: commessa → *Modifica* → *Responsabile*.
 

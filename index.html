@@ -1642,7 +1642,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.27.03';
+const VERSIONE = '2026.11.27.04';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -8054,9 +8054,13 @@ function righePerResponsabile(voci, pidDi, colonne, totaleDi, perCommessa) {
   return perResponsabile(voci, pidDi).map(r => rigaResponsabile(r, colonne, totaleDi(r.voci)) + perCommessa(r.voci)).join('');
 }
 function sceltaResponsabile() {
-  const ids = Array.from(new Set(S.projects.filter(p => !p.archiviato && p.owner_id).map(p => p.owner_id)))
-    .sort((a, b) => nomeResp(a).localeCompare(nomeResp(b), 'it'));
+  /* solo chi ha commesse con scaglioni: chi e' responsabile di commesse
+     senza fatturazione qui non serve (piu' chi e' scelto adesso) */
   const v = S.fzResp || '';
+  const conScaglioni = new Set(S.fatture.filter(f => f.stato !== 'annullata').map(f => f.project_id));
+  const ids = Array.from(new Set(S.projects.filter(p => !p.archiviato && p.owner_id && conScaglioni.has(p.id)).map(p => p.owner_id)
+      .concat(v && v[0] !== '_' ? [v] : [])))
+    .sort((a, b) => nomeResp(a).localeCompare(nomeResp(b), 'it'));
   const o = (val, l) => '<option value="' + esc(val) + '"' + (v === val ? ' selected' : '') + '>' + esc(l) + '</option>';
   return '<select class="sel" id="fz-resp" title="Raggruppa o filtra per il responsabile indicato nella commessa">'
     + o('', '👤 Tutti i responsabili') + o('_gruppi', '👤 Raggruppa per responsabile')
@@ -8699,13 +8703,19 @@ function riquadroControlloFatt(elenco) {
 function rFatturare() {
   const v = S.fzResp || '';
   if (!v || v === '_gruppi') return rFatturareTutto();
-  const prima = { projects: S.projects, fatture: S.fatture };
+  const prima = { projects: S.projects, fatture: S.fatture, time: S.time };
   const tiene = p => v === '_nessuno' ? !p.owner_id : p.owner_id === v;
   const proj = S.projects.filter(tiene), ids = new Set(proj.map(p => p.id));
   try {
+    /* anche le ore e le parcelle degli esterni: solo quelle delle sue commesse */
     S.projects = proj; S.fatture = S.fatture.filter(f => ids.has(f.project_id));
+    S.time = S.time.filter(t => ids.has(t.project_id));
     rFatturareTutto();
-  } finally { S.projects = prima.projects; S.fatture = prima.fatture; }
+  } finally { S.projects = prima.projects; S.fatture = prima.fatture; S.time = prima.time; }
+  if (!S.fatture.some(f => ids.has(f.project_id) && f.stato !== 'annullata'))
+    el('page').insertAdjacentHTML('afterbegin', '<div class="ibox mb16">Le commesse di <b>'
+      + esc(v === '_nessuno' ? 'chi non ha responsabile' : nomeResp(v)) + '</b> non hanno scaglioni di fatturazione'
+      + (proj.length ? ': ' + esc(proj.map(p => nomeConCodice(p)).join(', ')) : '') + '.</div>');
   /* la tendina elenca tutte le persone, non solo quella scelta */
   el('fz-resp').outerHTML = sceltaResponsabile(); collegaSceltaResp();
 }
