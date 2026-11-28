@@ -174,6 +174,13 @@ textarea.fc { resize:vertical; min-height:64px; }
      «Salva» delle finestre. Si chiudono anche con un tocco. */
   #tc { top:calc(8px + env(safe-area-inset-top)) !important; bottom:auto !important; left:10px !important; right:10px !important; }
   #tc .toast { max-width:none; cursor:pointer; pointer-events:auto; }
+
+  /* Nelle tabelle larghe che scorrono di lato, le righe con il nome del
+     responsabile e della commessa restano ferme e intere sullo schermo:
+     prima scorrevano con la tabella e nome e totale finivano fuori. */
+  .riga-resp > td > div, .riga-gruppo > td > div { position:sticky; left:10px;
+    width:calc(100vw - 84px); max-width:calc(100vw - 84px); }
+  .riga-gruppo > td > div > span:first-child { white-space:normal; }
   #page { padding:12px; }
 
   /* Due colonne su uno schermo largo come una mano non sono due colonne:
@@ -1642,7 +1649,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.27.05';
+const VERSIONE = '2026.11.28.01';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';

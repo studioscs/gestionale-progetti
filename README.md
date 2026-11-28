@@ -663,7 +663,9 @@ sotto la quale un dito sbaglia bersaglio — e che nessun campo abbia il testo
 sotto i 16 punti, perché sotto quella soglia Safari di iOS ingrandisce la pagina
 da solo appena tocchi una casella. Controlla anche la **barra in alto** (titolo
 su una riga, pulsanti dentro lo schermo) e che gli **avvisi** compaiano in alto
-e si chiudano con un tocco, senza coprire i pulsanti delle finestre.
+e si chiudano con un tocco, senza coprire i pulsanti delle finestre, e che in
+Fatturazione raggruppata la riga del responsabile resti dentro lo schermo
+anche scorrendo la tabella di lato.
 
 36 controlli.
 

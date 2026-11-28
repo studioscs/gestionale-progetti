@@ -128,6 +128,20 @@ const SCHERMI=[
         must(await p.evaluate(()=>!document.querySelector('#tc .toast')),'toccando l avviso non si chiude');
         await p.evaluate(()=>go('projects'));
       });
+      await t(nome+': in Fatturazione raggruppata, responsabile e commessa restano visibili scorrendo la tabella',async()=>{
+        const g=await p.evaluate(async()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; const u=S.profs[0].id;
+          const {data}=await SB.from('projects').insert({codice:'MOB_RS',name:'MOB_RS_COMMESSA CON UN NOME MOLTO LUNGO DA LEGGERE',status:'attivo',owner_id:u}).select().single();
+          await SB.from('commessa_fatture').insert({project_id:data.id,descrizione:'Acconto mob',imponibile:5000,stato:'emessa',numero_fattura:'M-1/FE',data_fattura:'2026-10-02'});
+          await loadAll(true); S.fzResp='_gruppi'; go('fatturare');
+          const r=document.querySelector('.riga-resp'); if(!r) return {manca:true};
+          const tw=r.closest('.tw'); tw.scrollLeft=tw.scrollWidth;
+          const d=r.querySelector('td > div').getBoundingClientRect(); const out={l:Math.round(d.left),r:Math.round(d.right),w:innerWidth};
+          S.fzResp=''; await SB.from('commessa_fatture').delete().eq('project_id',data.id); await SB.from('projects').delete().eq('id',data.id); await loadAll(true);
+          return out; });
+        must(!g.manca,'nessuna riga del responsabile');
+        must(g.l>=0&&g.r<=g.w+1,'la riga del responsabile esce dallo schermo: '+JSON.stringify(g));
+        await p.evaluate(()=>go('projects'));
+      });
       await t(nome+': i campi non fanno ingrandire la pagina da soli',async()=>{
         /* Safari di iOS ingrandisce quando si tocca un campo sotto i 16px */
         await p.evaluate(()=>{ go('projects'); openNewProj(); });
