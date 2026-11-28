@@ -665,7 +665,9 @@ da solo appena tocchi una casella. Controlla anche la **barra in alto** (titolo
 su una riga, pulsanti dentro lo schermo) e che gli **avvisi** compaiano in alto
 e si chiudano con un tocco, senza coprire i pulsanti delle finestre, e che in
 Fatturazione raggruppata la riga del responsabile resti dentro lo schermo
-anche scorrendo la tabella di lato.
+anche scorrendo la tabella di lato. Tocca **ogni voce del menu** laterale (per
+l'amministratore, quindi tutte) e verifica che porti alla sua pagina e che il
+cassetto si richiuda, anche dopo *Copia di sicurezza* e *Ripristina da copia*.
 
 36 controlli.
 

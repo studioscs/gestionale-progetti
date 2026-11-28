@@ -1649,7 +1649,7 @@ const STUDIO = {
 /* Versione del file: compare in fondo alla barra laterale e nella schermata di
    accesso. Serve a capire in un colpo d'occhio se il browser sta servendo una
    copia vecchia dalla cache invece del file appena caricato. */
-const VERSIONE = '2026.11.28.01';
+const VERSIONE = '2026.11.28.02';
 
 const SURL = 'https://aaneazempmhuznvornwn.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmVhemVtcG1odXpudm9ybnduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzA0MzIsImV4cCI6MjA5NzcwNjQzMn0.SStt_69iTybb_z-JqWYWhavROWmURyfZEguW96FQDIA';
@@ -4062,7 +4062,8 @@ async function doLogout() {
 const TITLES = { oggi:'Oggi', scadenzario:'Scadenzario', fatturare:'Fatturazione', clienti:'Anagrafica clienti', projects:'Progetti', pratiche:'Pratiche & Enti',
                  tasks:'Attività', kanban:'Kanban', timeline:'Timeline', time:'Ore e costi esterni',
                  files:'File Commesse', users:'Gestione Utenti', project:'Commessa',
-                 costi:'Costi generali dello studio', preventivi:'Preventivi', studio:'Dati dello studio' };
+                 costi:'Costi generali dello studio', preventivi:'Preventivi', studio:'Dati dello studio',
+                 chat:'Chat', redditivita:'Redditività' };
 
 /* IL CASSETTO DEL MENU (solo su telefono)
    Su iPad e su computer la barra laterale e' sempre li' e queste funzioni non
@@ -13331,6 +13332,7 @@ async function conTastoOccupato(id, etichetta, fn) {
 
 async function scaricaCopia() {
   if (!isAd()) return toast('La copia di sicurezza la scarica un amministratore', 'error');
+  chiudiMenu();
   await conTastoOccupato('sn-copia', 'Copia…', async avanza => {
     const dati = await leggiTutteLeTabelle(avanza);
     const nome = scaricaFileCopia(dati);
@@ -15161,7 +15163,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   qsa('.sn').forEach(n => n.onclick = () => go(n.dataset.page));
   el('sn-copia').onclick = scaricaCopia;
-  el('sn-ripr').onclick = () => { if (!isAd()) return; el('ripr-file').value = ''; el('ripr-file').click(); };
+  /* sul telefono il cassetto del menu si chiude: dietro c'e' la pagina che lavora */
+  el('sn-ripr').onclick = () => { if (!isAd()) return; chiudiMenu(); el('ripr-file').value = ''; el('ripr-file').click(); };
   el('ripr-file').onchange = e => { const f = e.target.files && e.target.files[0]; if (f) apriRipristino(f); };
   el('ripr-mancanti').onclick = () => eseguiRipristino(false);
   el('ripr-tutto').onclick = () => eseguiRipristino(true);

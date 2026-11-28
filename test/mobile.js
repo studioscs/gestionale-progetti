@@ -142,6 +142,29 @@ const SCHERMI=[
         must(g.l>=0&&g.r<=g.w+1,'la riga del responsabile esce dallo schermo: '+JSON.stringify(g));
         await p.evaluate(()=>go('projects'));
       });
+      await t(nome+': ogni voce del menu porta alla sua pagina e il menu si richiude',async()=>{
+        await p.evaluate(()=>{ S.prof.role='admin'; S.prof.vede_tutto=true; ['sec-admin','sn-users','sn-copia','sn-ripr','sn-studio','sn-prev']
+          .forEach(id=>el(id).style.display=id==='sec-admin'?'block':''); });
+        const voci=await p.evaluate(()=>[...document.querySelectorAll('#side .sn')].filter(v=>getComputedStyle(v).display!=='none')
+          .map(v=>v.dataset.page?'[data-page="'+v.dataset.page+'"]':'#'+v.id));
+        const male=[];
+        for(const v of voci){
+          if(!(await p.evaluate(()=>el('side').classList.contains('aperto')))){ await p.tap('#menubtn'); await p.waitForTimeout(300); }
+          const fc=v==='#sn-ripr'?p.waitForEvent('filechooser',{timeout:4000}).catch(()=>null):null;
+          await p.tap(v[0]==='['?'#side .sn'+v:v);
+          await p.waitForTimeout(v==='#sn-copia'?1500:350);
+          const g=await p.evaluate(()=>({page:S.page,aperto:el('side').classList.contains('aperto'),
+            titolo:el('ptitle').textContent}));
+          if(fc&&!(await fc)) male.push(v+': non apre la scelta del file');
+          if(g.aperto) male.push(v+': il menu resta aperto');
+          const pg=(v.match(/data-page="([a-z]+)"/)||[])[1];
+          if(pg&&g.page!==pg) male.push(v+' porta a '+g.page);
+          if(pg&&!/[A-Z]/.test(g.titolo[0]||'')) male.push(v+': titolo "'+g.titolo+'"');
+          await p.evaluate(()=>{ closeAll(); });
+        }
+        must(!male.length,male.join(' | '));
+        await p.evaluate(()=>go('projects'));
+      });
       await t(nome+': i campi non fanno ingrandire la pagina da soli',async()=>{
         /* Safari di iOS ingrandisce quando si tocca un campo sotto i 16px */
         await p.evaluate(()=>{ go('projects'); openNewProj(); });
