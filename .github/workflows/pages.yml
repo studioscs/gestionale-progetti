@@ -60,6 +60,11 @@ jobs:
         with:
           path: _site
           name: github-pages-${{ github.run_attempt }}
+      # A volte GitHub non ha ancora registrato il pacchetto appena caricato e
+      # la pubblicazione fallisce con «No artifacts named ... were found»
+      # (successo il 27 e il 28/11/2026). Una breve attesa lo evita.
+      - name: Attende che GitHub registri il pacchetto
+        run: sleep 20
       - id: deploy
         uses: actions/deploy-pages@v4
         with:
